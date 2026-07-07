@@ -48,7 +48,7 @@ type GraphData = { nodes: Obj[]; edges: Link[] };
 type SchemaEdge = { source: string; target: string; relation: string; kind: string; required?: boolean };
 type Point = { x: number; y: number };
 type ViewID = "objects" | "detail" | "types" | "graph" | "health";
-type RouteSearch = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string };
+type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string };
 type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string };
 type AppState = {
   view: string;
@@ -144,6 +144,7 @@ const indexRoute = createRoute({
   path: "/",
   validateSearch: (search: Record<string, unknown>): RouteSearch => ({
     view: normalizeView(search.view),
+    vault: typeof search.vault === "string" ? search.vault : undefined,
     type: typeof search.type === "string" ? search.type : undefined,
     filter: typeof search.filter === "string" ? search.filter : undefined,
     object: typeof search.object === "string" ? search.object : undefined,
@@ -241,6 +242,7 @@ function App() {
   const routeSearch = indexRoute.useSearch();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
+  const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
   const [types, setTypes] = useState<TypeDef[]>([]);
@@ -256,8 +258,8 @@ function App() {
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
   const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
   const [filter, setFilterState] = useState(routeSearch.filter ?? "");
-  const [vault, setVault] = useState(getCurrentVault());
-  const [vaultDraft, setVaultDraft] = useState(getCurrentVault());
+  const [vault, setVault] = useState(initialVault);
+  const [vaultDraft, setVaultDraft] = useState(initialVault);
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
 
@@ -294,7 +296,7 @@ function App() {
     updateSearch({ view: "graph", graphMode: next }, options);
   }
 
-  function cachedRun<T>(argv: string[], vaultOverride = getCurrentVault()) {
+  function cachedRun<T>(argv: string[], vaultOverride = vault) {
     const key = ["run", vaultOverride || "default", ...argv];
     return queryClient.fetchQuery({
       queryKey: key,
@@ -450,7 +452,7 @@ function App() {
     setFilterState(nextFilter);
     setGraphModeState(nextGraphMode);
     setViewState(nextView === "detail" ? "objects" : nextView);
-    updateSearch({ view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: undefined, graphMode: nextGraphMode }, { replace: true });
+    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: undefined, graphMode: nextGraphMode }, { replace: true });
     const loaded = await loadBase(nextType, nextFilter);
     if (nextView === "graph") {
       await openGraph({ syncURL: false });
@@ -479,7 +481,7 @@ function App() {
       ...overrides
     });
 
-    const runAndSync = async <T,>(argv: string[], vaultOverride = getCurrentVault()) => {
+    const runAndSync = async <T,>(argv: string[], vaultOverride = vault) => {
       const result = await run<T>(argv, vaultOverride);
       const changedObject = result.effects?.find((effect) => effect.object && (effect.kind === "body.refresh" || effect.kind === "body.write" || effect.kind === "body.append"))?.object;
       if (result.ok && changedObject) {
@@ -491,7 +493,7 @@ function App() {
 
     window.mbase = {
       run: runAndSync,
-      getVault: () => getCurrentVault(),
+      getVault: () => vault,
       recentVaults: () => getRecentVaults(),
       switchVault: async (path: string) => {
         const loaded = await openVaultPath(path);
