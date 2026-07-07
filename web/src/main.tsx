@@ -225,6 +225,17 @@ function downloadDataURL(dataURL: string, filename: string) {
   link.remove();
 }
 
+async function waitForImages(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(images.map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    });
+  }));
+}
+
 function automationState(state: AppState): AutomationSnapshot {
   return {
     version: 1,
@@ -270,7 +281,7 @@ function App() {
   const routeSearch = indexRoute.useSearch();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
-  const objectPageRef = useRef<HTMLElement | null>(null);
+  const objectPageRef = useRef<HTMLDivElement | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
@@ -440,22 +451,36 @@ function App() {
     if (!activeObject || !objectPageRef.current) {
       throw new Error("No active object page to save");
     }
-    const node = objectPageRef.current;
+    const source = objectPageRef.current;
     const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
     setSavingObjectImage(true);
+    const node = source.cloneNode(true) as HTMLDivElement;
     try {
+      node.style.position = "fixed";
+      node.style.left = "-10000px";
+      node.style.top = "0";
+      node.style.width = "760px";
+      node.style.minWidth = "760px";
+      node.style.maxWidth = "760px";
+      node.style.margin = "0";
+      node.style.background = "hsl(48 33% 97%)";
+      document.body.appendChild(node);
+      await waitForImages(node);
+      const width = Math.ceil(Math.max(node.scrollWidth, node.getBoundingClientRect().width));
+      const height = Math.ceil(node.scrollHeight);
       const canvas = await html2canvas(node, {
         backgroundColor: "hsl(48 33% 97%)",
         scale: Math.min(2, window.devicePixelRatio || 1),
         useCORS: true,
         allowTaint: false,
-        width: node.scrollWidth,
-        height: node.scrollHeight,
-        windowWidth: node.scrollWidth,
-        windowHeight: node.scrollHeight,
+        width,
+        height,
+        windowWidth: width,
+        windowHeight: height,
         onclone: (_document, clonedElement) => {
           const el = clonedElement as HTMLElement;
-          el.style.height = `${node.scrollHeight}px`;
+          el.style.width = `${width}px`;
+          el.style.height = `${height}px`;
           el.style.overflow = "visible";
           el.style.maxHeight = "none";
         }
@@ -469,6 +494,7 @@ function App() {
       toast.error(`Could not save image: ${message}`);
       throw error;
     } finally {
+      node.remove();
       setSavingObjectImage(false);
     }
   }
@@ -788,8 +814,8 @@ function App() {
 
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
-            <article ref={objectPageRef} className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "pr-[420px]" : ""}`}>
-              <div className="mx-auto max-w-[760px]">
+            <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "pr-[420px]" : ""}`}>
+              <div ref={objectPageRef} className="mx-auto max-w-[760px]">
                 <div className="mb-6 flex flex-wrap items-center gap-3">
                   <Badge>{activeObject.type_id}</Badge>
                   <span className="font-mono text-xs text-muted-foreground">{activeObject.id}</span>
