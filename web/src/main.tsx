@@ -753,7 +753,7 @@ function App() {
             </article>
 
             <button
-              className={`inspector-toggle ${inspectorOpen ? "right-[374px] text-[hsl(var(--earth))]" : "right-10 text-muted-foreground"}`}
+              className={`inspector-toggle ${inspectorOpen ? "right-[414px] text-[hsl(var(--earth))]" : "right-10 text-muted-foreground"}`}
               onClick={() => setInspectorOpen((open) => !open)}
               title={inspectorOpen ? "Hide inspector" : "Show inspector"}
             >
@@ -761,9 +761,13 @@ function App() {
               <span>{inspectorOpen ? "Hide" : "Inspector"}</span>
             </button>
 
-            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "translate-x-0 opacity-100" : "translate-x-[380px] opacity-0"}`}>
-              <div className="flex items-center justify-between px-1 pb-1">
-                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Inspector</div>
+            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "translate-x-0 opacity-100" : "translate-x-[420px] opacity-0"}`}>
+              <div className="inspector-header">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Inspector</div>
+                  <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
+                  <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
+                </div>
                 <button className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setInspectorOpen(false)} title="Hide inspector">
                   <ChevronRight className="size-4" />
                 </button>
@@ -1587,23 +1591,36 @@ function EmptyState({ title, description }: { title: string; description: string
 
 function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="panel-block">
-      <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+    <section className="panel-block">
+      <div className="inspector-section-title">
         {icon && <span className="text-muted-foreground">{icon}</span>}
-        {title}
+        <span>{title}</span>
       </div>
-      <div>{children}</div>
-    </div>
+      <div className="inspector-section-body">{children}</div>
+    </section>
   );
 }
 
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
-  return <div className="soft-row flex justify-between gap-3 py-2.5 text-sm"><span className="text-muted-foreground">{k}</span><span className="text-right">{v}</span></div>;
+  return (
+    <div className="inspector-kv">
+      <div className="inspector-kv-key">{k}</div>
+      <div className="inspector-kv-value">{v}</div>
+    </div>
+  );
 }
 
 function LinkRow({ link, open, reverse }: { link: Link; open: (id: string) => void; reverse?: boolean }) {
   const target = reverse ? link.from_id : link.to_id;
-  return <div className="soft-row flex items-center justify-between gap-2 py-2.5 text-sm"><span><Badge>{link.kind}</Badge> <span className="ml-1 text-muted-foreground">{link.relation}</span></span><button className="rounded-xl px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => open(target)}>{target}</button></div>;
+  return (
+    <div className="inspector-link-row">
+      <div className="flex min-w-0 items-center gap-2">
+        <Badge>{link.kind}</Badge>
+        <span className="truncate text-xs text-muted-foreground">{link.relation}</span>
+      </div>
+      <button className="inspector-link-target" onClick={() => open(target)}>{target}</button>
+    </div>
+  );
 }
 
 function shortPath(path: string) {
