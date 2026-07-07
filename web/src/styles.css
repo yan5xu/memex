@@ -661,6 +661,58 @@ body {
   background: hsl(var(--surface-soft) / 0.34);
 }
 
+.object-table-id-col {
+  width: 190px;
+  max-width: 190px;
+}
+
+.object-table-title-col {
+  width: 300px;
+}
+
+.object-table-url-col {
+  width: 260px;
+}
+
+.object-table-field-col {
+  max-width: 180px;
+}
+
+.object-id-cell {
+  display: inline-flex;
+  max-width: 174px;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.34rem;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.object-id-cell:hover .object-id-suffix {
+  color: hsl(var(--foreground));
+}
+
+.object-id-context {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground) / 0.76);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-id-suffix {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--earth));
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
 .detail-stage {
   background:
     radial-gradient(circle at 50% 0%, hsl(var(--muted) / 0.22), transparent 34rem),

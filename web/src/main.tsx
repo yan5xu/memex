@@ -810,7 +810,7 @@ function App() {
                     {rows.length === 0 ? (
                       <EmptyState title="No objects" description="Create objects from the CLI or switch to another type." />
                     ) : (
-                      <ObjectDataTable rows={rows} fields={activeFields} open={(id) => void openObject(id)} />
+                      <ObjectDataTable rows={rows} fields={activeFields} activeType={activeType} open={(id) => void openObject(id)} />
                     )}
                 </TabsContent>
                 <TabsContent value="api" className="mt-0 min-h-0 flex-1 rounded-lg bg-muted/30">
@@ -1672,7 +1672,7 @@ function pruneDraggedPositions(nodes: Array<{ id: string }>, setDraggedPositions
   });
 }
 
-function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>[]; fields: FieldDef[]; open: (id: string) => void }) {
+function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<string, unknown>[]; fields: FieldDef[]; activeType: string; open: (id: string) => void }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -1680,18 +1680,14 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
       {
         accessorKey: "id",
         header: ({ column }) => <SortableHeader label="id" toggle={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
-        cell: ({ row }) => (
-          <button className="font-mono text-xs text-[hsl(var(--earth))] transition hover:text-foreground" onClick={() => open(String(row.original.id))}>
-            {String(row.original.id)}
-          </button>
-        ),
+        cell: ({ row }) => <ObjectIDCell id={String(row.original.id)} activeType={activeType} open={open} />,
         enableHiding: false
       },
       {
         accessorKey: "title",
         header: ({ column }) => <SortableHeader label="title" toggle={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => (
-          <button className="max-w-56 truncate text-left font-medium transition hover:text-[hsl(var(--earth))]" onClick={() => open(String(row.original.id))}>
+          <button className="block w-full truncate text-left font-medium transition hover:text-[hsl(var(--earth))]" onClick={() => open(String(row.original.id))}>
             {String(row.original.title || row.original.id)}
           </button>
         )
@@ -1706,7 +1702,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
         cell: ({ row }) => renderTableCell(row.original[field.name], field, open)
       }));
     return [...base, ...fieldColumns];
-  }, [fields, open]);
+  }, [fields, activeType, open]);
   const table = useReactTable({
     data: rows,
     columns,
@@ -1717,6 +1713,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 25 } }
   });
+  const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => sum + objectTableColumnWidth(column.id), 0);
   const visibleRows = table.getRowModel().rows;
   const rowVirtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -1731,12 +1728,12 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg">
       <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
-        <Table className="min-w-[900px]">
+        <Table className="table-fixed" style={{ minWidth: tableMinWidth, width: tableMinWidth }}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="whitespace-nowrap">
+                  <TableHead key={header.id} className={objectTableCellClass(header.column.id)} style={objectTableColumnStyle(header.column.id)}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
@@ -1754,7 +1751,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
               return (
               <TableRow key={row.id} onDoubleClick={() => open(String(row.original.id))}>
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="max-w-72 whitespace-nowrap align-top">
+                  <TableCell key={cell.id} className={objectTableCellClass(cell.column.id)} style={objectTableColumnStyle(cell.column.id)}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
@@ -1792,6 +1789,63 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
       </div>
     </div>
   );
+}
+
+function ObjectIDCell({ id, activeType, open }: { id: string; activeType: string; open: (id: string) => void }) {
+  const compact = compactObjectID(id, activeType);
+  return (
+    <button
+      className="object-id-cell group"
+      title={id}
+      onClick={() => open(id)}
+    >
+      {compact.context && <span className="object-id-context">{compact.context}</span>}
+      <span className="object-id-suffix">{compact.suffix}</span>
+    </button>
+  );
+}
+
+function compactObjectID(id: string, activeType: string) {
+  const prefix = activeType ? `${activeType}.` : "";
+  const rest = prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id;
+  const parts = rest.split(".");
+  const suffix = parts.pop() || rest;
+  const context = parts.length > 0 ? parts.join(".") : "";
+  return {
+    context: context ? truncateMiddle(context, 20) : "",
+    suffix: truncateMiddle(suffix, 18)
+  };
+}
+
+function truncateMiddle(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  const head = Math.ceil((maxLength - 1) / 2);
+  const tail = Math.floor((maxLength - 1) / 2);
+  return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
+}
+
+function objectTableCellClass(columnID: string) {
+  const base = "whitespace-nowrap align-top";
+  if (columnID === "id") return `${base} object-table-id-col`;
+  if (columnID === "title") return `${base} object-table-title-col`;
+  if (columnID === "url") return `${base} object-table-url-col`;
+  return `${base} object-table-field-col`;
+}
+
+function objectTableColumnStyle(columnID: string): React.CSSProperties | undefined {
+  return { width: objectTableColumnWidth(columnID) };
+}
+
+function objectTableColumnWidth(columnID: string) {
+  if (columnID === "id") return 190;
+  if (columnID === "title") return 330;
+  if (columnID === "url") return 300;
+  if (columnID === "platform") return 110;
+  if (columnID === "post_type") return 130;
+  if (columnID === "author") return 130;
+  if (columnID.endsWith("_at") || columnID.endsWith("_date")) return 150;
+  if (columnID === "status" || columnID.endsWith("_status")) return 130;
+  return 160;
 }
 
 function SortableHeader({ label, toggle }: { label: string; toggle: () => void }) {
