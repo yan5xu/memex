@@ -627,7 +627,16 @@ function App() {
                     <div className="mt-3 h-px w-24 bg-[hsl(var(--earth)/0.28)]" />
                   </div>
                   <div className="markdown max-w-3xl">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``}</ReactMarkdown>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        img: ({ node: _node, src, alt, ...props }) => (
+                          <img {...props} src={markdownAssetURL(src, activeObject, vault)} alt={alt ?? ""} loading="lazy" />
+                        )
+                      }}
+                    >
+                      {normalizeObsidianImages(activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``)}
+                    </ReactMarkdown>
                   </div>
                 </article>
               </ResizablePanel>
@@ -750,6 +759,31 @@ function renderCell(v: unknown) {
   if (Array.isArray(v)) return <span className="flex flex-wrap gap-1">{v.map((x) => <Badge key={String(x)}>{String(x)}</Badge>)}</span>;
   if (v === undefined || v === null || v === "") return <span className="text-muted-foreground">—</span>;
   return String(v);
+}
+
+function normalizeObsidianImages(markdown: string) {
+  return markdown.replace(/!\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
+    const [target, label] = raw.split("|").map((part) => part.trim());
+    if (!target) return "";
+    const alt = label || target.split("/").pop() || target;
+    return `![${escapeMarkdownAlt(alt)}](${encodeURI(target)})`;
+  });
+}
+
+function escapeMarkdownAlt(value: string) {
+  return value.replace(/[[\]\\]/g, "\\$&");
+}
+
+function markdownAssetURL(src: string | undefined, object: Obj | null, vault: string) {
+  if (!src || isExternalAsset(src)) return src;
+  const params = new URLSearchParams({ path: src });
+  if (object?.body_path) params.set("base", object.body_path);
+  if (vault) params.set("vault", vault);
+  return `/api/file?${params.toString()}`;
+}
+
+function isExternalAsset(src: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("#");
 }
 
 function Header({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
