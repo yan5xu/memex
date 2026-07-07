@@ -19,20 +19,17 @@ import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate } from "@tanstack/react-router";
-import { type ColumnDef, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, type RowSelectionState, type SortingState, type VisibilityState, useReactTable } from "@tanstack/react-table";
+import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, Database, Download, FileText, FolderOpen, GitBranch, HeartPulse, History, Network, PanelLeftClose, PanelLeftOpen, Play, Search } from "lucide-react";
+import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, FileText, FolderOpen, GitBranch, HeartPulse, History, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Search } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
-import { Checkbox } from "./components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger } from "./components/ui/dropdown-menu";
 import { Input } from "./components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui/resizable";
 import { ScrollArea } from "./components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Separator } from "./components/ui/separator";
@@ -279,6 +276,7 @@ function App() {
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
   const [savingObjectImage, setSavingObjectImage] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
@@ -624,31 +622,17 @@ function App() {
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter]);
 
   return (
-    <div className="app-shell flex min-h-screen text-foreground">
-      <aside className={`${sidebarCollapsed ? "w-20 px-3" : "w-72 px-4"} shrink-0 bg-[hsl(var(--sidebar)/0.78)] py-5 transition-[width,padding] duration-200`}>
-        <div className={`mb-7 flex items-center ${sidebarCollapsed ? "justify-center" : "justify-between gap-3 px-2"}`}>
-          <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
-          <div className="flex size-9 items-center justify-center rounded-2xl bg-foreground text-sm font-semibold text-primary-foreground shadow-[0_12px_24px_hsl(var(--shadow-warm)/0.16)]">m</div>
-          {!sidebarCollapsed && <div>
-            <div className="text-base font-semibold tracking-tight">mbase</div>
-            <div className="text-xs text-muted-foreground">Local knowledge workbench</div>
-          </div>}
-          </div>
-          <button className="glass-light inline-flex rounded-xl p-2 text-muted-foreground transition hover:text-foreground" onClick={toggleSidebar} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            {sidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </button>
+    <div className="app-shell flex h-screen w-screen overflow-hidden text-foreground">
+      <aside className={`${sidebarCollapsed ? "w-[60px] px-2.5" : "w-72 px-4"} flex h-screen shrink-0 flex-col overflow-hidden py-[18px] transition-[width,padding] duration-200`}>
+        <div className={`mb-6 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[13px] bg-foreground font-serif text-[19px] font-semibold italic text-background shadow-[0_12px_24px_-8px_hsl(var(--shadow-warm)/0.30)]">m</div>
+          {!sidebarCollapsed && (
+            <div className="min-w-0">
+              <div className="text-[15px] font-semibold tracking-tight text-foreground/90">mbase</div>
+              <div className="text-[11px] text-muted-foreground">Local knowledge workbench</div>
+            </div>
+          )}
         </div>
-
-        {!sidebarCollapsed && (
-          <VaultSwitcher
-            vault={vault}
-            draft={vaultDraft}
-            setDraft={setVaultDraft}
-            recentVaults={recentVaults}
-            vaultOK={vaultOK}
-            openVault={(path) => void openVaultPath(path)}
-          />
-        )}
 
         <nav className="space-y-1.5">
           <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-4" />} label="Objects" active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
@@ -657,116 +641,154 @@ function App() {
           <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-4" />} label="Health" active={view === "health"} onClick={() => setView("health")} />
         </nav>
 
-        {!sidebarCollapsed && <><Separator className="my-6 bg-border/55" /><div className="px-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Types</div>
-        <TypeCommand types={types} activeType={activeType} select={(type) => setActiveType(type)} />
-        <ScrollArea className="mt-2 max-h-64 pr-2">
-          <div className="space-y-1">
-            {types.map((t) => (
-              <button key={t.id} onClick={() => setActiveType(t.id)} className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition hover:bg-foreground/[0.035] ${activeType === t.id ? "bg-card/62 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.45)]" : "text-muted-foreground"}`}>
-                <span className="truncate font-medium">{t.id}</span>
-                <span className="text-xs tabular-nums opacity-60">{t.fields?.length ?? 0}</span>
-              </button>
-            ))}
+        {!sidebarCollapsed && (
+          <div className="mt-6 flex min-h-0 flex-1 flex-col">
+            <Separator className="mb-4 bg-border/55" />
+            <div className="flex items-center justify-between px-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Types</span>
+              <span className="font-mono text-[10px] text-muted-foreground/65">{types.length}</span>
+            </div>
+            <ScrollArea className="mt-2 min-h-0 flex-1 pr-2">
+              <div className="space-y-1">
+                {types.map((t) => (
+                  <button key={t.id} onClick={() => setActiveType(t.id)} className={`sidebar-type-row ${activeType === t.id ? "sidebar-type-row-active" : ""}`}>
+                    <span className="truncate">{t.id}</span>
+                    <span className="font-mono text-[11px] opacity-60">{t.fields?.length ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
-        </ScrollArea>
+        )}
 
-        <div className="tray mt-8 rounded-2xl p-3 text-xs text-muted-foreground">
-          <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3.5" /> Agent API</div>
-          <code className="font-mono">window.mbase.state()</code>
-        </div></>}
+        <div className="mt-auto space-y-3 pt-4">
+          {!sidebarCollapsed && (
+            <>
+              <div className="sidebar-tool-card text-xs text-muted-foreground">
+                <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3.5 text-[hsl(var(--earth))]" /> Agent API</div>
+                <code className="font-mono">window.mbase.state()</code>
+              </div>
+              <VaultSwitcher
+                vault={vault}
+                draft={vaultDraft}
+                setDraft={setVaultDraft}
+                recentVaults={recentVaults}
+                vaultOK={vaultOK}
+                openVault={(path) => void openVaultPath(path)}
+              />
+            </>
+          )}
+          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"}`} onClick={toggleSidebar} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+            {sidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+            {!sidebarCollapsed && <span>Collapse sidebar</span>}
+          </button>
+        </div>
       </aside>
 
-      <main className="min-w-0 flex-1 p-6">
+      <main className="console-inset my-3 mr-3 min-w-0 flex-1 overflow-hidden">
+        <div className="console-topbar">
+          <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
+              <span className={`size-1.5 rounded-full ${vaultOK ? "bg-[hsl(var(--moss))]" : "bg-[hsl(var(--clay))]"}`} />
+              {vaultOK ? "vault ready" : "vault missing"}
+            </span>
+          </div>
+        </div>
+        <div className="mb-scroll min-h-0 flex-1 overflow-auto">
         {view === "objects" && (
-          <section className="mx-auto max-w-6xl">
-            <Header eyebrow="Objects" title={activeType || "Objects"} description="Typed markdown objects from the current local vault." />
-            <div className="mica overflow-hidden rounded-3xl">
-              <div className="flex items-center justify-between gap-4 px-5 py-4">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Boxes className="size-5 text-[hsl(var(--earth))]" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">{rows.length} objects</div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">{vault || "server default vault"}</div>
-                  </div>
-                </div>
-                <div className="relative w-80 max-w-full">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="w-full pl-9" />
-                </div>
-              </div>
-              <Tabs defaultValue="table" className="px-3 pb-3">
-                <div className="mb-3 flex items-center justify-between">
-                  <TabsList className="rounded-2xl bg-card/68">
+          <section className="mx-auto max-w-[1100px] px-7 py-6">
+            <div className="mb-5 flex items-baseline gap-3">
+              <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || "Objects"}</h1>
+              <span className="font-mono text-xs text-muted-foreground">{rows.length} objects</span>
+            </div>
+            <div className="objects-workspace">
+              <Tabs defaultValue="table">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <TabsList className="rounded-2xl bg-muted/58">
                     <TabsTrigger value="table" className="rounded-xl">Table</TabsTrigger>
                     <TabsTrigger value="api" className="rounded-xl">API</TabsTrigger>
                   </TabsList>
+                  <div className="relative w-80 max-w-[45%]">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-10 w-full rounded-xl bg-background/72 pl-9 font-mono text-xs" />
+                  </div>
                 </div>
-                <div className="rounded-2xl bg-card/46">
-                  <TabsContent value="table" className="mt-0">
+                <TabsContent value="table" className="mt-0">
                     {rows.length === 0 ? (
                       <EmptyState title="No objects" description="Create objects from the CLI or switch to another type." />
                     ) : (
                       <ObjectDataTable rows={rows} fields={activeFields} open={(id) => void openObject(id)} />
                     )}
-                  </TabsContent>
-                  <TabsContent value="api" className="mt-0">
-                    <pre className="overflow-x-auto p-4 font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"query\",\"" + (activeType || "type") + "\",\"--limit\",\"200\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
-                  </TabsContent>
-                </div>
+                </TabsContent>
+                <TabsContent value="api" className="mt-0 rounded-2xl bg-muted/38">
+                  <pre className="overflow-x-auto p-4 font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"query\",\"" + (activeType || "type") + "\",\"--limit\",\"200\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
+                </TabsContent>
               </Tabs>
             </div>
           </section>
         )}
 
         {view === "detail" && activeObject && (
-          <section className="mx-auto h-[calc(100vh-3rem)] max-w-7xl">
-            <ResizablePanelGroup orientation="horizontal" className="gap-4">
-              <ResizablePanel defaultSize={68} minSize={45}>
-                <article ref={objectPageRef} className="mica h-full overflow-auto rounded-3xl px-8 py-7">
-                  <div className="mb-6 flex flex-wrap items-center gap-3">
-                    <Badge>{activeObject.type_id}</Badge>
-                    <span className="font-mono text-xs text-muted-foreground">{activeObject.id}</span>
-                  </div>
-                  <div className="mb-7">
-                    <h1 className="font-serif text-4xl font-medium tracking-tight">{activeObject.title || activeObject.id}</h1>
-                    <div className="mt-3 h-px w-24 bg-[hsl(var(--earth)/0.28)]" />
-                  </div>
-                  <div className="markdown max-w-3xl">
-                    <MarkdownBody
-                      body={activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``}
-                      object={activeObject}
-                      vault={vault}
-                      openObject={(id) => void openObject(id)}
-                    />
-                  </div>
-                </article>
-              </ResizablePanel>
-              <ResizableHandle withHandle className="bg-transparent" />
-              <ResizablePanel defaultSize={32} minSize={22}>
-                <aside className="h-full space-y-4 overflow-auto">
-                  <Panel title="Actions" icon={<Download className="size-4" />}>
-                    <Button className="w-full justify-start rounded-xl" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
-                      <Download className="size-4" />
-                      {savingObjectImage ? "Saving image" : "Save as PNG"}
-                    </Button>
-                  </Panel>
-                  <Panel title="Body" icon={<FileText className="size-4" />}>
-                    <div className="tray break-all rounded-2xl p-3 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
-                  </Panel>
-                  <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
-                  <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-                  <Panel title="Body Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-                  <Panel title="Backlinks" icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
-                </aside>
-              </ResizablePanel>
-            </ResizablePanelGroup>
+          <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
+            <article ref={objectPageRef} className="object-reader mb-scroll h-full overflow-auto px-8 py-8">
+              <div className="mx-auto max-w-[760px]">
+                <div className="mb-6 flex flex-wrap items-center gap-3">
+                  <Badge>{activeObject.type_id}</Badge>
+                  <span className="font-mono text-xs text-muted-foreground">{activeObject.id}</span>
+                </div>
+                <div className="mb-7">
+                  <h1 className="font-serif text-[42px] font-medium leading-[1.05] tracking-tight">{activeObject.title || activeObject.id}</h1>
+                  <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
+                </div>
+                <div className="markdown">
+                  <MarkdownBody
+                    body={activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``}
+                    object={activeObject}
+                    vault={vault}
+                    openObject={(id) => void openObject(id)}
+                  />
+                </div>
+              </div>
+            </article>
+
+            <button
+              className={`inspector-toggle ${inspectorOpen ? "right-[374px] text-[hsl(var(--earth))]" : "right-10 text-muted-foreground"}`}
+              onClick={() => setInspectorOpen((open) => !open)}
+              title={inspectorOpen ? "Hide inspector" : "Show inspector"}
+            >
+              {inspectorOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+              <span>{inspectorOpen ? "Hide" : "Inspector"}</span>
+            </button>
+
+            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "translate-x-0 opacity-100" : "translate-x-[380px] opacity-0"}`}>
+              <div className="flex items-center justify-between px-1 pb-1">
+                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Inspector</div>
+                <button className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setInspectorOpen(false)} title="Hide inspector">
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+              <Panel title="Actions" icon={<Download className="size-4" />}>
+                <Button className="w-full justify-start rounded-xl" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
+                  <Download className="size-4" />
+                  {savingObjectImage ? "Saving image" : "Save as PNG"}
+                </Button>
+              </Panel>
+              <Panel title="Body" icon={<FileText className="size-4" />}>
+                <div className="tray break-all rounded-2xl p-3 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
+              </Panel>
+              <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
+              <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+              <Panel title="Body Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+              <Panel title="Backlinks" icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
+            </aside>
           </section>
         )}
 
         {view === "types" && (
-          <section className="mx-auto max-w-6xl">
+          <section className="mx-auto max-w-[1100px] px-7 py-6">
             <Header eyebrow="Schema Studio" title="Types and fields" description="Dynamic schema for object projections, field links, and local validation." />
-            <div className="mica mb-5 overflow-hidden rounded-3xl">
+            <div className="content-panel mb-7 overflow-hidden">
               <div className="flex items-start justify-between gap-4 px-5 py-4">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium"><Network className="size-4 text-[hsl(var(--earth))]" /> Schema graph</div>
@@ -774,11 +796,11 @@ function App() {
                 </div>
                 <button className="rounded-xl px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setSelectedSchemaType(null)}>Clear</button>
               </div>
-              <div className="h-[360px] border-t border-border/50">
+              <div className="schema-graph-surface h-[390px] border-t border-border/35">
                 <SchemaGraphCanvas graphView={schemaGraphView} selectedType={selectedSchemaType} select={setSelectedSchemaType} />
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
               {types.map((t) => (
                 <Panel key={t.id} title={t.id} icon={<Braces className="size-4" />}>
                   <div className="space-y-1">
@@ -795,7 +817,7 @@ function App() {
                 </Panel>
               ))}
             </div>
-            <div className="tray mt-5 rounded-3xl p-4">
+            <div className="tray mt-7 rounded-2xl p-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium"><Play className="size-4 text-[hsl(var(--earth))]" /> Run console</div>
               <pre className="overflow-x-auto font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"type\",\"list\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
             </div>
@@ -803,7 +825,7 @@ function App() {
         )}
 
         {view === "graph" && (
-          <section className="mx-auto h-[calc(100vh-3rem)] max-w-7xl">
+          <section className="mx-auto h-full max-w-7xl px-6 py-5">
             <div className="mb-4 flex items-start justify-between gap-4">
               <Header eyebrow="Link Map" title="Object graph" description={`${graphView.nodes.length} visible nodes, ${graphView.edges.length} visible links`} />
               <Tabs value={graphMode} onValueChange={setGraphMode}>
@@ -816,7 +838,7 @@ function App() {
               </Tabs>
             </div>
             <div className="grid h-[calc(100%-6rem)] grid-cols-[minmax(0,1fr)_280px] gap-4">
-              <div className="mica relative overflow-hidden rounded-3xl">
+              <div className="graph-surface relative overflow-hidden">
                 <div className="pointer-events-none absolute left-5 top-5 z-10 flex gap-2">
                   {graphView.lanes.map((lane) => <Badge key={lane.type} className="bg-card/70">{lane.type} · {lane.count}</Badge>)}
                 </div>
@@ -850,13 +872,14 @@ function App() {
         )}
 
         {view === "health" && (
-          <section className="mx-auto max-w-5xl">
+          <section className="mx-auto max-w-5xl px-7 py-6">
             <Header eyebrow="Health" title="Vault integrity" description="Local validation and body/link diagnostics." />
-            <div className="mica rounded-3xl p-4">
+            <div className="content-panel p-4">
               {issues.length === 0 ? <EmptyState title="No issues" description="The current vault is clean." /> : issues.map((issue, i) => <pre key={i} className="tray mb-3 overflow-x-auto rounded-2xl p-3 font-mono text-xs text-muted-foreground last:mb-0">{JSON.stringify(issue, null, 2)}</pre>)}
             </div>
           </section>
         )}
+        </div>
       </main>
     </div>
   );
@@ -1078,6 +1101,30 @@ function Header({ eyebrow, title, description }: { eyebrow: string; title: strin
   );
 }
 
+function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; activeType: string; activeObject: Obj | null }) {
+  const parts = ["mbase"];
+  if (view === "objects") {
+    if (activeType) parts.push(activeType);
+  } else if (view === "detail") {
+    if (activeObject?.type_id || activeType) parts.push(activeObject?.type_id || activeType);
+    if (activeObject?.id) parts.push(activeObject.id);
+  } else if (view === "types") {
+    parts.push("schema");
+  } else {
+    parts.push(view);
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11.5px] text-muted-foreground">
+      {parts.map((part, index) => (
+        <React.Fragment key={`${part}-${index}`}>
+          {index > 0 && <ChevronRight className="size-3 opacity-45" />}
+          <span className={`truncate ${index === parts.length - 1 ? "font-semibold text-foreground" : ""}`}>{part}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.ReactNode; label: string; active: boolean; collapsed?: boolean; onClick: () => void }) {
   const button = (
     <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-2xl py-2.5 text-left text-sm transition ${active ? "bg-card/68 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.42),0_10px_22px_hsl(var(--shadow-warm)/0.08)]" : "text-foreground/72 hover:bg-foreground/[0.035]"}`}>
@@ -1109,21 +1156,21 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
     setOpen(false);
   }
   return (
-    <div className="mica mb-5 rounded-2xl p-3">
+    <div className="sidebar-tool-card">
       <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
         <FolderOpen className="size-3.5" />
         Vault
       </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button className="flex w-full items-center justify-between gap-3 rounded-2xl bg-card/62 px-3 py-3 text-left transition hover:bg-card">
+          <button className="flex w-full items-center justify-between gap-3 rounded-[14px] border border-border/40 bg-card/45 px-3 py-2.5 text-left transition hover:bg-card/72">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="min-w-0 truncate font-mono text-xs">{vault ? shortPath(vault) : "default server vault"}</span>
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-sm break-all font-mono">{vault || "server default vault"}</TooltipContent>
             </Tooltip>
-            <Badge className={vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}>{vaultOK ? "ready" : "missing"}</Badge>
+            <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? "ready" : "missing"}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 rounded-3xl p-0">
@@ -1135,7 +1182,7 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
                 <CommandItem value={vault || "default"} onSelect={() => vault && commit(vault)}>
                   <Check className="size-4 opacity-100" />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{vault ? shortPath(vault) : "server default"}</span>
-                  <Badge className={vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}>{vaultOK ? "ready" : "missing"}</Badge>
+                  <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? "ready" : "missing"}</span>
                 </CommandItem>
               </CommandGroup>
               {visibleRecent.length > 0 && (
@@ -1161,38 +1208,6 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
         </PopoverContent>
       </Popover>
     </div>
-  );
-}
-
-function TypeCommand({ types, activeType, select }: { types: TypeDef[]; activeType: string; select: (type: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const active = types.find((type) => type.id === activeType);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground">
-          <span className="truncate">{active?.id ?? "Select type"}</span>
-          <Search className="size-3.5 opacity-60" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 rounded-2xl p-0">
-        <Command>
-          <CommandInput placeholder="Find type..." />
-          <CommandList>
-            <CommandEmpty>No type found.</CommandEmpty>
-            <CommandGroup>
-              {types.map((type) => (
-                <CommandItem key={type.id} value={type.id} onSelect={() => { select(type.id); setOpen(false); }}>
-                  <Check className={`size-4 ${type.id === activeType ? "opacity-100" : "opacity-0"}`} />
-                  <span className="flex-1 truncate">{type.id}</span>
-                  <span className="text-xs text-muted-foreground">{type.fields?.length ?? 0}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   );
 }
 
@@ -1322,13 +1337,13 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
         <svg className="absolute inset-0" width={innerSize.width} height={innerSize.height}>
           <defs>
             <marker id="graph-arrow-earth" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.48)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.72)" />
             </marker>
             <marker id="graph-arrow-moss" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.62)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.76)" />
             </marker>
             <marker id="graph-arrow-clay" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.66)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.78)" />
             </marker>
           </defs>
           {graphView.edges.map((edge) => {
@@ -1339,7 +1354,7 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
             const dimmed = selectedID !== null && edge.source !== selectedID && edge.target !== selectedID;
             return (
               <g key={edge.id} opacity={dimmed ? 0.24 : 1}>
-                <path d={path.d} fill="none" stroke={edge.color} strokeWidth={dimmed ? 1.1 : 1.9} markerEnd={`url(#${edge.marker})`} />
+                <path d={path.d} fill="none" stroke={edge.color} strokeWidth={dimmed ? 1.15 : 2.05} markerEnd={`url(#${edge.marker})`} />
                 {!dimmed && selectedID && (
                   <text x={path.label.x} y={path.label.y} className="fill-muted-foreground text-[10px]">
                     {edge.relation}
@@ -1352,7 +1367,7 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
         {nodes.map((node) => (
           <button
             key={node.id}
-            className={`absolute w-[190px] rounded-[18px] px-2 py-2 text-left transition ${node.id === selectedID ? "bg-card shadow-[0_16px_34px_hsl(var(--shadow-warm)/0.18)]" : "bg-card/80 shadow-[0_10px_24px_hsl(var(--shadow-warm)/0.10)] hover:bg-card"}`}
+            className={`absolute w-[190px] rounded-[18px] px-2 py-2 text-left transition ${node.id === selectedID ? "bg-card shadow-[0_16px_34px_hsl(var(--shadow-warm)/0.18)]" : "bg-card/95 shadow-[0_12px_26px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"}`}
             data-graph-node={node.id}
             style={{ left: node.position.x, top: node.position.y, border: `1px solid ${node.id === selectedID ? graphTypeColor(node.object.type_id) : "hsl(var(--border) / 0.45)"}` }}
             onClick={() => select(node.id)}
@@ -1398,31 +1413,9 @@ function pruneDraggedPositions(nodes: Array<{ id: string }>, setDraggedPositions
 
 function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>[]; fields: FieldDef[]; open: (id: string) => void }) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     const base: ColumnDef<Record<string, unknown>>[] = [
-      {
-        id: "_select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
-            aria-label="Select all rows"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
-            aria-label={`Select ${String(row.original.id)}`}
-            onClick={(event) => event.stopPropagation()}
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false
-      },
       {
         accessorKey: "id",
         header: ({ column }) => <SortableHeader label="id" toggle={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
@@ -1456,13 +1449,10 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, columnVisibility, rowSelection },
+    state: { sorting },
     onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 25 } }
   });
@@ -1479,25 +1469,6 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
 
   return (
     <div className="overflow-hidden rounded-2xl">
-      <div className="flex items-center justify-between gap-3 border-b border-border/45 px-3 py-2">
-        <div className="text-xs text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} rows · {table.getVisibleLeafColumns().length} columns · {Object.keys(rowSelection).length} selected
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground">
-              <Columns3 className="size-3.5" /> Columns
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44 rounded-2xl bg-card/95 p-1 shadow-[0_18px_50px_hsl(var(--shadow-warm)/0.18)] backdrop-blur">
-            {table.getAllLeafColumns().filter((column) => column.getCanHide()).map((column) => (
-              <DropdownMenuCheckboxItem key={column.id} checked={column.getIsVisible()} onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}>
-                {column.id}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
       <div ref={tableScrollRef} className="max-h-[520px] overflow-auto">
         <Table className="min-w-[900px]">
           <TableHeader>
@@ -1539,6 +1510,8 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-border/45 px-3 py-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
+          <span>{rows.length} rows</span>
+          <span className="text-border">/</span>
           <span>Page {table.getState().pagination.pageIndex + 1} / {table.getPageCount() || 1}</span>
           <Select value={String(table.getState().pagination.pageSize)} onValueChange={(value) => table.setPageSize(Number(value))}>
             <SelectTrigger className="h-8 w-24 rounded-xl text-xs">
@@ -1614,9 +1587,9 @@ function EmptyState({ title, description }: { title: string; description: string
 
 function Panel({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="mica rounded-3xl p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        {icon && <span className="text-[hsl(var(--earth))]">{icon}</span>}
+    <div className="panel-block">
+      <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        {icon && <span className="text-muted-foreground">{icon}</span>}
         {title}
       </div>
       <div>{children}</div>
@@ -1803,6 +1776,8 @@ function graphTypeOrder(types: string[]) {
 function layoutGraphNodes(nodes: Obj[], edges: Link[]) {
   const byID = new Map(nodes.map((node) => [node.id, node]));
   const companies = nodes.filter((node) => node.type_id === "company").sort(sortObject);
+  if (companies.length === 0) return layoutGenericGraphNodes(nodes);
+
   const companyY = new Map<string, number>();
   companies.forEach((company, i) => companyY.set(company.id, 80 + i * 230));
   const positions: Record<string, { x: number; y: number }> = {};
@@ -1840,6 +1815,24 @@ function layoutGraphNodes(nodes: Obj[], edges: Link[]) {
   }
 
   placeRemaining(nodes, positions);
+  return positions;
+}
+
+function layoutGenericGraphNodes(nodes: Obj[]) {
+  const positions: Record<string, { x: number; y: number }> = {};
+  const byType = new Map<string, Obj[]>();
+  for (const node of nodes) {
+    const group = byType.get(node.type_id) ?? [];
+    group.push(node);
+    byType.set(node.type_id, group);
+  }
+  graphTypeOrder([...byType.keys()]).forEach((type, typeIndex) => {
+    const group = (byType.get(type) ?? []).sort(sortObject);
+    const x = 40 + typeIndex * 270;
+    group.forEach((node, nodeIndex) => {
+      positions[node.id] = { x, y: 70 + nodeIndex * 102 };
+    });
+  });
   return positions;
 }
 
