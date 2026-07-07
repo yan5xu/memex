@@ -705,13 +705,13 @@ function App() {
             <div className="objects-workspace">
               <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
                 <div className="mb-5 flex items-center justify-between gap-4">
-                  <TabsList className="rounded-lg bg-muted/45">
+                  <TabsList className="rounded-lg bg-muted/35">
                     <TabsTrigger value="table" className="rounded-md">Table</TabsTrigger>
                     <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
                   </TabsList>
                   <div className="relative w-80 max-w-[45%]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-lg bg-background/72 pl-9 font-mono text-xs" />
+                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-md bg-background/68 pl-9 font-mono text-xs" />
                   </div>
                 </div>
                 <TabsContent value="table" className="mt-0 min-h-0 flex-1">
@@ -731,7 +731,7 @@ function App() {
 
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
-            <article ref={objectPageRef} className="object-reader mb-scroll h-full overflow-auto px-8 py-8">
+            <article ref={objectPageRef} className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "pr-[420px]" : ""}`}>
               <div className="mx-auto max-w-[760px]">
                 <div className="mb-6 flex flex-wrap items-center gap-3">
                   <Badge>{activeObject.type_id}</Badge>
@@ -800,7 +800,7 @@ function App() {
                 </div>
                 <button className="rounded-xl px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setSelectedSchemaType(null)}>Clear</button>
               </div>
-              <div className="schema-graph-surface h-[390px] border-t border-border/35">
+              <div className="schema-graph-surface h-[390px] border-t border-border/25">
                 <SchemaGraphCanvas graphView={schemaGraphView} selectedType={selectedSchemaType} select={setSelectedSchemaType} />
               </div>
             </div>
@@ -833,18 +833,18 @@ function App() {
             <div className="mb-4 flex items-start justify-between gap-4">
               <Header eyebrow="Link Map" title="Object graph" description={`${graphView.nodes.length} visible nodes, ${graphView.edges.length} visible links`} />
               <Tabs value={graphMode} onValueChange={setGraphMode}>
-                <TabsList className="acrylic rounded-2xl">
-                  <TabsTrigger value="core" className="rounded-xl text-xs">Core</TabsTrigger>
-                  <TabsTrigger value="all" className="rounded-xl text-xs">All</TabsTrigger>
-                  <TabsTrigger value="founders" className="rounded-xl text-xs">Founders</TabsTrigger>
-                  <TabsTrigger value="sources" className="rounded-xl text-xs">Sources</TabsTrigger>
+                <TabsList className="acrylic rounded-lg">
+                  <TabsTrigger value="core" className="rounded-md text-xs">Core</TabsTrigger>
+                  <TabsTrigger value="all" className="rounded-md text-xs">All</TabsTrigger>
+                  <TabsTrigger value="founders" className="rounded-md text-xs">Founders</TabsTrigger>
+                  <TabsTrigger value="sources" className="rounded-md text-xs">Sources</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
             <div className="grid h-[calc(100%-6rem)] grid-cols-[minmax(0,1fr)_280px] gap-4">
               <div className="graph-surface relative overflow-hidden">
-                <div className="pointer-events-none absolute left-5 top-5 z-10 flex gap-2">
-                  {graphView.lanes.map((lane) => <Badge key={lane.type} className="bg-card/70">{lane.type} · {lane.count}</Badge>)}
+                  <div className="pointer-events-none absolute left-5 top-5 z-10 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
+                  {graphView.lanes.map((lane) => <Badge key={lane.type} className="bg-card/55">{lane.type} · {lane.count}</Badge>)}
                 </div>
                 <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} />
               </div>
@@ -1131,9 +1131,9 @@ function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; act
 
 function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.ReactNode; label: string; active: boolean; collapsed?: boolean; onClick: () => void }) {
   const button = (
-    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-2.5 px-2"} rounded-lg py-2 text-left text-[12.5px] transition ${active ? "bg-[hsl(var(--card)/0.72)] text-foreground shadow-[inset_2px_0_0_hsl(var(--earth)/0.42)]" : "text-foreground/66 hover:bg-foreground/[0.028] hover:text-foreground/82"}`}>
+    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-2.5 px-2"} rounded-lg py-2 text-left text-[12.5px] transition ${active ? "bg-[hsl(var(--card)/0.58)] text-foreground" : "text-foreground/66 hover:bg-card/40 hover:text-foreground/82"}`}>
       <span className={active ? "text-[hsl(31_28%_39%)]" : "text-muted-foreground"}>{icon}</span>
-      {!collapsed && <span className="font-normal">{label}</span>}
+      {!collapsed && <span className={active ? "font-medium" : "font-normal"}>{label}</span>}
     </button>
   );
   if (!collapsed) return button;
@@ -1270,7 +1270,7 @@ function SchemaGraphCanvas({ graphView, selectedType, select }: { graphView: Ret
             const dimmed = selectedType !== null && edge.source !== selectedType && edge.target !== selectedType;
             return (
               <g key={`${edge.source}-${edge.relation}-${edge.target}`} opacity={dimmed ? 0.22 : 1}>
-                <path d={path.d} fill="none" stroke={dimmed ? "hsl(var(--muted-foreground) / 0.18)" : schemaEdgeColor(edge)} strokeWidth={edge.required ? 2.2 : 1.7} markerEnd="url(#schema-arrow)" />
+                <path d={path.d} fill="none" stroke={dimmed ? "hsl(var(--muted-foreground) / 0.14)" : schemaEdgeColor(edge)} strokeWidth={edge.required ? 1.8 : 1.35} markerEnd="url(#schema-arrow)" />
                 {!dimmed && (
                   <text x={path.label.x} y={path.label.y} className="fill-muted-foreground text-[10px]">
                     {edge.relation}
@@ -1283,7 +1283,7 @@ function SchemaGraphCanvas({ graphView, selectedType, select }: { graphView: Ret
         {nodes.map((node) => (
           <button
             key={node.id}
-            className={`absolute w-[190px] rounded-[18px] px-4 py-3 text-left transition ${node.id === selectedType ? "bg-card shadow-[0_16px_34px_hsl(var(--shadow-warm)/0.18)]" : "bg-card/80 shadow-[0_10px_24px_hsl(var(--shadow-warm)/0.10)] hover:bg-card"}`}
+            className={`absolute w-[190px] rounded-xl px-4 py-3 text-left transition ${node.id === selectedType ? "bg-card shadow-[0_10px_22px_-16px_hsl(var(--shadow-warm)/0.20)]" : "bg-card/76 shadow-[0_8px_18px_-15px_hsl(var(--shadow-warm)/0.14)] hover:bg-card/92"}`}
             data-graph-node={node.id}
             style={{ left: node.position.x, top: node.position.y, border: `1px solid ${node.id === selectedType ? graphTypeColor(node.id) : "hsl(var(--border) / 0.45)"}` }}
             onClick={() => select(node.id)}
@@ -1341,13 +1341,13 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
         <svg className="absolute inset-0" width={innerSize.width} height={innerSize.height}>
           <defs>
             <marker id="graph-arrow-earth" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.72)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.56)" />
             </marker>
             <marker id="graph-arrow-moss" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.76)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.58)" />
             </marker>
             <marker id="graph-arrow-clay" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.78)" />
+              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.6)" />
             </marker>
           </defs>
           {graphView.edges.map((edge) => {
@@ -1357,8 +1357,8 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
             const path = graphPath(source.position, target.position);
             const dimmed = selectedID !== null && edge.source !== selectedID && edge.target !== selectedID;
             return (
-              <g key={edge.id} opacity={dimmed ? 0.24 : 1}>
-                <path d={path.d} fill="none" stroke={edge.color} strokeWidth={dimmed ? 1.15 : 2.05} markerEnd={`url(#${edge.marker})`} />
+              <g key={edge.id} opacity={dimmed ? 0.2 : 0.88}>
+                <path d={path.d} fill="none" stroke={edge.color} strokeWidth={dimmed ? 1 : 1.65} markerEnd={`url(#${edge.marker})`} />
                 {!dimmed && selectedID && (
                   <text x={path.label.x} y={path.label.y} className="fill-muted-foreground text-[10px]">
                     {edge.relation}
@@ -1371,7 +1371,7 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
         {nodes.map((node) => (
           <button
             key={node.id}
-            className={`absolute w-[190px] rounded-[18px] px-2 py-2 text-left transition ${node.id === selectedID ? "bg-card shadow-[0_16px_34px_hsl(var(--shadow-warm)/0.18)]" : "bg-card/95 shadow-[0_12px_26px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"}`}
+            className={`absolute w-[190px] rounded-xl px-2 py-2 text-left transition ${node.id === selectedID ? "bg-card shadow-[0_10px_22px_-16px_hsl(var(--shadow-warm)/0.20)]" : "bg-card/90 shadow-[0_8px_18px_-15px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"}`}
             data-graph-node={node.id}
             style={{ left: node.position.x, top: node.position.y, border: `1px solid ${node.id === selectedID ? graphTypeColor(node.object.type_id) : "hsl(var(--border) / 0.45)"}` }}
             onClick={() => select(node.id)}
@@ -1394,11 +1394,11 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
 function GraphZoomControls({ zoom, setZoom, reset }: { zoom: number; setZoom: React.Dispatch<React.SetStateAction<number>>; reset: () => void }) {
   const change = (delta: number) => setZoom((value) => clampZoom(Number((value + delta).toFixed(2))));
   return (
-    <div className="absolute right-4 top-4 z-20 flex items-center gap-1 rounded-2xl bg-card/78 p-1 text-xs shadow-[0_10px_24px_hsl(var(--shadow-warm)/0.10)] backdrop-blur">
-      <button className="rounded-xl px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => change(-0.12)} title="Zoom out">-</button>
-      <button className="min-w-12 rounded-xl px-2.5 py-1.5 font-mono text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setZoom(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
-      <button className="rounded-xl px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => change(0.12)} title="Zoom in">+</button>
-      <button className="rounded-xl px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={reset} title="Reset layout">Reset</button>
+    <div className="absolute right-4 top-4 z-20 flex items-center gap-1 rounded-lg bg-card/72 p-1 text-xs shadow-[0_8px_18px_-14px_hsl(var(--shadow-warm)/0.12)] backdrop-blur">
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(-0.12)} title="Zoom out">-</button>
+      <button className="min-w-12 rounded-md px-2.5 py-1.5 font-mono text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setZoom(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(0.12)} title="Zoom in">+</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={reset} title="Reset layout">Reset</button>
     </div>
   );
 }

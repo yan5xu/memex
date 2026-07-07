@@ -9,9 +9,9 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-[hsl(var(--border)/0.58)] bg-[hsl(var(--muted)/0.52)] text-[hsl(var(--foreground)/0.76)] hover:bg-[hsl(var(--muted)/0.72)]",
+          "border-[hsl(var(--border)/0.42)] bg-[hsl(var(--card)/0.48)] text-[hsl(var(--foreground)/0.68)] hover:bg-[hsl(var(--card)/0.68)]",
         secondary:
-          "border-[hsl(var(--border)/0.48)] bg-[hsl(var(--card)/0.72)] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--card))]",
+          "border-[hsl(var(--border)/0.36)] bg-[hsl(var(--card)/0.56)] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--card)/0.74)]",
         destructive:
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
