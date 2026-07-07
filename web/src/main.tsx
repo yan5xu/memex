@@ -46,8 +46,8 @@ type GraphData = { nodes: Obj[]; edges: Link[] };
 type SchemaEdge = { source: string; target: string; relation: string; kind: string; required?: boolean };
 type Point = { x: number; y: number };
 type ViewID = "objects" | "detail" | "types" | "graph" | "health";
-type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string };
-type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string };
+type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
+type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
 type AppState = {
   view: string;
   vault: string;
@@ -146,7 +146,8 @@ const indexRoute = createRoute({
     type: typeof search.type === "string" ? search.type : undefined,
     filter: typeof search.filter === "string" ? search.filter : undefined,
     object: typeof search.object === "string" ? search.object : undefined,
-    graphMode: typeof search.graphMode === "string" ? search.graphMode : undefined
+    graphMode: typeof search.graphMode === "string" ? search.graphMode : undefined,
+    graphHiddenTypes: typeof search.graphHiddenTypes === "string" ? search.graphHiddenTypes : undefined
   }),
   component: App
 });
@@ -194,6 +195,21 @@ function saveVaultUIState(vault: string, state: VaultUIState) {
   const states = getVaultUIStates();
   states[nextVault] = state;
   localStorage.setItem("mbase.vaultStates", JSON.stringify(states));
+}
+
+function parseGraphHiddenTypes(value: unknown): Set<string> {
+  if (typeof value !== "string" || !value.trim()) return new Set();
+  return new Set(value.split(",").map((item) => {
+    try {
+      return decodeURIComponent(item.trim());
+    } catch {
+      return item.trim();
+    }
+  }).filter(Boolean));
+}
+
+function serializeGraphHiddenTypes(types: Set<string>) {
+  return [...types].sort().map((type) => encodeURIComponent(type)).join(",");
 }
 
 function safeFileName(value: string) {
@@ -268,6 +284,7 @@ function App() {
   const [issues, setIssues] = useState<unknown[]>([]);
   const [graph, setGraph] = useState<GraphData>({ nodes: [], edges: [] });
   const [graphMode, setGraphModeState] = useState(routeSearch.graphMode ?? "core");
+  const [hiddenGraphTypes, setHiddenGraphTypesState] = useState(() => parseGraphHiddenTypes(routeSearch.graphHiddenTypes));
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
   const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
   const [filter, setFilterState] = useState(routeSearch.filter ?? "");
@@ -309,6 +326,26 @@ function App() {
   function setGraphMode(next: string, options: { replace?: boolean } = {}) {
     setGraphModeState(next);
     updateSearch({ view: "graph", graphMode: next }, options);
+  }
+
+  function setGraphHiddenTypes(next: Set<string>, options: { replace?: boolean } = {}) {
+    const serialized = serializeGraphHiddenTypes(next);
+    setHiddenGraphTypesState(next);
+    updateSearch({ view: "graph", graphHiddenTypes: serialized || undefined }, options);
+  }
+
+  function toggleGraphType(type: string) {
+    const next = new Set(hiddenGraphTypes);
+    if (next.has(type)) {
+      next.delete(type);
+    } else {
+      next.add(type);
+    }
+    setGraphHiddenTypes(next);
+  }
+
+  function showAllGraphTypes() {
+    setGraphHiddenTypes(new Set());
   }
 
   function cachedRun<T>(argv: string[], vaultOverride = vault) {
@@ -389,7 +426,7 @@ function App() {
     setGraph(nextGraph);
     setViewState("graph");
     if (options.syncURL !== false) {
-      updateSearch({ view: "graph", graphMode });
+      updateSearch({ view: "graph", graphMode, graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined });
     }
     return nextGraph;
   }
@@ -433,32 +470,45 @@ function App() {
 
   const activeFields = useMemo(() => types.find((t) => t.id === activeType)?.fields ?? [], [types, activeType]);
   const schemaGraphView = useMemo(() => buildSchemaGraphView(types, selectedSchemaType), [types, selectedSchemaType]);
-  const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode), [graph, graphMode, selectedGraphNode]);
+  const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode, hiddenGraphTypes), [graph, graphMode, selectedGraphNode, hiddenGraphTypes]);
+  const graphTypeControls = useMemo(() => buildGraphTypeControls(graph, graphMode, hiddenGraphTypes), [graph, graphMode, hiddenGraphTypes]);
   const selectedGraphObject = useMemo(() => graph.nodes.find((n) => n.id === selectedGraphNode) ?? null, [graph.nodes, selectedGraphNode]);
+  const graphLayoutKey = useMemo(() => `${graphMode}:${serializeGraphHiddenTypes(hiddenGraphTypes)}`, [graphMode, hiddenGraphTypes]);
   const currentVaultState = useMemo<VaultUIState>(() => ({
     view,
     type: activeType || undefined,
     filter: filter || undefined,
     object: view === "detail" ? activeObject?.id : undefined,
-    graphMode
-  }), [view, activeType, filter, activeObject?.id, graphMode]);
+    graphMode,
+    graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined
+  }), [view, activeType, filter, activeObject?.id, graphMode, hiddenGraphTypes]);
 
   useEffect(() => {
     const nextView = routeSearch.view;
     const nextType = routeSearch.type ?? "";
     const nextFilter = routeSearch.filter ?? "";
     const nextGraphMode = routeSearch.graphMode ?? "core";
+    const nextHiddenGraphTypes = parseGraphHiddenTypes(routeSearch.graphHiddenTypes);
     if (nextView !== view) setViewState(nextView);
     if (nextType !== activeType) setActiveTypeState(nextType);
     if (nextFilter !== filter) setFilterState(nextFilter);
     if (nextGraphMode !== graphMode) setGraphModeState(nextGraphMode);
+    if (serializeGraphHiddenTypes(nextHiddenGraphTypes) !== serializeGraphHiddenTypes(hiddenGraphTypes)) {
+      setHiddenGraphTypesState(nextHiddenGraphTypes);
+    }
     if (nextView === "detail" && routeSearch.object && routeSearch.object !== activeObject?.id) {
       void openObject(routeSearch.object, { syncURL: false });
     }
     if (nextView === "graph" && graph.nodes.length === 0) {
       void openGraph({ syncURL: false });
     }
-  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode]);
+  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
+
+  useEffect(() => {
+    if (selectedGraphNode && !graphView.nodes.some((node) => node.id === selectedGraphNode)) {
+      setSelectedGraphNode(null);
+    }
+  }, [selectedGraphNode, graphView.nodes]);
 
   useEffect(() => {
     if (!vault) return;
@@ -491,6 +541,7 @@ function App() {
     const nextType = saved?.type ?? "";
     const nextFilter = saved?.filter ?? "";
     const nextGraphMode = saved?.graphMode ?? "core";
+    const nextHiddenGraphTypes = parseGraphHiddenTypes(saved?.graphHiddenTypes);
     setCurrentVault(nextPath);
     setRecentVaults(getRecentVaults());
     queryClient.invalidateQueries();
@@ -503,8 +554,9 @@ function App() {
     setGraph({ nodes: [], edges: [] });
     setFilterState(nextFilter);
     setGraphModeState(nextGraphMode);
+    setHiddenGraphTypesState(nextHiddenGraphTypes);
     setViewState(nextView === "detail" ? "objects" : nextView);
-    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: undefined, graphMode: nextGraphMode }, { replace: true });
+    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
     const loaded = await loadBase(nextType, nextFilter);
     if (nextView === "graph") {
       await openGraph({ syncURL: false });
@@ -831,7 +883,11 @@ function App() {
         {view === "graph" && (
           <section className="mx-auto h-full max-w-7xl px-6 py-5">
             <div className="mb-4 flex items-start justify-between gap-4">
-              <Header eyebrow="Link Map" title="Object graph" description={`${graphView.nodes.length} visible nodes, ${graphView.edges.length} visible links`} />
+              <Header
+                eyebrow="Link Map"
+                title="Object graph"
+                description={`${graphView.nodes.length} visible nodes, ${graphView.edges.length} visible links${hiddenGraphTypes.size ? `, ${hiddenGraphTypes.size} type${hiddenGraphTypes.size > 1 ? "s" : ""} hidden` : ""}`}
+              />
               <Tabs value={graphMode} onValueChange={setGraphMode}>
                 <TabsList className="acrylic rounded-lg">
                   <TabsTrigger value="core" className="rounded-md text-xs">Core</TabsTrigger>
@@ -843,12 +899,50 @@ function App() {
             </div>
             <div className="grid h-[calc(100%-6rem)] grid-cols-[minmax(0,1fr)_280px] gap-4">
               <div className="graph-surface relative overflow-hidden">
-                  <div className="pointer-events-none absolute left-5 top-5 z-10 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
-                  {graphView.lanes.map((lane) => <Badge key={lane.type} className="bg-card/55">{lane.type} · {lane.count}</Badge>)}
+                <div className="absolute left-5 top-5 z-30 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
+                  {graphTypeControls.map((lane) => (
+                    <button
+                      key={lane.type}
+                      type="button"
+                      className={`graph-type-chip ${lane.hidden ? "graph-type-chip-hidden" : ""}`}
+                      onClick={() => toggleGraphType(lane.type)}
+                      title={lane.hidden ? `Show ${lane.type}` : `Hide ${lane.type}`}
+                    >
+                      <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
+                      <span>{lane.type}</span>
+                      <span className="font-mono opacity-60">{lane.count}</span>
+                    </button>
+                  ))}
                 </div>
-                <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} />
+                <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} layoutKey={graphLayoutKey} />
               </div>
               <aside className="space-y-4">
+                <Panel title="Visible Types" icon={<Braces className="size-4" />}>
+                  <div className="space-y-2">
+                    {graphTypeControls.map((lane) => (
+                      <button
+                        key={lane.type}
+                        type="button"
+                        className={`graph-type-row ${lane.hidden ? "graph-type-row-hidden" : ""}`}
+                        onClick={() => toggleGraphType(lane.type)}
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
+                          <span className="truncate">{lane.type}</span>
+                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground">{lane.hidden ? "hidden" : lane.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-md px-2.5 py-1.5 text-xs text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04] disabled:text-muted-foreground/45"
+                    onClick={showAllGraphTypes}
+                    disabled={hiddenGraphTypes.size === 0}
+                  >
+                    Show all types
+                  </button>
+                </Panel>
                 <Panel title="Selection" icon={<Network className="size-4" />}>
                   {selectedGraphObject ? (
                     <div className="space-y-3">
@@ -1306,11 +1400,12 @@ function SchemaGraphCanvas({ graphView, selectedType, select }: { graphView: Ret
   );
 }
 
-function GraphCanvas({ graphView, selectedID, select, open }: { graphView: ReturnType<typeof buildGraphView>; selectedID: string | null; select: (id: string) => void; open: (id: string) => void }) {
+function GraphCanvas({ graphView, selectedID, select, open, layoutKey }: { graphView: ReturnType<typeof buildGraphView>; selectedID: string | null; select: (id: string) => void; open: (id: string) => void; layoutKey: string }) {
   const [zoom, setZoom] = useState(1);
   const [draggedPositions, setDraggedPositions] = useState<Record<string, Point>>({});
   const dragRef = useRef<{ id: string; startX: number; startY: number; origin: Point; moved: boolean } | null>(null);
   useEffect(() => pruneDraggedPositions(graphView.nodes, setDraggedPositions), [graphView.nodes]);
+  useEffect(() => setDraggedPositions({}), [layoutKey]);
   const nodes = graphView.nodes.map((node) => ({ ...node, position: draggedPositions[node.id] ?? node.position }));
   const nodeMap = new Map(nodes.map((node) => [node.id, { object: node.object, position: node.position }]));
   const relatedNodeIDs = new Set<string>();
@@ -1429,7 +1524,7 @@ function GraphZoomControls({ zoom, setZoom, reset }: { zoom: number; setZoom: Re
       <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(-0.12)} title="Zoom out">-</button>
       <button className="min-w-12 rounded-md px-2.5 py-1.5 font-mono text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setZoom(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
       <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(0.12)} title="Zoom in">+</button>
-      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={reset} title="Reset layout">Reset</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={reset} title="Relayout visible graph">Relayout</button>
     </div>
   );
 }
@@ -1746,14 +1841,16 @@ function schemaEdgeColor(edge: SchemaEdge) {
   return "hsl(var(--earth) / 0.52)";
 }
 
-function buildGraphView(graph: GraphData, mode: string, selectedID: string | null) {
-  const visibleEdges = graph.edges.filter((edge) => graphEdgeVisible(edge, mode));
+function buildGraphView(graph: GraphData, mode: string, selectedID: string | null, hiddenTypes: Set<string>) {
+  const modeEdges = graph.edges.filter((edge) => graphEdgeVisible(edge, mode));
   const visibleNodeIds = new Set<string>();
-  for (const edge of visibleEdges) {
+  for (const edge of modeEdges) {
     visibleNodeIds.add(edge.from_id);
     visibleNodeIds.add(edge.to_id);
   }
-  const nodes = graph.nodes.filter((node) => visibleNodeIds.size === 0 || visibleNodeIds.has(node.id));
+  const nodes = graph.nodes.filter((node) => (visibleNodeIds.size === 0 || visibleNodeIds.has(node.id)) && !hiddenTypes.has(node.type_id));
+  const nodeIDs = new Set(nodes.map((node) => node.id));
+  const visibleEdges = modeEdges.filter((edge) => nodeIDs.has(edge.from_id) && nodeIDs.has(edge.to_id));
   const lanes = graphLanes(nodes);
   const positions = layoutGraphNodes(nodes, visibleEdges);
   return {
@@ -1783,6 +1880,25 @@ function buildGraphView(graph: GraphData, mode: string, selectedID: string | nul
     }),
     nodeMap: new Map(nodes.map((node) => [node.id, { object: node, position: positions[node.id] ?? { x: 0, y: 0 } }]))
   };
+}
+
+function buildGraphTypeControls(graph: GraphData, mode: string, hiddenTypes: Set<string>) {
+  const modeEdges = graph.edges.filter((edge) => graphEdgeVisible(edge, mode));
+  const visibleNodeIds = new Set<string>();
+  for (const edge of modeEdges) {
+    visibleNodeIds.add(edge.from_id);
+    visibleNodeIds.add(edge.to_id);
+  }
+  const counts = new Map<string, number>();
+  for (const node of graph.nodes) {
+    if (visibleNodeIds.size > 0 && !visibleNodeIds.has(node.id)) continue;
+    counts.set(node.type_id, (counts.get(node.type_id) ?? 0) + 1);
+  }
+  return graphTypeOrder([...counts.keys()]).map((type) => ({
+    type,
+    count: counts.get(type) ?? 0,
+    hidden: hiddenTypes.has(type)
+  }));
 }
 
 function displayEdge(edge: Link) {
@@ -1865,8 +1981,8 @@ function layoutGraphNodes(nodes: Obj[], edges: Link[]) {
   for (const [companyID, group] of companyGroups) {
     const y = companyY.get(companyID) ?? middleY;
     placeGroup(group.people.sort(sortObject), 640, y, 74, positions);
-    placeGroup(group.touchpoints.sort(sortObject), 640, y + 92, 76, positions);
-    placeGroup(group.sources.sort(sortObject), 930, y + 92, 76, positions);
+    placeGroup(group.touchpoints.sort(sortObject), 890, y, 76, positions);
+    placeGroup(group.sources.sort(sortObject), 1140, y, 76, positions);
   }
 
   placeRemaining(nodes, positions);
@@ -1906,8 +2022,8 @@ function placeGroup(nodes: Obj[], x: number, centerY: number, step: number, posi
 function placeRemaining(nodes: Obj[], positions: Record<string, { x: number; y: number }>) {
   const lanes: Record<string, { x: number; y: number; step: number }> = {
     person: { x: 640, y: 0, step: 86 },
-    touchpoint: { x: 640, y: 470, step: 94 },
-    "source.item": { x: 930, y: 500, step: 108 }
+    touchpoint: { x: 890, y: 470, step: 94 },
+    "source.item": { x: 1140, y: 500, step: 108 }
   };
   const counts = new Map<string, number>();
   for (const node of nodes.filter((item) => !positions[item.id]).sort(sortObject)) {
