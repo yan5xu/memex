@@ -388,6 +388,8 @@ body {
 }
 
 .objects-workspace {
+  min-height: 0;
+  flex: 1;
   border-radius: 18px;
 }
 

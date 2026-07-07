@@ -697,13 +697,13 @@ function App() {
         </div>
         <div className="mb-scroll min-h-0 flex-1 overflow-auto">
         {view === "objects" && (
-          <section className="mx-auto max-w-[1100px] px-7 py-6">
+          <section className="mx-auto flex h-full w-full max-w-[1100px] flex-col px-7 py-6">
             <div className="mb-5 flex items-baseline gap-3">
               <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || "Objects"}</h1>
               <span className="font-mono text-xs text-muted-foreground">{rows.length} objects</span>
             </div>
             <div className="objects-workspace">
-              <Tabs defaultValue="table">
+              <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
                 <div className="mb-5 flex items-center justify-between gap-4">
                   <TabsList className="rounded-2xl bg-muted/58">
                     <TabsTrigger value="table" className="rounded-xl">Table</TabsTrigger>
@@ -714,14 +714,14 @@ function App() {
                     <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-10 w-full rounded-xl bg-background/72 pl-9 font-mono text-xs" />
                   </div>
                 </div>
-                <TabsContent value="table" className="mt-0">
+                <TabsContent value="table" className="mt-0 min-h-0 flex-1">
                     {rows.length === 0 ? (
                       <EmptyState title="No objects" description="Create objects from the CLI or switch to another type." />
                     ) : (
                       <ObjectDataTable rows={rows} fields={activeFields} open={(id) => void openObject(id)} />
                     )}
                 </TabsContent>
-                <TabsContent value="api" className="mt-0 rounded-2xl bg-muted/38">
+                <TabsContent value="api" className="mt-0 min-h-0 flex-1 rounded-2xl bg-muted/38">
                   <pre className="overflow-x-auto p-4 font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"query\",\"" + (activeType || "type") + "\",\"--limit\",\"200\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
                 </TabsContent>
               </Tabs>
@@ -1472,8 +1472,8 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
   const bottomPadding = virtualRows.length > 0 ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end : 0;
 
   return (
-    <div className="overflow-hidden rounded-2xl">
-      <div ref={tableScrollRef} className="max-h-[520px] overflow-auto">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl">
+      <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
         <Table className="min-w-[900px]">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -1497,7 +1497,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
               return (
               <TableRow key={row.id} onDoubleClick={() => open(String(row.original.id))}>
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="max-w-72 whitespace-nowrap">
+                  <TableCell key={cell.id} className="max-w-72 whitespace-nowrap align-top">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
@@ -1551,7 +1551,7 @@ function renderTableCell(value: unknown, field: FieldDef, open: (id: string) => 
   if (field.kind === "ref" || field.kind === "ref_list") {
     const refs = Array.isArray(value) ? value : [value];
     return (
-      <span className="flex max-w-72 flex-wrap gap-1">
+      <span className="flex max-h-16 max-w-72 flex-wrap gap-1 overflow-hidden">
         {refs.map((ref) => (
           <button key={String(ref)} className="glass-light rounded-xl px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-card hover:text-foreground" onClick={() => open(String(ref))}>
             {String(ref)}
@@ -1565,7 +1565,7 @@ function renderTableCell(value: unknown, field: FieldDef, open: (id: string) => 
     return <a href={href} target="_blank" rel="noreferrer" className="inline-block max-w-64 truncate text-[hsl(var(--earth))] hover:text-foreground">{href}</a>;
   }
   if (Array.isArray(value)) {
-    return <span className="flex max-w-72 flex-wrap gap-1">{value.map((item) => <Badge key={String(item)}>{String(item)}</Badge>)}</span>;
+    return <span className="flex max-h-16 max-w-72 flex-wrap gap-1 overflow-hidden">{value.map((item) => <Badge key={String(item)}>{String(item)}</Badge>)}</span>;
   }
   if (field.kind === "enum" || field.kind === "boolean") return <Badge>{String(value)}</Badge>;
   return <span className="inline-block max-w-72 truncate">{String(value)}</span>;
