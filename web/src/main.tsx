@@ -285,6 +285,7 @@ function App() {
   const [graph, setGraph] = useState<GraphData>({ nodes: [], edges: [] });
   const [graphMode, setGraphModeState] = useState(routeSearch.graphMode ?? "core");
   const [hiddenGraphTypes, setHiddenGraphTypesState] = useState(() => parseGraphHiddenTypes(routeSearch.graphHiddenTypes));
+  const [graphLayoutSeed, setGraphLayoutSeed] = useState(0);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
   const [selectedSchemaType, setSelectedSchemaType] = useState<string | null>(null);
   const [filter, setFilterState] = useState(routeSearch.filter ?? "");
@@ -346,6 +347,10 @@ function App() {
 
   function showAllGraphTypes() {
     setGraphHiddenTypes(new Set());
+  }
+
+  function relayoutGraph() {
+    setGraphLayoutSeed((seed) => seed + 1);
   }
 
   function cachedRun<T>(argv: string[], vaultOverride = vault) {
@@ -470,10 +475,10 @@ function App() {
 
   const activeFields = useMemo(() => types.find((t) => t.id === activeType)?.fields ?? [], [types, activeType]);
   const schemaGraphView = useMemo(() => buildSchemaGraphView(types, selectedSchemaType), [types, selectedSchemaType]);
-  const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode, hiddenGraphTypes), [graph, graphMode, selectedGraphNode, hiddenGraphTypes]);
+  const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed), [graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed]);
   const graphTypeControls = useMemo(() => buildGraphTypeControls(graph, graphMode, hiddenGraphTypes), [graph, graphMode, hiddenGraphTypes]);
   const selectedGraphObject = useMemo(() => graph.nodes.find((n) => n.id === selectedGraphNode) ?? null, [graph.nodes, selectedGraphNode]);
-  const graphLayoutKey = useMemo(() => `${graphMode}:${serializeGraphHiddenTypes(hiddenGraphTypes)}`, [graphMode, hiddenGraphTypes]);
+  const graphLayoutKey = useMemo(() => `${graphMode}:${serializeGraphHiddenTypes(hiddenGraphTypes)}:${graphLayoutSeed}`, [graphMode, hiddenGraphTypes, graphLayoutSeed]);
   const currentVaultState = useMemo<VaultUIState>(() => ({
     view,
     type: activeType || undefined,
@@ -914,7 +919,7 @@ function App() {
                     </button>
                   ))}
                 </div>
-                <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} layoutKey={graphLayoutKey} />
+                <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} layoutKey={graphLayoutKey} relayout={relayoutGraph} />
               </div>
               <aside className="space-y-4">
                 <Panel title="Visible Types" icon={<Braces className="size-4" />}>
@@ -1400,12 +1405,16 @@ function SchemaGraphCanvas({ graphView, selectedType, select }: { graphView: Ret
   );
 }
 
-function GraphCanvas({ graphView, selectedID, select, open, layoutKey }: { graphView: ReturnType<typeof buildGraphView>; selectedID: string | null; select: (id: string) => void; open: (id: string) => void; layoutKey: string }) {
+function GraphCanvas({ graphView, selectedID, select, open, layoutKey, relayout }: { graphView: ReturnType<typeof buildGraphView>; selectedID: string | null; select: (id: string) => void; open: (id: string) => void; layoutKey: string; relayout: () => void }) {
   const [zoom, setZoom] = useState(1);
   const [draggedPositions, setDraggedPositions] = useState<Record<string, Point>>({});
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; origin: Point; moved: boolean } | null>(null);
   useEffect(() => pruneDraggedPositions(graphView.nodes, setDraggedPositions), [graphView.nodes]);
-  useEffect(() => setDraggedPositions({}), [layoutKey]);
+  useEffect(() => {
+    setDraggedPositions({});
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" }));
+  }, [layoutKey]);
   const nodes = graphView.nodes.map((node) => ({ ...node, position: draggedPositions[node.id] ?? node.position }));
   const nodeMap = new Map(nodes.map((node) => [node.id, { object: node.object, position: node.position }]));
   const relatedNodeIDs = new Set<string>();
@@ -1442,10 +1451,15 @@ function GraphCanvas({ graphView, selectedID, select, open, layoutKey }: { graph
     if (dragRef.current) event.currentTarget.releasePointerCapture(event.pointerId);
     dragRef.current = null;
   }
+  function handleRelayout() {
+    setDraggedPositions({});
+    relayout();
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" }));
+  }
   return (
     <div className="relative h-full overflow-hidden">
-      <GraphZoomControls zoom={zoom} setZoom={setZoom} reset={() => setDraggedPositions({})} />
-      <div className="h-full overflow-auto overscroll-contain">
+      <GraphZoomControls zoom={zoom} setZoom={setZoom} reset={handleRelayout} />
+      <div ref={scrollRef} className="h-full overflow-auto overscroll-contain">
         <div className="relative" style={{ width: size.width, height: size.height }}>
           <div className="relative origin-top-left" style={{ width: innerSize.width, height: innerSize.height, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
             <svg className="absolute inset-0" width={innerSize.width} height={innerSize.height}>
@@ -1841,7 +1855,7 @@ function schemaEdgeColor(edge: SchemaEdge) {
   return "hsl(var(--earth) / 0.52)";
 }
 
-function buildGraphView(graph: GraphData, mode: string, selectedID: string | null, hiddenTypes: Set<string>) {
+function buildGraphView(graph: GraphData, mode: string, selectedID: string | null, hiddenTypes: Set<string>, layoutSeed = 0) {
   const modeEdges = graph.edges.filter((edge) => graphEdgeVisible(edge, mode));
   const visibleNodeIds = new Set<string>();
   for (const edge of modeEdges) {
@@ -1852,7 +1866,7 @@ function buildGraphView(graph: GraphData, mode: string, selectedID: string | nul
   const nodeIDs = new Set(nodes.map((node) => node.id));
   const visibleEdges = modeEdges.filter((edge) => nodeIDs.has(edge.from_id) && nodeIDs.has(edge.to_id));
   const lanes = graphLanes(nodes);
-  const positions = layoutGraphNodes(nodes, visibleEdges);
+  const positions = layoutGraphNodes(nodes, visibleEdges, layoutSeed);
   return {
     lanes,
     nodes: nodes.map((node) => {
@@ -1944,49 +1958,77 @@ function graphTypeOrder(types: string[]) {
   });
 }
 
-function layoutGraphNodes(nodes: Obj[], edges: Link[]) {
+function layoutGraphNodes(nodes: Obj[], edges: Link[], layoutSeed = 0) {
   const byID = new Map(nodes.map((node) => [node.id, node]));
   const companies = nodes.filter((node) => node.type_id === "company").sort(sortObject);
   if (companies.length === 0) return layoutGenericGraphNodes(nodes);
 
+  const detailTypes = graphDetailTypes(nodes);
+  const detailX = graphDetailColumnX(detailTypes, layoutSeed);
+  const companyGroups = new Map<string, Map<string, Obj[]>>();
+  const ensureGroup = (companyID: string) => {
+    if (!companyGroups.has(companyID)) companyGroups.set(companyID, new Map());
+    return companyGroups.get(companyID)!;
+  };
+  const pushRelated = (companyID: string, obj: Obj | undefined) => {
+    if (!obj || obj.type_id === "company" || obj.type_id === "batch") return;
+    const groups = ensureGroup(companyID);
+    const list = groups.get(obj.type_id) ?? [];
+    ensurePush(list, obj);
+    groups.set(obj.type_id, list);
+  };
+  for (const edge of edges) {
+    if (edge.relation === "founders" && byID.get(edge.from_id)?.type_id === "company") pushRelated(edge.from_id, byID.get(edge.to_id));
+    if (edge.relation === "founded_companies" && byID.get(edge.to_id)?.type_id === "company") pushRelated(edge.to_id, byID.get(edge.from_id));
+    if (edge.relation === "owner_company" && byID.get(edge.to_id)?.type_id === "company") pushRelated(edge.to_id, byID.get(edge.from_id));
+    if (edge.relation === "about_company" && byID.get(edge.to_id)?.type_id === "company") pushRelated(edge.to_id, byID.get(edge.from_id));
+    if (edge.relation === "from_touchpoint") {
+      const touchpointOwner = edges.find((candidate) => candidate.relation === "owner_company" && candidate.from_id === edge.to_id);
+      if (touchpointOwner) pushRelated(touchpointOwner.to_id, byID.get(edge.from_id));
+    }
+  }
+
   const companyY = new Map<string, number>();
-  companies.forEach((company, i) => companyY.set(company.id, 80 + i * 230));
+  let y = 80;
+  const rowStep = 78 + (layoutSeed % 2) * 4;
+  for (const company of companies) {
+    companyY.set(company.id, y);
+    const groups = companyGroups.get(company.id);
+    const largestVisibleGroup = Math.max(1, ...detailTypes.map((type) => groups?.get(type)?.length ?? 0));
+    y += Math.max(210, largestVisibleGroup * rowStep + 112);
+  }
+
   const positions: Record<string, { x: number; y: number }> = {};
   companies.forEach((company) => {
-    positions[company.id] = { x: 300, y: companyY.get(company.id) ?? 0 };
+    positions[company.id] = { x: nodes.some((node) => node.type_id === "batch") ? 300 : 40, y: companyY.get(company.id) ?? 0 };
   });
 
   const batchNodes = nodes.filter((node) => node.type_id === "batch").sort(sortObject);
-  const middleY = companies.length > 0 ? 80 + ((companies.length - 1) * 230) / 2 : 120;
+  const companyYs = [...companyY.values()];
+  const middleY = companyYs.length > 0 ? (companyYs[0] + companyYs[companyYs.length - 1]) / 2 : 120;
   batchNodes.forEach((node, i) => {
     positions[node.id] = { x: 0, y: middleY + (i - (batchNodes.length - 1) / 2) * 110 };
   });
 
-  const companyGroups = new Map<string, { people: Obj[]; touchpoints: Obj[]; sources: Obj[] }>();
-  const ensureGroup = (companyID: string) => {
-    if (!companyGroups.has(companyID)) companyGroups.set(companyID, { people: [], touchpoints: [], sources: [] });
-    return companyGroups.get(companyID)!;
-  };
-  for (const edge of edges) {
-    if (edge.relation === "founders" && byID.get(edge.from_id)?.type_id === "company") ensurePush(ensureGroup(edge.from_id).people, byID.get(edge.to_id));
-    if (edge.relation === "founded_companies" && byID.get(edge.to_id)?.type_id === "company") ensurePush(ensureGroup(edge.to_id).people, byID.get(edge.from_id));
-    if (edge.relation === "owner_company" && byID.get(edge.to_id)?.type_id === "company") ensurePush(ensureGroup(edge.to_id).touchpoints, byID.get(edge.from_id));
-    if (edge.relation === "about_company" && byID.get(edge.to_id)?.type_id === "company") ensurePush(ensureGroup(edge.to_id).sources, byID.get(edge.from_id));
-    if (edge.relation === "from_touchpoint") {
-      const touchpointOwner = edges.find((candidate) => candidate.relation === "owner_company" && candidate.from_id === edge.to_id);
-      if (touchpointOwner) ensurePush(ensureGroup(touchpointOwner.to_id).sources, byID.get(edge.from_id));
+  for (const [companyID, groups] of companyGroups) {
+    const y = companyY.get(companyID) ?? middleY;
+    for (const type of detailTypes) {
+      placeGroup((groups.get(type) ?? []).sort(sortObject), detailX.get(type) ?? 640, y, rowStep, positions);
     }
   }
 
-  for (const [companyID, group] of companyGroups) {
-    const y = companyY.get(companyID) ?? middleY;
-    placeGroup(group.people.sort(sortObject), 640, y, 74, positions);
-    placeGroup(group.touchpoints.sort(sortObject), 890, y, 76, positions);
-    placeGroup(group.sources.sort(sortObject), 1140, y, 76, positions);
-  }
-
-  placeRemaining(nodes, positions);
+  placeRemaining(nodes, positions, detailX, rowStep);
   return positions;
+}
+
+function graphDetailTypes(nodes: Obj[]) {
+  return graphTypeOrder([...new Set(nodes.map((node) => node.type_id).filter((type) => type !== "batch" && type !== "company"))]);
+}
+
+function graphDetailColumnX(types: string[], layoutSeed = 0) {
+  const start = 560;
+  const gap = 208 + (layoutSeed % 2) * 12;
+  return new Map(types.map((type, index) => [type, start + index * gap]));
 }
 
 function layoutGenericGraphNodes(nodes: Obj[]) {
@@ -2019,18 +2061,14 @@ function placeGroup(nodes: Obj[], x: number, centerY: number, step: number, posi
   });
 }
 
-function placeRemaining(nodes: Obj[], positions: Record<string, { x: number; y: number }>) {
-  const lanes: Record<string, { x: number; y: number; step: number }> = {
-    person: { x: 640, y: 0, step: 86 },
-    touchpoint: { x: 890, y: 470, step: 94 },
-    "source.item": { x: 1140, y: 500, step: 108 }
-  };
+function placeRemaining(nodes: Obj[], positions: Record<string, { x: number; y: number }>, detailX: Map<string, number>, step: number) {
+  const defaultX = detailX.size > 0 ? Math.max(...detailX.values()) + 208 : 560;
   const counts = new Map<string, number>();
   for (const node of nodes.filter((item) => !positions[item.id]).sort(sortObject)) {
     const index = counts.get(node.type_id) ?? 0;
     counts.set(node.type_id, index + 1);
-    const lane = lanes[node.type_id] ?? { x: 1160, y: 0, step: 100 };
-    positions[node.id] = { x: lane.x, y: lane.y + index * lane.step };
+    const x = detailX.get(node.type_id) ?? defaultX;
+    positions[node.id] = { x, y: 80 + index * step };
   }
 }
 
