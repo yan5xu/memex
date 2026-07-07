@@ -1127,8 +1127,8 @@ function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; act
 
 function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.ReactNode; label: string; active: boolean; collapsed?: boolean; onClick: () => void }) {
   const button = (
-    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-2xl py-2.5 text-left text-sm transition ${active ? "bg-card/68 text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.42),0_10px_22px_hsl(var(--shadow-warm)/0.08)]" : "text-foreground/72 hover:bg-foreground/[0.035]"}`}>
-      <span className={active ? "text-[hsl(var(--earth))]" : "text-muted-foreground"}>{icon}</span>
+    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-2xl py-2.5 text-left text-sm transition ${active ? "bg-[hsl(var(--card))] text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.72),0_12px_24px_hsl(var(--shadow-warm)/0.09)]" : "text-foreground/72 hover:bg-foreground/[0.035]"}`}>
+      <span className={active ? "text-[hsl(31_28%_39%)]" : "text-muted-foreground"}>{icon}</span>
       {!collapsed && <span className="font-medium">{label}</span>}
     </button>
   );
@@ -1212,7 +1212,7 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
 }
 
 function GraphModeButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button className={`rounded-xl px-3 py-1.5 transition ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"}`} onClick={onClick}>{label}</button>;
+  return <button className={`rounded-xl px-3 py-1.5 transition ${active ? "bg-card text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.65),0_6px_14px_hsl(var(--shadow-warm)/0.08)]" : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"}`} onClick={onClick}>{label}</button>;
 }
 
 function LegendRow({ color, label }: { color: string; label: string }) {

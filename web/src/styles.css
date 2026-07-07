@@ -338,10 +338,12 @@ body {
 }
 
 .sidebar-type-row-active {
-  background: hsl(var(--card) / 0.62);
+  background: hsl(var(--card));
   color: hsl(var(--foreground));
   font-weight: 600;
-  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.42);
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.72),
+    0 10px 20px hsl(var(--shadow-warm) / 0.08);
 }
 
 .sidebar-collapse {
