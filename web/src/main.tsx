@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
+import html2canvas from "html2canvas";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -21,7 +22,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, use
 import { type ColumnDef, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, type RowSelectionState, type SortingState, type VisibilityState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, Database, FileText, FolderOpen, GitBranch, HeartPulse, History, Network, PanelLeftClose, PanelLeftOpen, Play, Search } from "lucide-react";
+import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, Database, Download, FileText, FolderOpen, GitBranch, HeartPulse, History, Network, PanelLeftClose, PanelLeftOpen, Play, Search } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault } from "./api";
 import { Badge } from "./components/ui/badge";
@@ -198,6 +199,19 @@ function saveVaultUIState(vault: string, state: VaultUIState) {
   localStorage.setItem("mbase.vaultStates", JSON.stringify(states));
 }
 
+function safeFileName(value: string) {
+  return value.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "object";
+}
+
+function downloadDataURL(dataURL: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function automationState(state: AppState): AutomationSnapshot {
   return {
     version: 1,
@@ -233,6 +247,7 @@ declare global {
       openObject: (id: string) => Promise<AutomationSnapshot>;
       openGraph: () => Promise<AutomationSnapshot>;
       openHealth: () => Promise<AutomationSnapshot>;
+      saveObjectImage: () => Promise<{ filename: string }>;
       state: () => AutomationSnapshot;
     };
   }
@@ -242,6 +257,7 @@ function App() {
   const routeSearch = indexRoute.useSearch();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
+  const objectPageRef = useRef<HTMLElement | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
@@ -262,6 +278,7 @@ function App() {
   const [vaultDraft, setVaultDraft] = useState(initialVault);
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
+  const [savingObjectImage, setSavingObjectImage] = useState(false);
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
@@ -377,6 +394,43 @@ function App() {
       updateSearch({ view: "graph", graphMode });
     }
     return nextGraph;
+  }
+
+  async function saveObjectImage(): Promise<{ filename: string }> {
+    if (!activeObject || !objectPageRef.current) {
+      throw new Error("No active object page to save");
+    }
+    const node = objectPageRef.current;
+    const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
+    setSavingObjectImage(true);
+    try {
+      const canvas = await html2canvas(node, {
+        backgroundColor: "hsl(48 33% 97%)",
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        allowTaint: false,
+        width: node.scrollWidth,
+        height: node.scrollHeight,
+        windowWidth: node.scrollWidth,
+        windowHeight: node.scrollHeight,
+        onclone: (_document, clonedElement) => {
+          const el = clonedElement as HTMLElement;
+          el.style.height = `${node.scrollHeight}px`;
+          el.style.overflow = "visible";
+          el.style.maxHeight = "none";
+        }
+      });
+      const dataURL = canvas.toDataURL("image/png");
+      downloadDataURL(dataURL, filename);
+      toast.success(`Saved ${filename}`);
+      return { filename };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Could not save image: ${message}`);
+      throw error;
+    } finally {
+      setSavingObjectImage(false);
+    }
   }
 
   const activeFields = useMemo(() => types.find((t) => t.id === activeType)?.fields ?? [], [types, activeType]);
@@ -561,6 +615,7 @@ function App() {
         setView("health");
         return currentState({ view: "health" });
       },
+      saveObjectImage,
       state: () => currentState()
     };
     return () => {
@@ -667,7 +722,7 @@ function App() {
           <section className="mx-auto h-[calc(100vh-3rem)] max-w-7xl">
             <ResizablePanelGroup orientation="horizontal" className="gap-4">
               <ResizablePanel defaultSize={68} minSize={45}>
-                <article className="mica h-full overflow-auto rounded-3xl px-8 py-7">
+                <article ref={objectPageRef} className="mica h-full overflow-auto rounded-3xl px-8 py-7">
                   <div className="mb-6 flex flex-wrap items-center gap-3">
                     <Badge>{activeObject.type_id}</Badge>
                     <span className="font-mono text-xs text-muted-foreground">{activeObject.id}</span>
@@ -689,6 +744,12 @@ function App() {
               <ResizableHandle withHandle className="bg-transparent" />
               <ResizablePanel defaultSize={32} minSize={22}>
                 <aside className="h-full space-y-4 overflow-auto">
+                  <Panel title="Actions" icon={<Download className="size-4" />}>
+                    <Button className="w-full justify-start rounded-xl" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
+                      <Download className="size-4" />
+                      {savingObjectImage ? "Saving image" : "Save as PNG"}
+                    </Button>
+                  </Panel>
                   <Panel title="Body" icon={<FileText className="size-4" />}>
                     <div className="tray break-all rounded-2xl p-3 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
                   </Panel>
