@@ -41,29 +41,72 @@ body {
 
 .markdown {
   color: hsl(var(--foreground));
-  line-height: 1.78;
+  font-size: 0.96rem;
+  line-height: 1.76;
+  overflow-wrap: break-word;
 }
 
 .markdown h1,
 .markdown h2,
-.markdown h3 {
+.markdown h3,
+.markdown h4 {
   font-family: "Instrument Serif", "Noto Serif SC", Georgia, serif;
   font-weight: 500;
-  letter-spacing: -0.01em;
-  margin: 1.45rem 0 0.75rem;
+  letter-spacing: 0;
+  margin: 1.65rem 0 0.7rem;
+  color: hsl(var(--foreground) / 0.94);
 }
 
 .markdown h1 {
   font-size: 2rem;
+  line-height: 1.12;
 }
 
 .markdown h2 {
   font-size: 1.45rem;
+  line-height: 1.18;
+  padding-top: 0.45rem;
+  border-top: 1px solid hsl(var(--border) / 0.48);
+}
+
+.markdown h3 {
+  font-size: 1.18rem;
+  line-height: 1.28;
+}
+
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-family: Inter, "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown p,
 .markdown li {
   color: hsl(var(--foreground) / 0.82);
+}
+
+.markdown p {
+  margin: 0.78rem 0;
+}
+
+.markdown strong {
+  color: hsl(var(--foreground) / 0.94);
+  font-weight: 650;
+}
+
+.markdown em {
+  color: hsl(var(--foreground) / 0.72);
 }
 
 .markdown a {
@@ -72,27 +115,66 @@ body {
   text-underline-offset: 0.2rem;
 }
 
+.markdown a:hover {
+  color: hsl(var(--foreground));
+}
+
+.markdown hr {
+  margin: 1.6rem 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border) / 0.62);
+}
+
 .markdown blockquote {
-  margin: 1rem 0;
+  margin: 1rem 0 1.1rem;
   border-left: 3px solid hsl(var(--earth) / 0.45);
-  padding: 0.2rem 0 0.2rem 1rem;
+  padding: 0.15rem 0 0.15rem 1rem;
   color: hsl(var(--muted-foreground));
 }
 
-.markdown table {
-  display: block;
-  width: 100%;
+.markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown blockquote blockquote {
+  margin: 0.72rem 0;
+  border-left-color: hsl(var(--moss) / 0.44);
+}
+
+.markdown-table-wrap {
   margin: 1.1rem 0;
   overflow-x: auto;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 0.55rem;
+}
+
+.markdown table {
+  width: 100%;
+  min-width: 620px;
   border-collapse: collapse;
   font-size: 0.9rem;
 }
 
 .markdown th,
 .markdown td {
-  border: 1px solid hsl(var(--border) / 0.72);
-  padding: 0.55rem 0.75rem;
+  border-right: 1px solid hsl(var(--border) / 0.72);
+  border-bottom: 1px solid hsl(var(--border) / 0.72);
+  padding: 0.55rem 0.7rem;
   vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown th:last-child,
+.markdown td:last-child {
+  border-right: 0;
 }
 
 .markdown th {
@@ -100,33 +182,114 @@ body {
   font-weight: 600;
 }
 
+.markdown tbody tr:nth-child(even) {
+  background: hsl(var(--surface-soft) / 0.28);
+}
+
+.markdown td > :first-child,
+.markdown th > :first-child {
+  margin-top: 0;
+}
+
+.markdown td > :last-child,
+.markdown th > :last-child {
+  margin-bottom: 0;
+}
+
 .markdown ul,
 .markdown ol {
   margin: 0.8rem 0;
-  padding-left: 1.35rem;
+  padding-left: 1.4rem;
+}
+
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
+.markdown ul ul {
+  list-style: circle;
+}
+
+.markdown ul ul ul {
+  list-style: square;
+}
+
+.markdown ol ol {
+  list-style: lower-alpha;
+}
+
+.markdown ol ol ol {
+  list-style: lower-roman;
+}
+
+.markdown li {
+  padding-left: 0.1rem;
 }
 
 .markdown li + li {
-  margin-top: 0.25rem;
+  margin-top: 0.32rem;
+}
+
+.markdown li > p {
+  margin: 0.35rem 0;
+}
+
+.markdown li > p:first-child {
+  margin-top: 0;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.36rem 0 0.5rem;
+}
+
+.markdown li > blockquote,
+.markdown li > pre,
+.markdown li > table,
+.markdown li > details {
+  margin-top: 0.55rem;
+  margin-bottom: 0.55rem;
+}
+
+.markdown ul.contains-task-list,
+.markdown li.contains-task-list > ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown li.task-list-item {
+  position: relative;
+  list-style: none;
+  padding-left: 1.65rem;
 }
 
 .markdown input[type="checkbox"] {
-  margin-right: 0.45rem;
+  position: absolute;
+  left: 0;
+  top: 0.38em;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
   accent-color: hsl(var(--earth));
 }
 
 .markdown code:not(.hljs) {
   background: hsl(var(--muted) / 0.72);
-  border-radius: 0.55rem;
-  padding: 0.1rem 0.25rem;
+  border-radius: 0.34rem;
+  padding: 0.08rem 0.28rem;
+  font-size: 0.88em;
 }
 
 .markdown pre {
   margin: 1.15rem 0;
   overflow-x: auto;
-  border-radius: 1rem;
+  border-radius: 0.62rem;
   background: hsl(35 20% 14%);
-  padding: 1rem;
+  padding: 0.9rem 1rem;
   color: hsl(40 26% 94%);
   box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08);
 }
@@ -135,6 +298,9 @@ body {
   background: transparent;
   padding: 0;
   color: inherit;
+  font-size: 0.87rem;
+  line-height: 1.62;
+  white-space: pre;
 }
 
 .markdown .hljs-keyword,
@@ -163,22 +329,86 @@ body {
   max-width: 100%;
   height: auto;
   margin: 1.25rem 0;
-  border-radius: 1rem;
-  box-shadow: 0 12px 28px hsl(var(--shadow-warm) / 0.12);
+  border-radius: 0.58rem;
+  box-shadow: 0 10px 24px hsl(var(--shadow-warm) / 0.1);
   cursor: zoom-in;
+}
+
+.markdown figure {
+  margin: 1.25rem 0;
+}
+
+.markdown figure img {
+  margin: 0;
+}
+
+.markdown figcaption {
+  margin-top: 0.5rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .markdown details {
   margin: 1rem 0;
-  border-radius: 1rem;
+  border-radius: 0.65rem;
   background: hsl(var(--card) / 0.55);
-  padding: 0.8rem 1rem;
+  padding: 0.72rem 0.9rem;
   box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.52);
 }
 
 .markdown summary {
   cursor: pointer;
   font-weight: 600;
+}
+
+.markdown details > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown mark {
+  border-radius: 0.28rem;
+  background: hsl(45 72% 78% / 0.55);
+  padding: 0 0.18rem;
+  color: hsl(var(--foreground));
+}
+
+.markdown del {
+  color: hsl(var(--muted-foreground));
+}
+
+.markdown ins {
+  color: hsl(var(--moss));
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.markdown sub,
+.markdown sup {
+  line-height: 0;
+}
+
+.markdown [data-footnotes] {
+  margin-top: 2rem;
+  border-top: 1px solid hsl(var(--border) / 0.58);
+  padding-top: 0.9rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.86rem;
+}
+
+.markdown [data-footnotes] h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.markdown [data-footnotes] ol {
+  margin: 0;
+  padding-left: 1.2rem;
 }
 
 .markdown kbd {
@@ -224,10 +454,6 @@ body {
   margin: 0;
   border: 0;
   padding: 0;
-}
-
-.markdown-alert-body > p:first-child {
-  display: none;
 }
 
 .markdown-alert-tip {

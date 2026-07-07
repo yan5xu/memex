@@ -119,7 +119,7 @@ hljs.registerLanguage("xml", xml);
 
 const markdownSanitizeSchema = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "kbd", "sub", "sup", "ins"],
+  tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "kbd", "sub", "sup", "ins", "mark", "figure", "figcaption"],
   attributes: {
     ...defaultSchema.attributes,
     "*": [...((defaultSchema.attributes?.["*"] as unknown[]) ?? []), "className", "title"],
@@ -1090,6 +1090,21 @@ function MarkdownBody({
         },
         blockquote: ({ node: _node, children, ...props }) => <MarkdownBlockquote {...props}>{children}</MarkdownBlockquote>,
         code: ({ node: _node, className, children, ...props }) => <MarkdownCode className={className} {...props}>{children}</MarkdownCode>,
+        pre: ({ node: _node, children, ...props }) => {
+          const child = Array.isArray(children) ? children[0] : children;
+          if (React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
+            const language = /language-([A-Za-z0-9_-]+)/.exec(child.props.className ?? "")?.[1]?.toLowerCase();
+            if (language === "mermaid") {
+              return <MermaidDiagram source={String(child.props.children ?? "").replace(/\n$/, "")} />;
+            }
+          }
+          return <pre {...props}>{children}</pre>;
+        },
+        table: ({ node: _node, children, ...props }) => (
+          <div className="markdown-table-wrap">
+            <table {...props}>{children}</table>
+          </div>
+        ),
         img: ({ node: _node, src, alt, ...props }) => {
           const resolved = markdownAssetURL(src, object, vault);
           return (
@@ -1173,11 +1188,34 @@ function MarkdownBlockquote({ children, ...props }: React.ComponentProps<"blockq
     return (
       <div className={`markdown-alert markdown-alert-${alertType.toLowerCase()}`}>
         <div className="markdown-alert-title">{alertType[0] + alertType.slice(1).toLowerCase()}</div>
-        <blockquote {...props} className="markdown-alert-body">{children}</blockquote>
+        <blockquote {...props} className="markdown-alert-body">{stripAlertMarker(children)}</blockquote>
       </div>
     );
   }
   return <blockquote {...props}>{children}</blockquote>;
+}
+
+function stripAlertMarker(children: React.ReactNode) {
+  let stripped = false;
+  function strip(node: React.ReactNode): React.ReactNode {
+    if (node === null || node === undefined || typeof node === "boolean") return node;
+    if (typeof node === "string" || typeof node === "number") {
+      if (stripped) return node;
+      const next = String(node).replace(/^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, "");
+      if (next !== String(node)) stripped = true;
+      return next;
+    }
+    if (Array.isArray(node)) {
+      return node.map(strip).filter((child) => child !== "");
+    }
+    if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+      const nextChildren = strip(node.props.children);
+      if (nextChildren === "" || (Array.isArray(nextChildren) && nextChildren.length === 0)) return null;
+      return React.cloneElement(node, { children: nextChildren });
+    }
+    return node;
+  }
+  return strip(children);
 }
 
 function normalizeMarkdownBody(markdown: string) {
