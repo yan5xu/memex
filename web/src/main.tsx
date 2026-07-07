@@ -623,33 +623,33 @@ function App() {
 
   return (
     <div className="app-shell flex h-screen w-screen overflow-hidden text-foreground">
-      <aside className={`${sidebarCollapsed ? "w-[60px] px-2.5" : "w-72 px-4"} flex h-screen shrink-0 flex-col overflow-hidden py-[18px] transition-[width,padding] duration-200`}>
-        <div className={`mb-6 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-3"}`}>
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-[13px] bg-foreground font-serif text-[19px] font-semibold italic text-background shadow-[0_12px_24px_-8px_hsl(var(--shadow-warm)/0.30)]">m</div>
+      <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
+        <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">m</div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <div className="text-[15px] font-semibold tracking-tight text-foreground/90">mbase</div>
-              <div className="text-[11px] text-muted-foreground">Local knowledge workbench</div>
+              <div className="text-[13px] font-medium tracking-tight text-foreground/90">mbase</div>
+              <div className="text-[10.5px] text-muted-foreground">Local knowledge workbench</div>
             </div>
           )}
         </div>
 
-        <nav className="space-y-1.5">
-          <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-4" />} label="Objects" active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-4" />} label="Schema" active={view === "types"} onClick={() => setView("types")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-4" />} label="Graph" active={view === "graph"} onClick={() => void openGraph()} />
-          <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-4" />} label="Health" active={view === "health"} onClick={() => setView("health")} />
+        <nav className="space-y-0.5">
+          <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-3.5" />} label="Objects" active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
+          <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-3.5" />} label="Schema" active={view === "types"} onClick={() => setView("types")} />
+          <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-3.5" />} label="Graph" active={view === "graph"} onClick={() => void openGraph()} />
+          <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label="Health" active={view === "health"} onClick={() => setView("health")} />
         </nav>
 
         {!sidebarCollapsed && (
-          <div className="mt-6 flex min-h-0 flex-1 flex-col">
-            <Separator className="mb-4 bg-border/55" />
-            <div className="flex items-center justify-between px-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Types</span>
+          <div className="mt-5 flex min-h-0 flex-1 flex-col">
+            <Separator className="mb-3 bg-border/45" />
+            <div className="flex items-center justify-between px-1.5">
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Types</span>
               <span className="font-mono text-[10px] text-muted-foreground/65">{types.length}</span>
             </div>
-            <ScrollArea className="mt-2 min-h-0 flex-1 pr-2">
-              <div className="space-y-1">
+            <ScrollArea className="mt-2 min-h-0 flex-1 pr-1.5">
+              <div className="space-y-0.5">
                 {types.map((t) => (
                   <button key={t.id} onClick={() => setActiveType(t.id)} className={`sidebar-type-row ${activeType === t.id ? "sidebar-type-row-active" : ""}`}>
                     <span className="truncate">{t.id}</span>
@@ -661,11 +661,11 @@ function App() {
           </div>
         )}
 
-        <div className="mt-auto space-y-3 pt-4">
+        <div className="mt-auto space-y-2.5 pt-3">
           {!sidebarCollapsed && (
             <>
-              <div className="sidebar-tool-card text-xs text-muted-foreground">
-                <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3.5 text-[hsl(var(--earth))]" /> Agent API</div>
+              <div className="sidebar-tool-card text-[11px] text-muted-foreground">
+                <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> Agent API</div>
                 <code className="font-mono">window.mbase.state()</code>
               </div>
               <VaultSwitcher
@@ -678,8 +678,8 @@ function App() {
               />
             </>
           )}
-          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"}`} onClick={toggleSidebar} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            {sidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+            {sidebarCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
             {!sidebarCollapsed && <span>Collapse sidebar</span>}
           </button>
         </div>
@@ -705,13 +705,13 @@ function App() {
             <div className="objects-workspace">
               <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
                 <div className="mb-5 flex items-center justify-between gap-4">
-                  <TabsList className="rounded-2xl bg-muted/58">
-                    <TabsTrigger value="table" className="rounded-xl">Table</TabsTrigger>
-                    <TabsTrigger value="api" className="rounded-xl">API</TabsTrigger>
+                  <TabsList className="rounded-lg bg-muted/45">
+                    <TabsTrigger value="table" className="rounded-md">Table</TabsTrigger>
+                    <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
                   </TabsList>
                   <div className="relative w-80 max-w-[45%]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-10 w-full rounded-xl bg-background/72 pl-9 font-mono text-xs" />
+                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-lg bg-background/72 pl-9 font-mono text-xs" />
                   </div>
                 </div>
                 <TabsContent value="table" className="mt-0 min-h-0 flex-1">
@@ -721,7 +721,7 @@ function App() {
                       <ObjectDataTable rows={rows} fields={activeFields} open={(id) => void openObject(id)} />
                     )}
                 </TabsContent>
-                <TabsContent value="api" className="mt-0 min-h-0 flex-1 rounded-2xl bg-muted/38">
+                <TabsContent value="api" className="mt-0 min-h-0 flex-1 rounded-lg bg-muted/30">
                   <pre className="overflow-x-auto p-4 font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"query\",\"" + (activeType || "type") + "\",\"--limit\",\"200\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
                 </TabsContent>
               </Tabs>
@@ -768,18 +768,18 @@ function App() {
                   <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
                   <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
                 </div>
-                <button className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setInspectorOpen(false)} title="Hide inspector">
+                <button className="rounded-md p-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setInspectorOpen(false)} title="Hide inspector">
                   <ChevronRight className="size-4" />
                 </button>
               </div>
               <Panel title="Actions" icon={<Download className="size-4" />}>
-                <Button className="w-full justify-start rounded-xl" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
+                <Button className="w-full justify-start rounded-md" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
                   <Download className="size-4" />
                   {savingObjectImage ? "Saving image" : "Save as PNG"}
                 </Button>
               </Panel>
               <Panel title="Body" icon={<FileText className="size-4" />}>
-                <div className="tray break-all rounded-2xl p-3 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
+                <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
               </Panel>
               <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
               <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
@@ -1131,9 +1131,9 @@ function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; act
 
 function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.ReactNode; label: string; active: boolean; collapsed?: boolean; onClick: () => void }) {
   const button = (
-    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-3 px-3"} rounded-2xl py-2.5 text-left text-sm transition ${active ? "bg-[hsl(var(--card))] text-foreground shadow-[inset_0_1px_0_hsl(0_0%_100%/0.72),0_12px_24px_hsl(var(--shadow-warm)/0.09)]" : "text-foreground/72 hover:bg-foreground/[0.035]"}`}>
+    <button onClick={onClick} title={collapsed ? label : undefined} className={`flex w-full items-center ${collapsed ? "justify-center px-0" : "gap-2.5 px-2"} rounded-lg py-2 text-left text-[12.5px] transition ${active ? "bg-[hsl(var(--card)/0.72)] text-foreground shadow-[inset_2px_0_0_hsl(var(--earth)/0.42)]" : "text-foreground/66 hover:bg-foreground/[0.028] hover:text-foreground/82"}`}>
       <span className={active ? "text-[hsl(31_28%_39%)]" : "text-muted-foreground"}>{icon}</span>
-      {!collapsed && <span className="font-medium">{label}</span>}
+      {!collapsed && <span className="font-normal">{label}</span>}
     </button>
   );
   if (!collapsed) return button;
@@ -1161,13 +1161,13 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
   }
   return (
     <div className="sidebar-tool-card">
-      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        <FolderOpen className="size-3.5" />
+      <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <FolderOpen className="size-3" />
         Vault
       </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button className="flex w-full items-center justify-between gap-3 rounded-[14px] border border-border/40 bg-card/45 px-3 py-2.5 text-left transition hover:bg-card/72">
+          <button className="flex w-full items-center justify-between gap-3 rounded-md border border-border/35 bg-card/35 px-2.5 py-2 text-left transition hover:bg-card/62">
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="min-w-0 truncate font-mono text-xs">{vault ? shortPath(vault) : "default server vault"}</span>
@@ -1472,7 +1472,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
   const bottomPadding = virtualRows.length > 0 ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end : 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg">
       <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
         <Table className="min-w-[900px]">
           <TableHeader>
@@ -1518,7 +1518,7 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
           <span className="text-border">/</span>
           <span>Page {table.getState().pagination.pageIndex + 1} / {table.getPageCount() || 1}</span>
           <Select value={String(table.getState().pagination.pageSize)} onValueChange={(value) => table.setPageSize(Number(value))}>
-            <SelectTrigger className="h-8 w-24 rounded-xl text-xs">
+            <SelectTrigger className="h-8 w-24 rounded-md text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1527,10 +1527,10 @@ function ObjectDataTable({ rows, fields, open }: { rows: Record<string, unknown>
           </Select>
         </div>
         <div className="flex items-center gap-1">
-          <button className="rounded-xl p-2 transition hover:bg-foreground/[0.04] disabled:opacity-35" onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()} title="First page"><ChevronsLeft className="size-3.5" /></button>
-          <button className="rounded-xl p-2 transition hover:bg-foreground/[0.04] disabled:opacity-35" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} title="Previous page"><ChevronLeft className="size-3.5" /></button>
-          <button className="rounded-xl p-2 transition hover:bg-foreground/[0.04] disabled:opacity-35" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} title="Next page"><ChevronRight className="size-3.5" /></button>
-          <button className="rounded-xl p-2 transition hover:bg-foreground/[0.04] disabled:opacity-35" onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()} title="Last page"><ChevronsRight className="size-3.5" /></button>
+          <button className="rounded-md p-2 transition hover:bg-foreground/[0.035] disabled:opacity-35" onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()} title="First page"><ChevronsLeft className="size-3.5" /></button>
+          <button className="rounded-md p-2 transition hover:bg-foreground/[0.035] disabled:opacity-35" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} title="Previous page"><ChevronLeft className="size-3.5" /></button>
+          <button className="rounded-md p-2 transition hover:bg-foreground/[0.035] disabled:opacity-35" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} title="Next page"><ChevronRight className="size-3.5" /></button>
+          <button className="rounded-md p-2 transition hover:bg-foreground/[0.035] disabled:opacity-35" onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()} title="Last page"><ChevronsRight className="size-3.5" /></button>
         </div>
       </div>
     </div>
@@ -1553,7 +1553,7 @@ function renderTableCell(value: unknown, field: FieldDef, open: (id: string) => 
     return (
       <span className="flex max-h-16 max-w-72 flex-wrap gap-1 overflow-hidden">
         {refs.map((ref) => (
-          <button key={String(ref)} className="glass-light rounded-xl px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-card hover:text-foreground" onClick={() => open(String(ref))}>
+          <button key={String(ref)} className="glass-light rounded-md px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-card hover:text-foreground" onClick={() => open(String(ref))}>
             {String(ref)}
           </button>
         ))}
