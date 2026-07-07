@@ -1,0 +1,90 @@
+package store
+
+func (s *Store) Migrate() error {
+	_, err := s.DB.Exec(`
+CREATE TABLE IF NOT EXISTS types (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS fields (
+	id TEXT PRIMARY KEY,
+	type_id TEXT NOT NULL,
+	name TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	required INTEGER NOT NULL DEFAULT 0,
+	unique_value INTEGER NOT NULL DEFAULT 0,
+	enum_json TEXT NOT NULL DEFAULT '[]',
+	target_type TEXT NOT NULL DEFAULT '',
+	position INTEGER NOT NULL DEFAULT 0,
+	description TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(type_id, name),
+	FOREIGN KEY(type_id) REFERENCES types(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS objects (
+	id TEXT PRIMARY KEY,
+	type_id TEXT NOT NULL,
+	title TEXT NOT NULL DEFAULT '',
+	body_path TEXT NOT NULL,
+	body_hash TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(type_id) REFERENCES types(id)
+);
+
+CREATE TABLE IF NOT EXISTS field_values (
+	object_id TEXT NOT NULL,
+	field_id TEXT NOT NULL,
+	value_json TEXT NOT NULL,
+	value_text TEXT NOT NULL DEFAULT '',
+	value_number REAL,
+	value_bool INTEGER,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY(object_id, field_id),
+	FOREIGN KEY(object_id) REFERENCES objects(id) ON DELETE CASCADE,
+	FOREIGN KEY(field_id) REFERENCES fields(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS links (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	from_object_id TEXT NOT NULL,
+	to_object_id TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	relation TEXT NOT NULL,
+	field_id TEXT NOT NULL DEFAULT '',
+	line INTEGER NOT NULL DEFAULT 0,
+	text TEXT NOT NULL DEFAULT '',
+	resolved INTEGER NOT NULL DEFAULT 1,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(from_object_id) REFERENCES objects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_links_from ON links(from_object_id);
+CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_object_id);
+
+CREATE TABLE IF NOT EXISTS issues (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	object_id TEXT NOT NULL DEFAULT '',
+	field_id TEXT NOT NULL DEFAULT '',
+	kind TEXT NOT NULL,
+	severity TEXT NOT NULL,
+	message TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ops (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	op TEXT NOT NULL,
+	object_id TEXT NOT NULL DEFAULT '',
+	payload_json TEXT NOT NULL DEFAULT '{}',
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`)
+	return err
+}

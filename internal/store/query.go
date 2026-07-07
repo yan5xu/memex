@@ -1,0 +1,129 @@
+package store
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/yan5xu/mbase/internal/domain"
+)
+
+type QueryOptions struct {
+	Select []string `json:"select,omitempty"`
+	Where  []string `json:"where,omitempty"`
+	Sort   string   `json:"sort,omitempty"`
+	Limit  int      `json:"limit,omitempty"`
+}
+
+type QueryResult struct {
+	Type   string            `json:"type"`
+	Fields []domain.FieldDef `json:"fields"`
+	Rows   []map[string]any  `json:"rows"`
+	Count  int               `json:"count"`
+}
+
+func (s *Store) Query(typeID string, opts QueryOptions) (*QueryResult, error) {
+	fields, err := s.ListFields(typeID)
+	if err != nil {
+		return nil, err
+	}
+	fieldByName := make(map[string]domain.FieldDef)
+	for _, f := range fields {
+		fieldByName[f.Name] = f
+	}
+	objects, err := s.ListObjects(typeID, 10000)
+	if err != nil {
+		return nil, err
+	}
+	var rows []map[string]any
+	for _, obj := range objects {
+		row := map[string]any{"id": obj.ID, "type": obj.TypeID, "title": obj.Title}
+		for k, v := range obj.Fields {
+			row[k] = v
+		}
+		if matchWhere(row, opts.Where) {
+			rows = append(rows, row)
+		}
+	}
+	if opts.Sort != "" {
+		sortRows(rows, opts.Sort)
+	}
+	if opts.Limit > 0 && len(rows) > opts.Limit {
+		rows = rows[:opts.Limit]
+	}
+	if len(opts.Select) > 0 {
+		for i, row := range rows {
+			projected := map[string]any{"id": row["id"]}
+			for _, name := range opts.Select {
+				if val, ok := row[name]; ok {
+					projected[name] = val
+				}
+			}
+			rows[i] = projected
+		}
+	}
+	selectedFields := fields
+	if len(opts.Select) > 0 {
+		selectedFields = nil
+		for _, name := range opts.Select {
+			if f, ok := fieldByName[name]; ok {
+				selectedFields = append(selectedFields, f)
+			}
+		}
+	}
+	return &QueryResult{Type: typeID, Fields: selectedFields, Rows: rows, Count: len(rows)}, nil
+}
+
+func matchWhere(row map[string]any, wheres []string) bool {
+	for _, expr := range wheres {
+		field, op, want, ok := parseWhere(expr)
+		if !ok {
+			return false
+		}
+		got := fmt.Sprintf("%v", row[field])
+		switch op {
+		case "=":
+			if got != want {
+				return false
+			}
+		case "!=":
+			if got == want {
+				return false
+			}
+		case "contains":
+			if !strings.Contains(got, want) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func parseWhere(expr string) (string, string, string, bool) {
+	if parts := strings.SplitN(expr, " contains ", 2); len(parts) == 2 {
+		return strings.TrimSpace(parts[0]), "contains", strings.TrimSpace(parts[1]), true
+	}
+	for _, op := range []string{"!=", "="} {
+		if parts := strings.SplitN(expr, op, 2); len(parts) == 2 {
+			return strings.TrimSpace(parts[0]), op, strings.TrimSpace(parts[1]), true
+		}
+	}
+	return "", "", "", false
+}
+
+func sortRows(rows []map[string]any, sortExpr string) {
+	field := sortExpr
+	desc := false
+	if before, after, ok := strings.Cut(sortExpr, ":"); ok {
+		field = before
+		desc = after == "desc"
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		a := fmt.Sprintf("%v", rows[i][field])
+		b := fmt.Sprintf("%v", rows[j][field])
+		if desc {
+			return a > b
+		}
+		return a < b
+	})
+}
