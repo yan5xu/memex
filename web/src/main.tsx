@@ -451,20 +451,10 @@ function App() {
     if (!activeObject || !objectPageRef.current) {
       throw new Error("No active object page to save");
     }
-    const source = objectPageRef.current;
+    const node = objectPageRef.current;
     const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
     setSavingObjectImage(true);
-    const node = source.cloneNode(true) as HTMLDivElement;
     try {
-      node.style.position = "fixed";
-      node.style.left = "-10000px";
-      node.style.top = "0";
-      node.style.width = "760px";
-      node.style.minWidth = "760px";
-      node.style.maxWidth = "760px";
-      node.style.margin = "0";
-      node.style.background = "hsl(48 33% 97%)";
-      document.body.appendChild(node);
       await waitForImages(node);
       const width = Math.ceil(Math.max(node.scrollWidth, node.getBoundingClientRect().width));
       const height = Math.ceil(node.scrollHeight);
@@ -494,7 +484,6 @@ function App() {
       toast.error(`Could not save image: ${message}`);
       throw error;
     } finally {
-      node.remove();
       setSavingObjectImage(false);
     }
   }
