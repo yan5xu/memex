@@ -1313,6 +1313,21 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
   useEffect(() => pruneDraggedPositions(graphView.nodes, setDraggedPositions), [graphView.nodes]);
   const nodes = graphView.nodes.map((node) => ({ ...node, position: draggedPositions[node.id] ?? node.position }));
   const nodeMap = new Map(nodes.map((node) => [node.id, { object: node.object, position: node.position }]));
+  const relatedNodeIDs = new Set<string>();
+  if (selectedID) {
+    relatedNodeIDs.add(selectedID);
+    for (const edge of graphView.edges) {
+      if (edge.source === selectedID || edge.target === selectedID) {
+        relatedNodeIDs.add(edge.source);
+        relatedNodeIDs.add(edge.target);
+      }
+    }
+  }
+  const baseEdges = selectedID ? graphView.edges.filter((edge) => edge.source !== selectedID && edge.target !== selectedID) : graphView.edges;
+  const focusEdges = selectedID ? graphView.edges.filter((edge) => edge.source === selectedID || edge.target === selectedID) : [];
+  const orderedNodes = selectedID
+    ? [...nodes].sort((a, b) => graphNodeLayer(a.id, selectedID, relatedNodeIDs) - graphNodeLayer(b.id, selectedID, relatedNodeIDs))
+    : nodes;
   const size = graphCanvasSize(nodes, zoom);
   const innerSize = graphCanvasSize(nodes);
   function beginDrag(event: React.PointerEvent, id: string, position: Point) {
@@ -1338,52 +1353,68 @@ function GraphCanvas({ graphView, selectedID, select, open }: { graphView: Retur
       <div className="h-full overflow-auto overscroll-contain">
         <div className="relative" style={{ width: size.width, height: size.height }}>
           <div className="relative origin-top-left" style={{ width: innerSize.width, height: innerSize.height, transform: `scale(${zoom})`, transformOrigin: "0 0" }}>
-        <svg className="absolute inset-0" width={innerSize.width} height={innerSize.height}>
-          <defs>
-            <marker id="graph-arrow-earth" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.56)" />
-            </marker>
-            <marker id="graph-arrow-moss" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.58)" />
-            </marker>
-            <marker id="graph-arrow-clay" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
-              <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.6)" />
-            </marker>
-          </defs>
-          {graphView.edges.map((edge) => {
-            const source = nodeMap.get(edge.source);
-            const target = nodeMap.get(edge.target);
-            if (!source || !target) return null;
-            const path = graphPath(source.position, target.position);
-            const dimmed = selectedID !== null && edge.source !== selectedID && edge.target !== selectedID;
+            <svg className="absolute inset-0" width={innerSize.width} height={innerSize.height}>
+              <defs>
+                <marker id="graph-arrow-earth" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
+                  <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--earth) / 0.56)" />
+                </marker>
+                <marker id="graph-arrow-moss" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
+                  <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--moss) / 0.58)" />
+                </marker>
+                <marker id="graph-arrow-clay" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
+                  <path d="M2,2 L10,6 L2,10 Z" fill="hsl(var(--clay) / 0.6)" />
+                </marker>
+              </defs>
+              {baseEdges.map((edge) => {
+                const source = nodeMap.get(edge.source);
+                const target = nodeMap.get(edge.target);
+                if (!source || !target) return null;
+                const path = graphPath(source.position, target.position);
+                return (
+                  <g key={edge.id} opacity={selectedID ? 0.14 : 0.88}>
+                    <path d={path.d} fill="none" stroke={edge.color} strokeWidth={selectedID ? 0.95 : 1.65} markerEnd={`url(#${edge.marker})`} />
+                  </g>
+                );
+              })}
+            </svg>
+          {orderedNodes.map((node) => {
+            const related = selectedID === null || relatedNodeIDs.has(node.id);
+            const selected = node.id === selectedID;
             return (
-              <g key={edge.id} opacity={dimmed ? 0.2 : 0.88}>
-                <path d={path.d} fill="none" stroke={edge.color} strokeWidth={dimmed ? 1 : 1.65} markerEnd={`url(#${edge.marker})`} />
-                {!dimmed && selectedID && (
-                  <text x={path.label.x} y={path.label.y} className="fill-muted-foreground text-[10px]">
-                    {edge.relation}
-                  </text>
-                )}
-              </g>
+              <button
+                key={node.id}
+                className={`absolute w-[190px] rounded-xl px-2 py-2 text-left transition ${selected ? "bg-card shadow-[0_10px_22px_-16px_hsl(var(--shadow-warm)/0.20)]" : "bg-card/90 shadow-[0_8px_18px_-15px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"} ${related ? "opacity-100" : "opacity-[0.38]"}`}
+                data-graph-node={node.id}
+                style={{ left: node.position.x, top: node.position.y, zIndex: graphNodeLayer(node.id, selectedID, relatedNodeIDs), border: `1px solid ${selected ? graphTypeColor(node.object.type_id) : "hsl(var(--border) / 0.45)"}` }}
+                onClick={() => select(node.id)}
+                onDoubleClick={() => open(node.id)}
+                onPointerDown={(event) => beginDrag(event, node.id, node.position)}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+              >
+                <GraphNodeLabel object={node.object} />
+              </button>
             );
           })}
-        </svg>
-        {nodes.map((node) => (
-          <button
-            key={node.id}
-            className={`absolute w-[190px] rounded-xl px-2 py-2 text-left transition ${node.id === selectedID ? "bg-card shadow-[0_10px_22px_-16px_hsl(var(--shadow-warm)/0.20)]" : "bg-card/90 shadow-[0_8px_18px_-15px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"}`}
-            data-graph-node={node.id}
-            style={{ left: node.position.x, top: node.position.y, border: `1px solid ${node.id === selectedID ? graphTypeColor(node.object.type_id) : "hsl(var(--border) / 0.45)"}` }}
-            onClick={() => select(node.id)}
-            onDoubleClick={() => open(node.id)}
-            onPointerDown={(event) => beginDrag(event, node.id, node.position)}
-            onPointerMove={moveDrag}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-          >
-            <GraphNodeLabel object={node.object} />
-          </button>
-        ))}
+          {selectedID && focusEdges.length > 0 && (
+            <svg className="pointer-events-none absolute inset-0 z-20" width={innerSize.width} height={innerSize.height}>
+              {focusEdges.map((edge) => {
+                const source = nodeMap.get(edge.source);
+                const target = nodeMap.get(edge.target);
+                if (!source || !target) return null;
+                const path = graphPath(source.position, target.position);
+                return (
+                  <g key={`focus-${edge.id}`} opacity={1}>
+                    <path d={path.d} fill="none" stroke={edge.color} strokeWidth={2.05} markerEnd={`url(#${edge.marker})`} />
+                    <text x={path.label.x} y={path.label.y} className="fill-muted-foreground text-[10px]">
+                      {edge.relation}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          )}
           </div>
         </div>
       </div>
@@ -1405,6 +1436,13 @@ function GraphZoomControls({ zoom, setZoom, reset }: { zoom: number; setZoom: Re
 
 function clampZoom(value: number) {
   return Math.min(1.8, Math.max(0.55, value));
+}
+
+function graphNodeLayer(id: string, selectedID: string | null, relatedNodeIDs: Set<string>) {
+  if (!selectedID) return 1;
+  if (id === selectedID) return 40;
+  if (relatedNodeIDs.has(id)) return 30;
+  return 10;
 }
 
 function pruneDraggedPositions(nodes: Array<{ id: string }>, setDraggedPositions: React.Dispatch<React.SetStateAction<Record<string, Point>>>) {
