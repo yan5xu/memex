@@ -2,6 +2,20 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import hljs from "highlight.js/lib/core";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import go from "highlight.js/lib/languages/go";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import python from "highlight.js/lib/languages/python";
+import rust from "highlight.js/lib/languages/rust";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, type RowSelectionState, type SortingState, type VisibilityState, useReactTable } from "@tanstack/react-table";
@@ -86,6 +100,40 @@ const queryClient = new QueryClient({
     }
   }
 });
+
+hljs.registerLanguage("bash", bash);
+hljs.registerLanguage("css", css);
+hljs.registerLanguage("go", go);
+hljs.registerLanguage("javascript", javascript);
+hljs.registerLanguage("js", javascript);
+hljs.registerLanguage("json", json);
+hljs.registerLanguage("markdown", markdown);
+hljs.registerLanguage("md", markdown);
+hljs.registerLanguage("python", python);
+hljs.registerLanguage("py", python);
+hljs.registerLanguage("rust", rust);
+hljs.registerLanguage("rs", rust);
+hljs.registerLanguage("sql", sql);
+hljs.registerLanguage("typescript", typescript);
+hljs.registerLanguage("ts", typescript);
+hljs.registerLanguage("html", xml);
+hljs.registerLanguage("xml", xml);
+
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "details", "summary", "kbd", "sub", "sup", "ins"],
+  attributes: {
+    ...defaultSchema.attributes,
+    "*": [...((defaultSchema.attributes?.["*"] as unknown[]) ?? []), "className", "title"],
+    a: [...((defaultSchema.attributes?.a as unknown[]) ?? []), "href", "target", "rel"],
+    code: [...((defaultSchema.attributes?.code as unknown[]) ?? []), "className"],
+    div: [...((defaultSchema.attributes?.div as unknown[]) ?? []), "className"],
+    input: [...((defaultSchema.attributes?.input as unknown[]) ?? []), "type", "checked", "disabled"],
+    span: [...((defaultSchema.attributes?.span as unknown[]) ?? []), "className"],
+    details: ["open"],
+    summary: []
+  }
+};
 
 const rootRoute = createRootRoute({
   component: RootRoute
@@ -627,16 +675,12 @@ function App() {
                     <div className="mt-3 h-px w-24 bg-[hsl(var(--earth)/0.28)]" />
                   </div>
                   <div className="markdown max-w-3xl">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        img: ({ node: _node, src, alt, ...props }) => (
-                          <img {...props} src={markdownAssetURL(src, activeObject, vault)} alt={alt ?? ""} loading="lazy" />
-                        )
-                      }}
-                    >
-                      {normalizeObsidianImages(activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``)}
-                    </ReactMarkdown>
+                    <MarkdownBody
+                      body={activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``}
+                      object={activeObject}
+                      vault={vault}
+                      openObject={(id) => void openObject(id)}
+                    />
                   </div>
                 </article>
               </ResizablePanel>
@@ -761,8 +805,137 @@ function renderCell(v: unknown) {
   return String(v);
 }
 
-function normalizeObsidianImages(markdown: string) {
-  return markdown.replace(/!\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
+function MarkdownBody({ body, object, vault, openObject }: { body: string; object: Obj | null; vault: string; openObject: (id: string) => void }) {
+  const rendered = useMemo(() => normalizeMarkdownBody(body), [body]);
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+      components={{
+        a: ({ node: _node, href, children, ...props }) => {
+          const objectID = objectIDFromInternalHref(href);
+          if (objectID) {
+            return (
+              <button className="markdown-wikilink" type="button" onClick={() => openObject(objectID)}>
+                {children}
+              </button>
+            );
+          }
+          return (
+            <a {...props} href={href} target={isExternalHref(href) ? "_blank" : undefined} rel={isExternalHref(href) ? "noreferrer" : undefined}>
+              {children}
+            </a>
+          );
+        },
+        blockquote: ({ node: _node, children, ...props }) => <MarkdownBlockquote {...props}>{children}</MarkdownBlockquote>,
+        code: ({ node: _node, className, children, ...props }) => <MarkdownCode className={className} {...props}>{children}</MarkdownCode>,
+        img: ({ node: _node, src, alt, ...props }) => {
+          const resolved = markdownAssetURL(src, object, vault);
+          return (
+            <img
+              {...props}
+              src={resolved}
+              alt={alt ?? ""}
+              loading="lazy"
+              title={alt ?? ""}
+              onClick={() => resolved && window.open(resolved, "_blank", "noopener,noreferrer")}
+            />
+          );
+        }
+      }}
+    >
+      {rendered}
+    </ReactMarkdown>
+  );
+}
+
+function MarkdownCode({ className, children, ...props }: React.ComponentProps<"code">) {
+  const source = String(children ?? "").replace(/\n$/, "");
+  const language = /language-([A-Za-z0-9_-]+)/.exec(className ?? "")?.[1]?.toLowerCase();
+  if (language === "mermaid") {
+    return <MermaidDiagram source={source} />;
+  }
+  if (!language) {
+    return <code {...props}>{children}</code>;
+  }
+  const highlighted = highlightCode(source, language);
+  return <code {...props} className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted }} />;
+}
+
+function MermaidDiagram({ source }: { source: string }) {
+  const rawID = React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const [svg, setSVG] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        const mod = await import("mermaid");
+        const mermaid = mod.default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "base",
+          themeVariables: {
+            fontFamily: "Inter, ui-sans-serif, system-ui",
+            primaryColor: "#f8f5ef",
+            primaryBorderColor: "#c8b8a0",
+            lineColor: "#967a59",
+            textColor: "#332e27"
+          }
+        });
+        const result = await mermaid.render(`mbase-mermaid-${rawID}`, source);
+        if (!cancelled) {
+          setSVG(result.svg);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setSVG("");
+        }
+      }
+    }
+    void render();
+    return () => {
+      cancelled = true;
+    };
+  }, [rawID, source]);
+  if (error) return <pre className="markdown-mermaid-error">{error}</pre>;
+  if (!svg) return <div className="markdown-mermaid-loading">Rendering diagram...</div>;
+  return <div className="markdown-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+function MarkdownBlockquote({ children, ...props }: React.ComponentProps<"blockquote">) {
+  const alertType = githubAlertType(children);
+  if (alertType) {
+    return (
+      <div className={`markdown-alert markdown-alert-${alertType.toLowerCase()}`}>
+        <div className="markdown-alert-title">{alertType[0] + alertType.slice(1).toLowerCase()}</div>
+        <blockquote {...props} className="markdown-alert-body">{children}</blockquote>
+      </div>
+    );
+  }
+  return <blockquote {...props}>{children}</blockquote>;
+}
+
+function normalizeMarkdownBody(markdown: string) {
+  return transformMarkdownOutsideFences(markdown, (line) => normalizeWikiLinks(normalizeObsidianImages(line)));
+}
+
+function transformMarkdownOutsideFences(markdown: string, transform: (line: string) => string) {
+  let fenced = false;
+  return markdown.split("\n").map((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      return line;
+    }
+    return fenced ? line : transform(line);
+  }).join("\n");
+}
+
+function normalizeObsidianImages(line: string) {
+  return line.replace(/!\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
     const [target, label] = raw.split("|").map((part) => part.trim());
     if (!target) return "";
     const alt = label || target.split("/").pop() || target;
@@ -770,8 +943,54 @@ function normalizeObsidianImages(markdown: string) {
   });
 }
 
+function normalizeWikiLinks(line: string) {
+  return line.replace(/\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
+    const [target, label] = raw.split("|").map((part) => part.trim());
+    if (!target) return "";
+    const title = label || target;
+    return `[${escapeMarkdownAlt(title)}](#mbase-object:${encodeURIComponent(target)})`;
+  });
+}
+
 function escapeMarkdownAlt(value: string) {
   return value.replace(/[[\]\\]/g, "\\$&");
+}
+
+function highlightCode(source: string, language: string) {
+  try {
+    if (hljs.getLanguage(language)) {
+      return hljs.highlight(source, { language, ignoreIllegals: true }).value;
+    }
+    return hljs.highlightAuto(source).value;
+  } catch {
+    return escapeHTML(source);
+  }
+}
+
+function escapeHTML(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function githubAlertType(children: React.ReactNode) {
+  const match = reactText(children).trimStart().match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+  return match?.[1]?.toUpperCase() ?? "";
+}
+
+function reactText(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(reactText).join("");
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) return reactText(node.props.children);
+  return "";
+}
+
+function objectIDFromInternalHref(href: string | undefined) {
+  if (!href?.startsWith("#mbase-object:")) return "";
+  return decodeURIComponent(href.slice("#mbase-object:".length));
+}
+
+function isExternalHref(href: string | undefined) {
+  return Boolean(href && /^[a-z][a-z0-9+.-]*:/i.test(href));
 }
 
 function markdownAssetURL(src: string | undefined, object: Obj | null, vault: string) {
