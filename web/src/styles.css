@@ -339,6 +339,11 @@ body {
   box-shadow: inset 2px 0 0 hsl(var(--earth) / 0.42);
 }
 
+.sidebar-type-row-active:hover {
+  background: hsl(var(--card) / 0.7);
+  color: hsl(var(--foreground));
+}
+
 .sidebar-collapse {
   display: flex;
   min-height: 32px;
