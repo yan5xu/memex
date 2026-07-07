@@ -236,6 +236,25 @@ async function waitForImages(root: HTMLElement) {
   }));
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeout: number | undefined;
+  const timer = new Promise<never>((_resolve, reject) => {
+    timeout = window.setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+  return Promise.race([promise, timer]).finally(() => {
+    if (timeout !== undefined) window.clearTimeout(timeout);
+  });
+}
+
+function objectImageScale(width: number, height: number) {
+  const deviceScale = Math.min(2, window.devicePixelRatio || 1);
+  const maxEdge = 32000;
+  const maxArea = 240_000_000;
+  const edgeScale = maxEdge / Math.max(width, height, 1);
+  const areaScale = Math.sqrt(maxArea / Math.max(width * height, 1));
+  return Math.max(0.1, Math.min(deviceScale, edgeScale, areaScale));
+}
+
 function automationState(state: AppState): AutomationSnapshot {
   return {
     version: 1,
@@ -281,7 +300,7 @@ function App() {
   const routeSearch = indexRoute.useSearch();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
-  const objectPageRef = useRef<HTMLDivElement | null>(null);
+  const objectExportRef = useRef<HTMLDivElement | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
@@ -448,19 +467,20 @@ function App() {
   }
 
   async function saveObjectImage(): Promise<{ filename: string }> {
-    if (!activeObject || !objectPageRef.current) {
+    if (!activeObject || !objectExportRef.current) {
       throw new Error("No active object page to save");
     }
-    const node = objectPageRef.current;
+    const node = objectExportRef.current;
     const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
     setSavingObjectImage(true);
     try {
-      await waitForImages(node);
+      await withTimeout(waitForImages(node), 8000, "Image loading");
       const width = Math.ceil(Math.max(node.scrollWidth, node.getBoundingClientRect().width));
       const height = Math.ceil(node.scrollHeight);
-      const canvas = await html2canvas(node, {
+      const scale = objectImageScale(width, height);
+      const canvas = await withTimeout(html2canvas(node, {
         backgroundColor: "hsl(48 33% 97%)",
-        scale: Math.min(2, window.devicePixelRatio || 1),
+        scale,
         useCORS: true,
         allowTaint: false,
         width,
@@ -474,7 +494,7 @@ function App() {
           el.style.overflow = "visible";
           el.style.maxHeight = "none";
         }
-      });
+      }), 20000, "Image export");
       const dataURL = canvas.toDataURL("image/png");
       downloadDataURL(dataURL, filename);
       toast.success(`Saved ${filename}`);
@@ -804,25 +824,16 @@ function App() {
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
             <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "pr-[420px]" : ""}`}>
-              <div ref={objectPageRef} className="mx-auto max-w-[760px]">
-                <div className="mb-6 flex flex-wrap items-center gap-3">
-                  <Badge>{activeObject.type_id}</Badge>
-                  <span className="font-mono text-xs text-muted-foreground">{activeObject.id}</span>
-                </div>
-                <div className="mb-7">
-                  <h1 className="font-serif text-[42px] font-medium leading-[1.05] tracking-tight">{activeObject.title || activeObject.id}</h1>
-                  <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
-                </div>
-                <div className="markdown">
-                  <MarkdownBody
-                    body={activeBody || `# ${activeObject.title || activeObject.id}\n\nBody file: \`${activeObject.body_path}\``}
-                    object={activeObject}
-                    vault={vault}
-                    openObject={(id) => void openObject(id)}
-                  />
-                </div>
+              <div className="mx-auto max-w-[760px]">
+                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} openObject={(id) => void openObject(id)} />
               </div>
             </article>
+
+            <div className="object-export-host" aria-hidden="true">
+              <article ref={objectExportRef} className="object-export-page">
+                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} openObject={() => undefined} imageLoading="eager" />
+              </article>
+            </div>
 
             <button
               className={`inspector-toggle ${inspectorOpen ? "right-[414px] text-[hsl(var(--earth))]" : "right-10 text-muted-foreground"}`}
@@ -1009,7 +1020,53 @@ function renderCell(v: unknown) {
   return String(v);
 }
 
-function MarkdownBody({ body, object, vault, openObject }: { body: string; object: Obj | null; vault: string; openObject: (id: string) => void }) {
+function objectBodyForDisplay(object: Obj, body: string) {
+  return body || `# ${object.title || object.id}\n\nBody file: \`${object.body_path}\``;
+}
+
+function ObjectPageContent({
+  object,
+  body,
+  vault,
+  openObject,
+  imageLoading = "lazy"
+}: {
+  object: Obj;
+  body: string;
+  vault: string;
+  openObject: (id: string) => void;
+  imageLoading?: "lazy" | "eager";
+}) {
+  return (
+    <>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Badge>{object.type_id}</Badge>
+        <span className="font-mono text-xs text-muted-foreground">{object.id}</span>
+      </div>
+      <div className="mb-7">
+        <h1 className="font-serif text-[42px] font-medium leading-[1.05] tracking-tight">{object.title || object.id}</h1>
+        <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
+      </div>
+      <div className="markdown">
+        <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} imageLoading={imageLoading} />
+      </div>
+    </>
+  );
+}
+
+function MarkdownBody({
+  body,
+  object,
+  vault,
+  openObject,
+  imageLoading = "lazy"
+}: {
+  body: string;
+  object: Obj | null;
+  vault: string;
+  openObject: (id: string) => void;
+  imageLoading?: "lazy" | "eager";
+}) {
   const rendered = useMemo(() => normalizeMarkdownBody(body), [body]);
   return (
     <ReactMarkdown
@@ -1040,7 +1097,7 @@ function MarkdownBody({ body, object, vault, openObject }: { body: string; objec
               {...props}
               src={resolved}
               alt={alt ?? ""}
-              loading="lazy"
+              loading={imageLoading}
               title={alt ?? ""}
               onClick={() => resolved && window.open(resolved, "_blank", "noopener,noreferrer")}
             />

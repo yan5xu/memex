@@ -422,6 +422,29 @@ body {
   background: hsl(var(--card));
 }
 
+.object-export-host {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 872px;
+  pointer-events: none;
+}
+
+.object-export-page {
+  box-sizing: border-box;
+  width: 872px;
+  min-height: 1px;
+  overflow: visible;
+  background: hsl(48 33% 97%);
+  color: hsl(var(--foreground));
+  padding: 48px 56px 56px;
+}
+
+.object-export-page .markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
 .object-inspector {
   position: absolute;
   bottom: 22px;
