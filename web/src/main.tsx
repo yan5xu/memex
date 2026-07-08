@@ -1161,25 +1161,55 @@ function VIBlock({ title, children }: { title: string; children: React.ReactNode
 }
 
 function VIFoundations() {
+  const semanticColors = [
+    ["background", "page canvas"],
+    ["foreground", "primary text"],
+    ["card", "raised surface"],
+    ["card-foreground", "surface text"],
+    ["surface", "soft panel"],
+    ["surface-soft", "subtle band"],
+    ["muted", "quiet fill"],
+    ["muted-foreground", "secondary text"],
+    ["border", "hairline"],
+    ["input", "control border"],
+    ["ring", "focus ring"],
+    ["popover", "floating surface"],
+    ["popover-foreground", "popover text"],
+    ["sidebar", "app chrome"]
+  ];
+  const actionColors = [
+    ["primary", "primary action"],
+    ["primary-foreground", "on primary"],
+    ["secondary", "secondary fill"],
+    ["secondary-foreground", "secondary text"],
+    ["accent", "hover/focus fill"],
+    ["accent-foreground", "accent text"],
+    ["destructive", "danger"],
+    ["destructive-foreground", "on danger"]
+  ];
+  const accentColors = [
+    ["earth", "legacy warmth"],
+    ["clay", "warm emphasis"],
+    ["teal", "state/focus"],
+    ["teal-soft", "state wash"],
+    ["moss", "success/organic"],
+    ["shadow-warm", "shadow tone"]
+  ];
   return (
-    <div className="vi-grid">
-      <VIBlock title="Palette">
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            ["foreground", "hsl(var(--foreground))"],
-            ["earth", "hsl(var(--earth))"],
-            ["moss", "hsl(var(--moss))"],
-            ["clay", "hsl(var(--clay))"],
-            ["card", "hsl(var(--card))"],
-            ["surface", "hsl(var(--surface))"],
-            ["muted", "hsl(var(--muted))"],
-            ["border", "hsl(var(--border))"]
-          ].map(([name, color]) => (
-            <div key={name} className="space-y-2">
-              <div className="h-10 rounded-md border border-border/40" style={{ background: color }} />
-              <div className="font-mono text-[11px] text-muted-foreground">{name}</div>
-            </div>
-          ))}
+    <div className="vi-foundations-page">
+      <VIBlock title="Semantic tokens">
+        <div className="vi-color-grid vi-color-grid-semantic">
+          {semanticColors.map(([name, role]) => <VIColorSwatch key={name} name={name} role={role} />)}
+        </div>
+      </VIBlock>
+      <VIBlock title="Action tokens">
+        <div className="vi-color-grid">
+          {actionColors.map(([name, role]) => <VIColorSwatch key={name} name={name} role={role} />)}
+        </div>
+      </VIBlock>
+      <VIBlock title="Accent tokens">
+        <div className="vi-color-grid">
+          {accentColors.map(([name, role]) => <VIColorSwatch key={name} name={name} role={role} />)}
         </div>
       </VIBlock>
       <VIBlock title="Typography">
@@ -1189,14 +1219,61 @@ function VIFoundations() {
           <code className="font-mono text-xs text-muted-foreground">note.lightsprint.product-takeaway</code>
         </div>
       </VIBlock>
-      <VIBlock title="Badges">
-        <div className="flex flex-wrap gap-2">
-          <Badge>company</Badge>
-          <Badge>source.item</Badge>
-          <Badge>resolved</Badge>
-          <Badge>active</Badge>
+      <VIBlock title="Surface layering">
+        <div className="vi-surface-stack">
+          <div className="vi-surface-sample vi-surface-background">
+            <span>background</span>
+            <div className="vi-surface-sample vi-surface-card">
+              <span>card</span>
+              <div className="vi-surface-sample vi-surface-soft">
+                <span>surface-soft</span>
+              </div>
+            </div>
+          </div>
+          <div className="vi-type-row">
+            <span className="text-foreground">foreground</span>
+            <span className="text-muted-foreground">muted foreground</span>
+            <span className="font-mono text-[hsl(var(--teal))]">teal state</span>
+          </div>
         </div>
       </VIBlock>
+      <VIBlock title="Component usage">
+        <div className="vi-foundation-components">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button><Save className="size-4" />Primary</Button>
+            <Button variant="secondary"><Download className="size-4" />Secondary</Button>
+            <Button variant="ghost"><Link2 className="size-4" />Ghost</Button>
+            <Button variant="status" disabled><Loader2 className="size-4 animate-spin" />Status</Button>
+          </div>
+          <div className="grid gap-2">
+            <Input placeholder="where, e.g. status=active" className="font-mono text-xs" />
+            <Tabs defaultValue="table" className="w-fit">
+              <TabsList>
+                <TabsTrigger value="table">Table</TabsTrigger>
+                <TabsTrigger value="api">API</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge>company</Badge>
+            <Badge>source.item</Badge>
+            <Badge>resolved</Badge>
+            <Badge>active</Badge>
+          </div>
+        </div>
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIColorSwatch({ name, role }: { name: string; role: string }) {
+  return (
+    <div className="vi-color-swatch">
+      <div className="vi-color-chip" style={{ background: `hsl(var(--${name}))` }} />
+      <div className="min-w-0">
+        <div className="vi-color-name">--{name}</div>
+        <div className="vi-color-role">{role}</div>
+      </div>
     </div>
   );
 }
