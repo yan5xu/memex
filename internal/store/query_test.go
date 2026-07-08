@@ -82,3 +82,109 @@ func TestQueryWhereMatchesRefAndRefListIDs(t *testing.T) {
 		t.Fatalf("expected ref_list != where to exclude note.aisa, got %#v", notEqualResult.Rows)
 	}
 }
+
+func TestUpsertObjectWithBodyCreatesAndUpdates(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "status", domain.FieldEnum, false, false, []string{"active", "archived"}, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	body := "# Acme\n"
+	obj, created, err := s.UpsertObjectWithBody("company", "company.acme", "Acme", map[string]string{"title": "Acme", "status": "active"}, &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created || obj.ID != "company.acme" {
+		t.Fatalf("expected create, got created=%v obj=%#v", created, obj)
+	}
+
+	updatedBody := "# Acme Updated\n"
+	obj, created, err = s.UpsertObjectWithBody("company", "company.acme", "Acme Updated", map[string]string{"status": "archived"}, &updatedBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created {
+		t.Fatal("expected update, got create")
+	}
+	if obj.Title != "Acme Updated" || obj.Fields["status"] != "archived" {
+		t.Fatalf("expected updated object, got %#v", obj)
+	}
+	readBody, err := s.ReadBody("company.acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readBody != updatedBody {
+		t.Fatalf("expected body %q, got %q", updatedBody, readBody)
+	}
+}
+
+func TestFilteredLinksMatchesTypeKindRelationAndText(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("company", "company.acme", "Acme", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.CreateType("person"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("person", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("person", "person.ada", "Ada", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.CreateType("source.item"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("source.item", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("source.item", "about_company", domain.FieldRef, false, false, nil, "company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("source.item", "about_person", domain.FieldRef, false, false, nil, "person"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("source.item", "source.launch", "Launch", map[string]string{"about_company": "company.acme", "about_person": "person.ada"}); err != nil {
+		t.Fatal(err)
+	}
+
+	companyBacklinks, err := s.FilteredLinks("company.acme", true, LinkFilterOptions{Type: "source.item", Kind: "field", Relation: "about_company", Filter: "launch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(companyBacklinks) != 1 || companyBacklinks[0].FromID != "source.launch" {
+		t.Fatalf("expected source.launch backlink, got %#v", companyBacklinks)
+	}
+
+	personBacklinks, err := s.FilteredLinks("company.acme", true, LinkFilterOptions{Type: "person"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(personBacklinks) != 0 {
+		t.Fatalf("expected no person backlinks, got %#v", personBacklinks)
+	}
+}

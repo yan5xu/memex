@@ -57,6 +57,10 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 		return r.runObject(argv[1:])
 	case "create":
 		return r.runCreate(argv[1:])
+	case "upsert":
+		return r.runUpsert(argv[1:])
+	case "source":
+		return r.runSource(argv[1:])
 	case "get":
 		return r.runGet(argv[1:])
 	case "set":
@@ -129,6 +133,71 @@ func (r *Runner) runCreate(args []string) Result {
 			return fromErr(err)
 		}
 		return OK(obj, Effect{Kind: "object.create", Object: obj.ID})
+	})
+}
+
+func (r *Runner) runUpsert(args []string) Result {
+	if len(args) < 2 {
+		return Fail("usage", "usage: upsert <type> <id> [--body <file>|--body-stdin] field=value...")
+	}
+	fieldArgs, body, err := r.extractBodyInput(args[2:])
+	if err != nil {
+		return fromErr(err)
+	}
+	fields, err := parseAssignments(fieldArgs)
+	if err != nil {
+		return fromErr(err)
+	}
+	return r.withStore(func(s *store.Store) Result {
+		obj, created, err := s.UpsertObjectWithBody(args[0], args[1], fields["title"], fields, body)
+		if err != nil {
+			return fromErr(err)
+		}
+		return OK(map[string]any{"object": obj, "created": created, "updated": !created}, Effect{Kind: "object.upsert", Object: obj.ID})
+	})
+}
+
+func (r *Runner) runSource(args []string) Result {
+	if len(args) < 1 {
+		return Fail("usage", "usage: source add <id> [--body <file>|--body-stdin] [--title <title>] [--url <url>] field=value...")
+	}
+	switch args[0] {
+	case "add":
+		return r.runTypedAdd("source.add", "source.item", args[1:], sourceAddFieldAliases())
+	default:
+		return Fail("unknown_command", "unknown source command: "+args[0])
+	}
+}
+
+func (r *Runner) runTypedAdd(effectKind, typeID string, args []string, aliases map[string]string) Result {
+	if len(args) < 1 {
+		return Fail("usage", "usage: source add <id> [--body <file>|--body-stdin] [--title <title>] [--url <url>] field=value...")
+	}
+	fieldArgs, body, err := r.extractBodyInput(args[1:])
+	if err != nil {
+		return fromErr(err)
+	}
+	fields, err := parseFieldsFromArgs(fieldArgs, aliases)
+	if err != nil {
+		return fromErr(err)
+	}
+	return r.withStore(func(s *store.Store) Result {
+		obj, created, err := s.UpsertObjectWithBody(typeID, args[0], fields["title"], fields, body)
+		if err != nil {
+			return fromErr(err)
+		}
+		issues, err := s.Issues()
+		if err != nil {
+			return fromErr(err)
+		}
+		objectIssues := filterIssuesForObject(issues, obj.ID)
+		return OK(map[string]any{
+			"object":      obj,
+			"created":     created,
+			"updated":     !created,
+			"issues":      objectIssues,
+			"issue_count": len(objectIssues),
+		}, Effect{Kind: effectKind, Object: obj.ID})
 	})
 }
 
@@ -381,20 +450,21 @@ func (r *Runner) runQuery(args []string) Result {
 
 func (r *Runner) runLinks(args []string, back bool) Result {
 	if len(args) < 1 {
-		return Fail("usage", "usage: links <id>")
+		return Fail("usage", "usage: links <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]")
+	}
+	flags := parseFlags(args[1:])
+	opts := store.LinkFilterOptions{
+		Type:     flags.Get("type"),
+		Kind:     flags.Get("kind"),
+		Relation: flags.Get("relation"),
+		Filter:   flags.Get("filter"),
 	}
 	return r.withStore(func(s *store.Store) Result {
-		var links any
-		var err error
-		if back {
-			links, err = s.Backlinks(args[0])
-		} else {
-			links, err = s.Links(args[0])
-		}
+		links, err := s.FilteredLinks(args[0], back, opts)
 		if err != nil {
 			return fromErr(err)
 		}
-		return OK(map[string]any{"links": links})
+		return OK(map[string]any{"links": links, "count": len(links)})
 	})
 }
 
@@ -771,6 +841,86 @@ func parseFlags(args []string) Flags {
 	return flags
 }
 
+func parseFieldsFromArgs(args []string, aliases map[string]string) (map[string]string, error) {
+	fields := make(map[string]string)
+	flags := parseFlags(args)
+	for flag, field := range aliases {
+		if value := flags.Get(flag); value != "" {
+			fields[field] = value
+		}
+	}
+	for _, assignment := range flags.All("field") {
+		key, value, ok := strings.Cut(assignment, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("field assignment must be key=value: %s", assignment)
+		}
+		fields[strings.TrimSpace(key)] = value
+	}
+	for _, assignment := range positionalAssignments(args) {
+		key, value, ok := strings.Cut(assignment, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("field assignment must be key=value: %s", assignment)
+		}
+		fields[strings.TrimSpace(key)] = value
+	}
+	return fields, nil
+}
+
+func positionalAssignments(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--field" {
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "--") {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+				i++
+			}
+			continue
+		}
+		if strings.Contains(arg, "=") {
+			out = append(out, arg)
+		}
+	}
+	return out
+}
+
+func sourceAddFieldAliases() map[string]string {
+	return map[string]string{
+		"title":             "title",
+		"url":               "url",
+		"platform":          "platform",
+		"item-type":         "item_type",
+		"author":            "author",
+		"published-at":      "published_at",
+		"collected-at":      "collected_at",
+		"quality":           "quality",
+		"processing-status": "processing_status",
+		"evidence-level":    "evidence_level",
+		"summary":           "summary",
+		"language":          "language",
+		"capture-method":    "capture_method",
+		"capture-status":    "capture_status",
+		"captured-at":       "captured_at",
+		"about-company":     "about_company",
+		"from-touchpoint":   "from_touchpoint",
+	}
+}
+
+func filterIssuesForObject(issues []domain.Issue, id string) []domain.Issue {
+	out := make([]domain.Issue, 0)
+	for _, issue := range issues {
+		if issue.ObjectID == id {
+			out = append(out, issue)
+		}
+	}
+	return out
+}
+
 func (f Flags) Bool(name string) bool {
 	return len(f[name]) > 0 && f[name][0] == "true"
 }
@@ -941,6 +1091,8 @@ func usage() string {
   vault info
   status
   create <type> <id> [--body <file>|--body-stdin] field=value...
+  upsert <type> <id> [--body <file>|--body-stdin] field=value...
+  source add <id> [--body <file>|--body-stdin] [--title <title>] [--url <url>] field=value...
   get <id> [--no-body|--body-preview <n>]
   set <id> <field> <value>
   link <id> <field> <target-id>
@@ -949,8 +1101,8 @@ func usage() string {
   field add <type> <field> --kind <kind>
   object create|get|list|set|link|unlink
   query <type>
-  links <id>
-  backlinks <id>
+  links <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]
+  backlinks <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]
   graph export
   graph views [list]|write --stdin
   body path|refresh|write|append <id>

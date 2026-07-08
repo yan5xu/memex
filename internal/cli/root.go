@@ -125,6 +125,14 @@ func printHuman(argv []string, result app.Result) error {
 			printCreatedObject(obj)
 			return nil
 		}
+	case "upsert":
+		if printUpsertedObject(result.Data) {
+			return nil
+		}
+	case "source":
+		if len(argv) > 1 && argv[1] == "add" && printUpsertedObject(result.Data) {
+			return nil
+		}
 	case "get":
 		if printObjectDetail(result.Data) {
 			return nil
@@ -146,6 +154,14 @@ func printHuman(argv []string, result app.Result) error {
 	case "query":
 		if q, ok := result.Data.(*store.QueryResult); ok {
 			printQuery(q)
+			return nil
+		}
+	case "links":
+		if printLinkList("Links", result.Data, false) {
+			return nil
+		}
+	case "backlinks":
+		if printLinkList("Backlinks", result.Data, true) {
 			return nil
 		}
 	case "object":
@@ -199,7 +215,7 @@ func shouldConsumeJSONFields(next string) bool {
 
 func isTopLevelCommand(s string) bool {
 	switch s {
-	case "vault", "init", "serve", "status", "type", "field", "object", "create", "get", "set", "link", "delete", "remove", "query", "links", "backlinks", "graph", "body", "asset", "refresh", "issues", "doctor":
+	case "vault", "init", "serve", "status", "type", "field", "object", "create", "upsert", "source", "get", "set", "link", "delete", "remove", "query", "links", "backlinks", "graph", "body", "asset", "refresh", "issues", "doctor":
 		return true
 	default:
 		return false
@@ -364,6 +380,35 @@ func printCreatedObject(obj *domain.Object) {
 	fmt.Printf("Next: edit %s, then run `%s body refresh %s` if you add wiki links manually.\n", obj.BodyAbsPath, commandPrefix(), obj.ID)
 }
 
+func printUpsertedObject(v any) bool {
+	data, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	obj, ok := asObject(data["object"])
+	if !ok {
+		return false
+	}
+	action := "Updated"
+	if created, ok := data["created"].(bool); ok && created {
+		action = "Created"
+	}
+	fmt.Printf("%s %s\n", action, obj.ID)
+	fmt.Printf("  type: %s\n", obj.TypeID)
+	if obj.Title != "" {
+		fmt.Printf("  title: %s\n", obj.Title)
+	}
+	fmt.Printf("  body: %s\n", obj.BodyAbsPath)
+	if issueCount, ok := data["issue_count"]; ok {
+		fmt.Printf("  issues: %v\n", issueCount)
+	}
+	if action == "Created" {
+		fmt.Println()
+		fmt.Printf("Next: edit %s, then run `%s body refresh %s` if you add wiki links manually.\n", obj.BodyAbsPath, commandPrefix(), obj.ID)
+	}
+	return true
+}
+
 func printDeletedObject(v any) bool {
 	data, ok := v.(map[string]any)
 	if !ok {
@@ -376,6 +421,18 @@ func printDeletedObject(v any) bool {
 	fmt.Printf("Deleted %s\n", obj.ID)
 	fmt.Printf("  type: %s\n", obj.TypeID)
 	fmt.Printf("  body kept: %s\n", obj.BodyAbsPath)
+	return true
+}
+
+func printLinkList(title string, v any, reverse bool) bool {
+	data, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	links := linkSlice(data["links"])
+	count := len(links)
+	fmt.Printf("%s: %d\n", title, count)
+	printLinkRows(links, reverse)
 	return true
 }
 
@@ -455,21 +512,31 @@ func printObjectDetail(v any) bool {
 }
 
 func printLinks(title string, v any, reverse bool) {
-	links, ok := v.([]domain.Link)
-	if !ok {
-		if ptrs, ok := v.([]*domain.Link); ok {
-			for _, link := range ptrs {
-				if link != nil {
-					links = append(links, *link)
-				}
-			}
-		}
-	}
+	links := linkSlice(v)
 	if len(links) == 0 {
 		return
 	}
 	fmt.Println()
 	fmt.Println(title)
+	printLinkRows(links, reverse)
+}
+
+func linkSlice(v any) []domain.Link {
+	links, ok := v.([]domain.Link)
+	if ok {
+		return links
+	}
+	if ptrs, ok := v.([]*domain.Link); ok {
+		for _, link := range ptrs {
+			if link != nil {
+				links = append(links, *link)
+			}
+		}
+	}
+	return links
+}
+
+func printLinkRows(links []domain.Link, reverse bool) {
 	limit := len(links)
 	if limit > 12 {
 		limit = 12

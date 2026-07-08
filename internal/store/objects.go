@@ -18,6 +18,58 @@ func (s *Store) CreateObject(typeID, id, title string, fields map[string]string)
 	return s.CreateObjectWithBody(typeID, id, title, fields, nil)
 }
 
+func (s *Store) UpsertObjectWithBody(typeID, id, title string, fields map[string]string, body *string) (*domain.Object, bool, error) {
+	if fields == nil {
+		fields = make(map[string]string)
+	}
+	if !s.objectExists(id) {
+		created, createErr := s.CreateObjectWithBody(typeID, id, title, fields, body)
+		return created, true, createErr
+	}
+	obj, err := s.GetObject(id)
+	if err != nil {
+		return nil, false, err
+	}
+	if obj.TypeID != typeID {
+		return nil, false, fmt.Errorf("object %q already exists as type %q, not %q", id, obj.TypeID, typeID)
+	}
+	if title == "" {
+		title = fields["title"]
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback()
+	if err := s.setFieldsTx(tx, id, typeID, fields); err != nil {
+		return nil, false, err
+	}
+	if title != "" {
+		if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, title, id); err != nil {
+			return nil, false, err
+		}
+	} else {
+		if _, err := tx.Exec(`UPDATE objects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, id); err != nil {
+			return nil, false, err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO ops(op, object_id, payload_json) VALUES('object.upsert', ?, ?)`, id, mustJSON(map[string]any{"type": typeID, "fields": fields, "body_written": body != nil})); err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	if body != nil {
+		if err := s.WriteBody(id, *body); err != nil {
+			return nil, false, err
+		}
+	} else if err := s.RevalidateObject(id); err != nil {
+		return nil, false, err
+	}
+	obj, err = s.GetObject(id)
+	return obj, false, err
+}
+
 func (s *Store) CreateObjectWithBody(typeID, id, title string, fields map[string]string, body *string) (*domain.Object, error) {
 	if fields == nil {
 		fields = make(map[string]string)
