@@ -114,6 +114,7 @@ type AutomationUISnapshot = {
   sidebarCollapsed: boolean;
   inspectorOpen: boolean;
   relationGraph: RelationGraphAutomationState | null;
+  graphWorkspace: GraphWorkspaceAutomationState | null;
 };
 
 type RelationGraphAutomationController = {
@@ -125,6 +126,24 @@ type RelationGraphAutomationController = {
   setEditor: (patch: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState>;
   saveView: (patch?: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState>;
   deleteView: (id?: string) => Promise<RelationGraphAutomationState>;
+};
+
+type GraphWorkspaceAutomationState = {
+  activeViewID: string | null;
+  activeCenterID: string | null;
+  fullMap: boolean;
+  centerSearch: string;
+  visibleCenterIDs: string[];
+  previewOpen: boolean;
+  previewObjectID: string | null;
+};
+
+type GraphWorkspaceAutomationController = {
+  state: () => GraphWorkspaceAutomationState;
+  searchCenter: (query: string) => Promise<GraphWorkspaceAutomationState>;
+  previewNode: (id: string) => Promise<GraphWorkspaceAutomationState>;
+  closePreview: () => Promise<GraphWorkspaceAutomationState>;
+  setCenterFromNode: (id: string) => Promise<GraphWorkspaceAutomationState>;
 };
 
 const queryClient = new QueryClient({
@@ -367,10 +386,14 @@ declare global {
       openObject: (id: string) => Promise<AutomationSnapshot>;
       openGraph: () => Promise<AutomationSnapshot>;
       graphWorkspace: {
-        state: () => { activeViewID: string | null; activeCenterID: string | null; fullMap: boolean };
+        state: () => GraphWorkspaceAutomationState;
         setView: (id: string) => Promise<AutomationSnapshot>;
         setCenter: (id: string) => Promise<AutomationSnapshot>;
         openFullMap: () => Promise<AutomationSnapshot>;
+        searchCenter: (query: string) => Promise<GraphWorkspaceAutomationState | null>;
+        previewNode: (id: string) => Promise<GraphWorkspaceAutomationState | null>;
+        closePreview: () => Promise<GraphWorkspaceAutomationState | null>;
+        setCenterFromNode: (id: string) => Promise<GraphWorkspaceAutomationState | null>;
       };
       openHealth: () => Promise<AutomationSnapshot>;
       relationGraph: {
@@ -395,6 +418,7 @@ function App() {
   const queryClient = useQueryClient();
   const objectExportRef = useRef<HTMLDivElement | null>(null);
   const relationGraphAutomationRef = useRef<RelationGraphAutomationController | null>(null);
+  const graphWorkspaceAutomationRef = useRef<GraphWorkspaceAutomationController | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
@@ -805,10 +829,16 @@ function App() {
     const uiState = (): AutomationUISnapshot => ({
       sidebarCollapsed,
       inspectorOpen,
-      relationGraph: relationGraphAutomationRef.current?.state() ?? null
+      relationGraph: relationGraphAutomationRef.current?.state() ?? null,
+      graphWorkspace: graphWorkspaceAutomationRef.current?.state() ?? null
     });
     const relationGraphCall = async <T,>(fn: (controller: RelationGraphAutomationController) => Promise<T>): Promise<T | null> => {
       const controller = relationGraphAutomationRef.current;
+      if (!controller) return null;
+      return fn(controller);
+    };
+    const graphWorkspaceCall = async <T,>(fn: (controller: GraphWorkspaceAutomationController) => Promise<T>): Promise<T | null> => {
+      const controller = graphWorkspaceAutomationRef.current;
       if (!controller) return null;
       return fn(controller);
     };
@@ -907,10 +937,14 @@ function App() {
         return currentState({ view: "graph", graph: nextGraph });
       },
       graphWorkspace: {
-        state: () => ({
+        state: () => graphWorkspaceAutomationRef.current?.state() ?? ({
           activeViewID: activeGraphViewID || null,
           activeCenterID: activeGraphCenterID || null,
-          fullMap: activeGraphViewID === fullGraphViewID
+          fullMap: activeGraphViewID === fullGraphViewID,
+          centerSearch: "",
+          visibleCenterIDs: [],
+          previewOpen: false,
+          previewObjectID: null
         }),
         setView: async (id: string) => {
           setGraphWorkspaceSelection({ viewID: id, centerID: "" });
@@ -938,7 +972,11 @@ function App() {
           }
           await nextFrame();
           return window.mbase?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
-        }
+        },
+        searchCenter: (query: string) => graphWorkspaceCall((controller) => controller.searchCenter(query)),
+        previewNode: (id: string) => graphWorkspaceCall((controller) => controller.previewNode(id)),
+        closePreview: () => graphWorkspaceCall((controller) => controller.closePreview()),
+        setCenterFromNode: (id: string) => graphWorkspaceCall((controller) => controller.setCenterFromNode(id))
       },
       openHealth: async () => {
         setView("health");
@@ -1182,6 +1220,7 @@ function App() {
             activeCenterID={activeGraphCenterID}
             setSelection={setGraphWorkspaceSelection}
             openObject={(id) => void openObject(id)}
+            automationRef={graphWorkspaceAutomationRef}
             fullGraph={{
               graphView,
               graphTypeControls,
@@ -1242,6 +1281,7 @@ function GraphWorkspacePage({
   activeCenterID,
   setSelection,
   openObject,
+  automationRef,
   fullGraph
 }: {
   graph: GraphData;
@@ -1250,6 +1290,7 @@ function GraphWorkspacePage({
   activeCenterID: string;
   setSelection: (next: { viewID?: string; centerID?: string }, options?: { replace?: boolean }) => void;
   openObject: (id: string) => void;
+  automationRef?: React.MutableRefObject<GraphWorkspaceAutomationController | null>;
   fullGraph: {
     graphView: ReturnType<typeof buildGraphView>;
     graphTypeControls: ReturnType<typeof buildGraphTypeControls>;
@@ -1273,6 +1314,12 @@ function GraphWorkspacePage({
   const [editorLabel, setEditorLabel] = useState("");
   const [editorRootType, setEditorRootType] = useState("");
   const [editorSteps, setEditorSteps] = useState("");
+  const [centerSearch, setCenterSearch] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewObject, setPreviewObject] = useState<Obj | null>(null);
+  const [previewBody, setPreviewBody] = useState("");
+  const clickTimerRef = useRef<number | null>(null);
   const configuredViews = viewConfig.views;
   const activeDefinition = configuredViews.find((view) => view.id === activeViewID) ?? configuredViews[0] ?? null;
   const showingFullGraph = activeViewID === fullGraphViewID || !activeDefinition;
@@ -1284,6 +1331,18 @@ function GraphWorkspacePage({
       .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
   }, [graph.nodes, rootType]);
   const centerObject = graph.nodes.find((node) => node.id === activeCenterID) ?? centerCandidates[0] ?? null;
+  const filteredCenterCandidates = useMemo(() => {
+    const needle = centerSearch.trim().toLowerCase();
+    if (!needle) return centerCandidates;
+    return centerCandidates.filter((object) => {
+      const values = [object.id, object.title, object.type_id, object.body_path];
+      return values.some((value) => String(value || "").toLowerCase().includes(needle));
+    });
+  }, [centerCandidates, centerSearch]);
+  const centerSelectOptions = useMemo(() => {
+    if (!centerObject || filteredCenterCandidates.some((object) => object.id === centerObject.id)) return filteredCenterCandidates;
+    return [centerObject, ...filteredCenterCandidates];
+  }, [centerObject, filteredCenterCandidates]);
   const activeTemplate = activeDefinition ? graphViewDefinitionToTemplate(activeDefinition, activeDefinition.root_type) : null;
   const queryGraph = useMemo(() => {
     if (!centerObject || !activeTemplate) return null;
@@ -1292,6 +1351,90 @@ function GraphWorkspacePage({
   const queryNodes = queryGraph ? [queryGraph.focus, ...queryGraph.incoming, ...queryGraph.outgoing] : [];
   const queryGroups = queryGraph ? relationGraphGroups(queryGraph, queryNodes) : [];
   const rootTypes = useMemo(() => graphTypeOrder([...new Set(graph.nodes.map((node) => node.type_id))]), [graph.nodes]);
+  const previewTitleByID = useMemo(() => buildObjectTitleByID(previewObject, [], graph.nodes), [previewObject, graph.nodes]);
+
+  function graphWorkspaceState(): GraphWorkspaceAutomationState {
+    return {
+      activeViewID: showingFullGraph ? fullGraphViewID : (activeDefinition?.id ?? activeViewID) || null,
+      activeCenterID: (centerObject?.id ?? activeCenterID) || null,
+      fullMap: showingFullGraph,
+      centerSearch,
+      visibleCenterIDs: centerSelectOptions.map((object) => object.id),
+      previewOpen,
+      previewObjectID: previewObject?.id ?? null
+    };
+  }
+
+  async function openMarkdownPreview(id: string) {
+    const existing = graph.nodes.find((node) => node.id === id) ?? null;
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewObject(existing);
+    setPreviewBody("");
+    const result = await run<ObjectLoadResult>(["object", "get", id], vault);
+    if (!result.ok || !result.data) {
+      setPreviewLoading(false);
+      toast.error(result.error?.message || `Failed to load ${id}`);
+      return graphWorkspaceState();
+    }
+    setPreviewObject(result.data.object);
+    setPreviewBody(result.data.body ?? "");
+    setPreviewLoading(false);
+    return {
+      ...graphWorkspaceState(),
+      previewOpen: true,
+      previewObjectID: result.data.object.id
+    };
+  }
+
+  async function setCenterFromNode(id: string) {
+    const target = graph.nodes.find((node) => node.id === id);
+    if (!target) {
+      toast.error(`Node not found: ${id}`);
+      return graphWorkspaceState();
+    }
+    const matchingView = configuredViews.find((view) => view.root_type === target.type_id);
+    if (!matchingView) {
+      toast.info(`No graph view starts from ${target.type_id}`);
+      return graphWorkspaceState();
+    }
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    setCenterSearch("");
+    setSelection({ viewID: matchingView.id, centerID: target.id });
+    const nextVisibleCenterIDs = graph.nodes
+      .filter((node) => node.type_id === matchingView.root_type)
+      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id))
+      .map((node) => node.id);
+    return {
+      ...graphWorkspaceState(),
+      activeViewID: matchingView.id,
+      activeCenterID: target.id,
+      fullMap: false,
+      centerSearch: "",
+      visibleCenterIDs: nextVisibleCenterIDs,
+      previewOpen,
+      previewObjectID: previewObject?.id ?? null
+    };
+  }
+
+  function handleGraphNodeClick(id: string) {
+    if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = null;
+      void openMarkdownPreview(id);
+    }, 180);
+  }
+
+  function handleGraphNodeDoubleClick(id: string) {
+    if (clickTimerRef.current) {
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    void setCenterFromNode(id);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1318,6 +1461,39 @@ function GraphWorkspacePage({
     if (showingFullGraph || !centerObject || activeCenterID === centerObject.id) return;
     setSelection({ centerID: centerObject.id }, { replace: true });
   }, [showingFullGraph, centerObject, activeCenterID, setSelection]);
+
+  useEffect(() => {
+    if (!automationRef) return;
+    automationRef.current = {
+      state: graphWorkspaceState,
+      searchCenter: async (query: string) => {
+        setCenterSearch(query);
+        await nextFrame();
+        const needle = query.trim().toLowerCase();
+        const matched = needle
+          ? centerCandidates.filter((object) => [object.id, object.title, object.type_id, object.body_path].some((value) => String(value || "").toLowerCase().includes(needle)))
+          : centerCandidates;
+        const options = centerObject && !matched.some((object) => object.id === centerObject.id) ? [centerObject, ...matched] : matched;
+        return { ...graphWorkspaceState(), centerSearch: query, visibleCenterIDs: options.map((object) => object.id) };
+      },
+      previewNode: openMarkdownPreview,
+      closePreview: async () => {
+        setPreviewOpen(false);
+        await nextFrame();
+        return { ...graphWorkspaceState(), previewOpen: false };
+      },
+      setCenterFromNode
+    };
+    return () => {
+      if (automationRef.current?.state === graphWorkspaceState) automationRef.current = null;
+    };
+  });
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) window.clearTimeout(clickTimerRef.current);
+    };
+  }, []);
 
   function openEditor(source = activeDefinition) {
     setEditorID(source?.id ?? slugifyGraphViewLabel(`${rootTypes[0] || "object"} view`));
@@ -1404,14 +1580,20 @@ function GraphWorkspacePage({
           </button>
         </div>
         {!showingFullGraph && activeDefinition && (
-          <label className="graph-center-select">
-            <span>Center</span>
-            <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
-              {centerCandidates.map((object) => (
-                <option key={object.id} value={object.id}>{object.title || object.id}</option>
-              ))}
-            </select>
-          </label>
+          <div className="graph-center-control">
+            <label className="graph-center-search">
+              <Search className="size-3.5" />
+              <Input value={centerSearch} onChange={(event) => setCenterSearch(event.target.value)} placeholder={`Search ${rootType}`} />
+            </label>
+            <label className="graph-center-select">
+              <span>Center</span>
+              <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
+                {centerSelectOptions.map((object) => (
+                  <option key={object.id} value={object.id}>{object.title || object.id}</option>
+                ))}
+              </select>
+            </label>
+          </div>
         )}
       </div>
 
@@ -1464,7 +1646,7 @@ function GraphWorkspacePage({
                 </button>
               ))}
             </div>
-            <GraphCanvas graphView={fullGraph.graphView} selectedID={fullGraph.selectedGraphNode} select={fullGraph.setSelectedGraphNode} open={openObject} layoutKey={fullGraph.graphLayoutKey} relayout={fullGraph.relayoutGraph} />
+            <GraphCanvas graphView={fullGraph.graphView} selectedID={fullGraph.selectedGraphNode} select={fullGraph.setSelectedGraphNode} open={openObject} layoutKey={fullGraph.graphLayoutKey} relayout={fullGraph.relayoutGraph} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} />
           </div>
           <aside className="space-y-4">
             <Panel title="Full map mode" icon={<Network className="size-4" />}>
@@ -1505,7 +1687,7 @@ function GraphWorkspacePage({
                   <button className="rounded-xl px-3 py-2 text-sm text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => openObject(fullGraph.selectedGraphObject!.id)}>Open object</button>
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">Select a node to inspect it. Double click opens the object page.</div>
+                <div className="text-sm text-muted-foreground">Select a node to inspect it. Click previews Markdown; double click makes it the center when a view exists for its type.</div>
               )}
             </Panel>
           </aside>
@@ -1513,7 +1695,7 @@ function GraphWorkspacePage({
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
           <div className="graph-lab-canvas">
-            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} /> : <EmptyState title="No graph view result" description={centerCandidates.length === 0 ? `No ${rootType} objects found for this view.` : "Select a center object to run the graph view."} />}
+            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} /> : <EmptyState title="No graph view result" description={centerCandidates.length === 0 ? `No ${rootType} objects found for this view.` : "Select a center object to run the graph view."} />}
           </div>
           <aside className="graph-lab-panel">
             <Panel title="Current view" icon={<Play className="size-4" />}>
@@ -1550,6 +1732,45 @@ function GraphWorkspacePage({
           </aside>
         </div>
       )}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="graph-markdown-dialog">
+          <DialogHeader>
+            <DialogTitle>{previewObject?.title || previewObject?.id || "Loading object"}</DialogTitle>
+            <DialogDescription>
+              {previewObject ? `${previewObject.type_id} · ${previewObject.id}` : "Loading Markdown body"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="graph-markdown-actions">
+            {previewObject && (
+              <>
+                <Button variant="secondary" size="sm" className="rounded-md" onClick={() => openObject(previewObject.id)}>
+                  <Eye className="size-3.5" />
+                  Open object
+                </Button>
+                {configuredViews.some((view) => view.root_type === previewObject.type_id) && (
+                  <Button size="sm" className="rounded-md" onClick={() => void setCenterFromNode(previewObject.id)}>
+                    <Network className="size-3.5" />
+                    Set center
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+          <ScrollArea className="graph-markdown-scroll">
+            {previewLoading && (
+              <div className="graph-markdown-loading">
+                <Loader2 className="size-4 animate-spin" />
+                Loading body
+              </div>
+            )}
+            {!previewLoading && previewObject && (
+              <div className="markdown">
+                <MarkdownBody body={objectBodyForDisplay(previewObject, previewBody)} object={previewObject} vault={vault} objectTitleByID={previewTitleByID} openObject={(id) => void openMarkdownPreview(id)} imageLoading="eager" />
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -3033,7 +3254,25 @@ function SchemaGraphCanvas({ graphView, selectedType, select }: { graphView: Ret
   );
 }
 
-function GraphCanvas({ graphView, selectedID, select, open, layoutKey, relayout }: { graphView: ReturnType<typeof buildGraphView>; selectedID: string | null; select: (id: string) => void; open: (id: string) => void; layoutKey: string; relayout: () => void }) {
+function GraphCanvas({
+  graphView,
+  selectedID,
+  select,
+  open,
+  layoutKey,
+  relayout,
+  onNodeClick,
+  onNodeDoubleClick
+}: {
+  graphView: ReturnType<typeof buildGraphView>;
+  selectedID: string | null;
+  select: (id: string) => void;
+  open: (id: string) => void;
+  layoutKey: string;
+  relayout: () => void;
+  onNodeClick?: (id: string) => void;
+  onNodeDoubleClick?: (id: string) => void;
+}) {
   const [zoom, setZoom] = useState(1);
   const [draggedPositions, setDraggedPositions] = useState<Record<string, Point>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -3123,8 +3362,17 @@ function GraphCanvas({ graphView, selectedID, select, open, layoutKey, relayout 
                 className={`absolute w-[190px] rounded-xl px-2 py-2 text-left transition ${selected ? "bg-card shadow-[0_10px_22px_-16px_hsl(var(--shadow-warm)/0.20)]" : "bg-card/90 shadow-[0_8px_18px_-15px_hsl(var(--shadow-warm)/0.13)] hover:bg-card"} ${related ? "opacity-100" : "opacity-[0.38]"}`}
                 data-graph-node={node.id}
                 style={{ left: node.position.x, top: node.position.y, zIndex: graphNodeLayer(node.id, selectedID, relatedNodeIDs), border: `1px solid ${selected ? graphTypeColor(node.object.type_id) : "hsl(var(--border) / 0.45)"}` }}
-                onClick={() => select(node.id)}
-                onDoubleClick={() => open(node.id)}
+                onClick={() => {
+                  select(node.id);
+                  onNodeClick?.(node.id);
+                }}
+                onDoubleClick={() => {
+                  if (onNodeDoubleClick) {
+                    onNodeDoubleClick(node.id);
+                    return;
+                  }
+                  open(node.id);
+                }}
                 onPointerDown={(event) => beginDrag(event, node.id, node.position)}
                 onPointerMove={moveDrag}
                 onPointerUp={endDrag}
@@ -3898,7 +4146,17 @@ function RelationFilterChip({ label, count, active, disabled, onClick }: { label
   );
 }
 
-function RelationGraphCanvas({ graph, openObject }: { graph: InspectorRelationGraphData; openObject: (id: string) => void }) {
+function RelationGraphCanvas({
+  graph,
+  openObject,
+  onNodeClick,
+  onNodeDoubleClick
+}: {
+  graph: InspectorRelationGraphData;
+  openObject: (id: string) => void;
+  onNodeClick?: (id: string) => void;
+  onNodeDoubleClick?: (id: string) => void;
+}) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(0.86);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -4071,6 +4329,7 @@ function RelationGraphCanvas({ graph, openObject }: { graph: InspectorRelationGr
             <button
               key={node.id}
               className={`relation-canvas-node relation-canvas-node-${node.direction} ${hoveredID && !connectedToHovered.has(node.id) ? "relation-canvas-node-dimmed" : ""} ${hoveredID === node.id ? "relation-canvas-node-hovered" : ""}`}
+              data-relation-node={node.id}
               style={{ left: node.x, top: node.y }}
               title={node.id}
               onPointerDown={(event) => beginNodeDrag(event, node)}
@@ -4079,6 +4338,19 @@ function RelationGraphCanvas({ graph, openObject }: { graph: InspectorRelationGr
               onClick={() => {
                 if (suppressClickRef.current === node.id) {
                   suppressClickRef.current = null;
+                  return;
+                }
+                if (onNodeClick) {
+                  onNodeClick(node.id);
+                  return;
+                }
+                openObject(node.id);
+              }}
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (onNodeDoubleClick) {
+                  onNodeDoubleClick(node.id);
                   return;
                 }
                 openObject(node.id);
