@@ -21,6 +21,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate } from "@tanstack/react-router";
 import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, RotateCcw, Save, Search, SplitSquareHorizontal, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
@@ -38,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Toaster } from "./components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
+import i18n, { languageOptions } from "./i18n";
 
 type TypeDef = { id: string; fields?: FieldDef[] };
 type FieldDef = { name: string; kind: string; required?: boolean; unique?: boolean; target_type?: string; enum_values?: string[] };
@@ -93,6 +95,7 @@ type AutomationSnapshot = {
   graphEdgesCount: number;
   graphViewID: string | null;
   graphCenterID: string | null;
+  language: string;
 };
 
 type RelationGraphAutomationState = {
@@ -364,7 +367,8 @@ function automationState(state: AppState): AutomationSnapshot {
     graphNodesCount: state.graph.nodes.length,
     graphEdgesCount: state.graph.edges.length,
     graphViewID: state.activeGraphViewID || null,
-    graphCenterID: state.activeGraphCenterID || null
+    graphCenterID: state.activeGraphCenterID || null,
+    language: i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en"
   };
 }
 
@@ -375,6 +379,7 @@ declare global {
       getVault: () => string;
       recentVaults: () => string[];
       uiState: () => AutomationUISnapshot;
+      setLanguage: (language: "en" | "zh") => Promise<AutomationSnapshot>;
       setSidebarCollapsed: (collapsed: boolean) => AutomationSnapshot;
       setInspectorOpen: (open: boolean) => AutomationSnapshot;
       switchVault: (path: string) => Promise<AutomationSnapshot>;
@@ -416,6 +421,7 @@ function App() {
   const routeSearch = indexRoute.useSearch();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const objectExportRef = useRef<HTMLDivElement | null>(null);
   const relationGraphAutomationRef = useRef<RelationGraphAutomationController | null>(null);
   const graphWorkspaceAutomationRef = useRef<GraphWorkspaceAutomationController | null>(null);
@@ -858,6 +864,11 @@ function App() {
       getVault: () => vault,
       recentVaults: () => getRecentVaults(),
       uiState,
+      setLanguage: async (language: "en" | "zh") => {
+        await i18n.changeLanguage(language);
+        await nextFrame();
+        return window.mbase?.state() ?? currentState();
+      },
       setSidebarCollapsed: (collapsed: boolean) => {
         setSidebarCollapsed(collapsed);
         return currentState();
@@ -1013,23 +1024,23 @@ function App() {
           {!sidebarCollapsed && (
             <div className="min-w-0">
               <div className="text-[13px] font-medium tracking-tight text-foreground/90">mbase</div>
-              <div className="text-[10.5px] text-muted-foreground">Local knowledge workbench</div>
+              <div className="text-[10.5px] text-muted-foreground">{t("app.tagline")}</div>
             </div>
           )}
         </div>
 
         <nav className="space-y-0.5">
-          <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-3.5" />} label="Objects" active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-3.5" />} label="Schema" active={view === "types"} onClick={() => setView("types")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-3.5" />} label="Graph" active={view === "graph"} onClick={() => void openGraph()} />
-          <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label="Health" active={view === "health"} onClick={() => setView("health")} />
+          <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-3.5" />} label={t("nav.objects")} active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
+          <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-3.5" />} label={t("nav.schema")} active={view === "types"} onClick={() => setView("types")} />
+          <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-3.5" />} label={t("nav.graph")} active={view === "graph"} onClick={() => void openGraph()} />
+          <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label={t("nav.health")} active={view === "health"} onClick={() => setView("health")} />
         </nav>
 
         {!sidebarCollapsed && (
           <div className="mt-5 flex min-h-0 flex-1 flex-col">
             <Separator className="mb-3 bg-border/45" />
             <div className="flex items-center justify-between px-1.5">
-              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Types</span>
+              <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t("nav.types")}</span>
             </div>
             <ScrollArea className="mt-2 min-h-0 flex-1 pr-1.5">
               <div className="space-y-0.5">
@@ -1047,7 +1058,7 @@ function App() {
           {!sidebarCollapsed && (
             <>
               <div className="sidebar-tool-card text-[11px] text-muted-foreground">
-                <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> Agent API</div>
+                <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> {t("nav.agentApi")}</div>
                 <code className="font-mono">window.mbase.state()</code>
               </div>
               <VaultSwitcher
@@ -1060,9 +1071,9 @@ function App() {
               />
             </>
           )}
-          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}>
             {sidebarCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
-            {!sidebarCollapsed && <span>Collapse sidebar</span>}
+            {!sidebarCollapsed && <span>{t("nav.collapseSidebar")}</span>}
           </button>
         </div>
       </aside>}
@@ -1071,9 +1082,10 @@ function App() {
         {!standaloneMode && <div className="console-topbar">
           <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
           <div className="flex items-center gap-2">
+            <LanguageSwitcher />
             <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
               <span className={`size-1.5 rounded-full ${vaultOK ? "bg-[hsl(var(--moss))]" : "bg-[hsl(var(--clay))]"}`} />
-              {vaultOK ? "vault ready" : "vault missing"}
+              {vaultOK ? t("status.vaultReady") : t("status.vaultMissing")}
             </span>
           </div>
         </div>}
@@ -1081,24 +1093,24 @@ function App() {
         {view === "objects" && (
           <section className="flex h-full w-full flex-col px-7 py-6">
             <div className="mb-5 flex items-baseline gap-3">
-              <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || "Objects"}</h1>
-              <span className="font-mono text-xs text-muted-foreground">{rows.length} objects</span>
+              <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || t("objects.title")}</h1>
+              <span className="font-mono text-xs text-muted-foreground">{t("objects.count", { count: rows.length })}</span>
             </div>
             <div className="objects-workspace">
               <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
                 <div className="mb-5 flex items-center justify-between gap-4">
                   <TabsList className="rounded-lg bg-muted/35">
-                    <TabsTrigger value="table" className="rounded-md">Table</TabsTrigger>
+                    <TabsTrigger value="table" className="rounded-md">{t("objects.table")}</TabsTrigger>
                     <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
                   </TabsList>
                   <div className="relative w-80 max-w-[45%]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder="where, e.g. judged=keep" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-md bg-background/68 pl-9 font-mono text-xs" />
+                    <Input placeholder={t("objects.filterPlaceholder")} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-md bg-background/68 pl-9 font-mono text-xs" />
                   </div>
                 </div>
                 <TabsContent value="table" className="mt-0 min-h-0 flex-1">
                     {rows.length === 0 ? (
-                      <EmptyState title="No objects" description="Create objects from the CLI or switch to another type." />
+                      <EmptyState title={t("objects.emptyTitle")} description={t("objects.emptyDescription")} />
                     ) : (
                       <ObjectDataTable rows={rows} fields={activeFields} activeType={activeType} open={(id) => void openObject(id)} />
                     )}
@@ -1128,8 +1140,8 @@ function App() {
                     <button
                       className={`inspector-toggle ${inspectorOpen ? "text-[hsl(var(--earth))]" : "text-muted-foreground"}`}
                       onClick={() => setInspectorOpen((open) => !open)}
-                      title={inspectorOpen ? "Collapse inspector" : "Expand inspector"}
-                      aria-label={inspectorOpen ? "Collapse inspector" : "Expand inspector"}
+                      title={inspectorOpen ? t("detail.collapseInspector") : t("detail.expandInspector")}
+                      aria-label={inspectorOpen ? t("detail.collapseInspector") : t("detail.expandInspector")}
                     >
                       {inspectorOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
                     </button>
@@ -1138,27 +1150,27 @@ function App() {
                     <aside className={`object-inspector mb-scroll ${inspectorOpen ? "object-inspector-open" : "object-inspector-closed"}`}>
                       <div className="inspector-header">
                         <div className="min-w-0">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Inspector</div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{t("detail.inspector")}</div>
                           <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
                           <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
                         </div>
                       </div>
-                      <Panel title="Actions" icon={<Download className="size-4" />}>
+                      <Panel title={t("detail.actions")} icon={<Download className="size-4" />}>
                         <Button className="w-full justify-start rounded-md" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
                           <Download className="size-4" />
-                          {savingObjectImage ? "Saving image" : "Save as PNG"}
+                          {savingObjectImage ? t("detail.savingImage") : t("detail.saveAsPng")}
                         </Button>
                       </Panel>
-                      <Panel title="Body" icon={<FileText className="size-4" />}>
+                      <Panel title={t("detail.body")} icon={<FileText className="size-4" />}>
                         <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
                       </Panel>
-                      <Panel title="Relation Graph" icon={<Network className="size-4" />}>
+                      <Panel title={t("detail.relationGraph")} icon={<Network className="size-4" />}>
                         <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} vault={vault} automationRef={relationGraphAutomationRef} open={(id) => void openObject(id)} />
                       </Panel>
-                      <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
-                      <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-                      <Panel title="Body Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-                      <Panel title="Backlinks" icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
+                      <Panel title={t("detail.fields")} icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
+                      <Panel title={t("detail.fieldLinks")} icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+                      <Panel title={t("detail.bodyLinks")} icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+                      <Panel title={t("detail.backlinks")} icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
                     </aside>
                   }
                 />
@@ -1175,30 +1187,30 @@ function App() {
 
         {view === "types" && (
           <section className="w-full px-7 py-6">
-            <Header eyebrow="Schema Studio" title="Types and fields" description="Dynamic schema for object projections, field links, and local validation." />
+            <Header eyebrow={t("schema.eyebrow")} title={t("schema.title")} description={t("schema.description")} />
             <div className="content-panel mb-7 overflow-hidden">
               <div className="flex items-start justify-between gap-4 px-5 py-4">
                 <div>
-                  <div className="flex items-center gap-2 text-sm font-medium"><Network className="size-4 text-[hsl(var(--earth))]" /> Schema graph</div>
-                  <div className="mt-1 text-sm text-muted-foreground">{schemaGraphView.nodes.length} types, {schemaGraphView.edges.length} reference fields</div>
+                  <div className="flex items-center gap-2 text-sm font-medium"><Network className="size-4 text-[hsl(var(--earth))]" /> {t("schema.graph")}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">{t("schema.graphStats", { types: schemaGraphView.nodes.length, edges: schemaGraphView.edges.length })}</div>
                 </div>
-                <button className="rounded-xl px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setSelectedSchemaType(null)}>Clear</button>
+                <button className="rounded-xl px-3 py-2 text-sm text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onClick={() => setSelectedSchemaType(null)}>{t("schema.clear")}</button>
               </div>
               <div className="schema-graph-surface h-[390px] border-t border-border/25">
                 <SchemaGraphCanvas graphView={schemaGraphView} selectedType={selectedSchemaType} select={setSelectedSchemaType} />
               </div>
             </div>
             <div className="grid gap-x-10 gap-y-5 md:grid-cols-2 2xl:grid-cols-3">
-              {types.map((t) => (
-                <Panel key={t.id} title={t.id} icon={<Braces className="size-4" />}>
+              {types.map((typeDef) => (
+                <Panel key={typeDef.id} title={typeDef.id} icon={<Braces className="size-4" />}>
                   <div className="space-y-1">
-                    {(t.fields ?? []).map((f) => (
+                    {(typeDef.fields ?? []).map((f) => (
                       <div key={f.name} className="soft-row flex items-center gap-2 py-3 text-sm">
                         <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
                         <Badge>{f.kind}</Badge>
-                        {f.required && <Badge>required</Badge>}
-                        {f.unique && <Badge>unique</Badge>}
-                        {f.target_type && <span className="font-mono text-xs text-muted-foreground">to {f.target_type}</span>}
+                        {f.required && <Badge>{t("schema.required")}</Badge>}
+                        {f.unique && <Badge>{t("schema.unique")}</Badge>}
+                        {f.target_type && <span className="font-mono text-xs text-muted-foreground">{t("schema.to", { type: f.target_type })}</span>}
                       </div>
                     ))}
                   </div>
@@ -1206,7 +1218,7 @@ function App() {
               ))}
             </div>
             <div className="tray mt-7 rounded-2xl p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium"><Play className="size-4 text-[hsl(var(--earth))]" /> Run console</div>
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium"><Play className="size-4 text-[hsl(var(--earth))]" /> {t("schema.runConsole")}</div>
               <pre className="overflow-x-auto font-mono text-xs text-muted-foreground">POST /api/run {"{\"argv\":[\"type\",\"list\"],\"vault\":\"" + (vault || "default") + "\"}"}</pre>
             </div>
           </section>
@@ -1240,9 +1252,9 @@ function App() {
 
         {view === "health" && (
           <section className="w-full px-7 py-6">
-            <Header eyebrow="Health" title="Vault integrity" description="Local validation and body/link diagnostics." />
+            <Header eyebrow={t("health.eyebrow")} title={t("health.title")} description={t("health.description")} />
             <div className="content-panel p-4">
-              {issues.length === 0 ? <EmptyState title="No issues" description="The current vault is clean." /> : issues.map((issue, i) => <pre key={i} className="tray mb-3 overflow-x-auto rounded-2xl p-3 font-mono text-xs text-muted-foreground last:mb-0">{JSON.stringify(issue, null, 2)}</pre>)}
+              {issues.length === 0 ? <EmptyState title={t("health.noIssuesTitle")} description={t("health.noIssuesDescription")} /> : issues.map((issue, i) => <pre key={i} className="tray mb-3 overflow-x-auto rounded-2xl p-3 font-mono text-xs text-muted-foreground last:mb-0">{JSON.stringify(issue, null, 2)}</pre>)}
             </div>
           </section>
         )}
@@ -1306,6 +1318,7 @@ function GraphWorkspacePage({
     relayoutGraph: () => void;
   };
 }) {
+  const { t } = useTranslation();
   const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
@@ -1374,7 +1387,7 @@ function GraphWorkspacePage({
     const result = await run<ObjectLoadResult>(["object", "get", id], vault);
     if (!result.ok || !result.data) {
       setPreviewLoading(false);
-      toast.error(result.error?.message || `Failed to load ${id}`);
+      toast.error(result.error?.message || t("graph.failedToLoad", { id }));
       return graphWorkspaceState();
     }
     setPreviewObject(result.data.object);
@@ -1390,12 +1403,12 @@ function GraphWorkspacePage({
   async function setCenterFromNode(id: string) {
     const target = graph.nodes.find((node) => node.id === id);
     if (!target) {
-      toast.error(`Node not found: ${id}`);
+      toast.error(t("graph.nodeNotFound", { id }));
       return graphWorkspaceState();
     }
     const matchingView = configuredViews.find((view) => view.root_type === target.type_id);
     if (!matchingView) {
-      toast.info(`No graph view starts from ${target.type_id}`);
+      toast.info(t("graph.noGraphStartsFrom", { type: target.type_id }));
       return graphWorkspaceState();
     }
     if (clickTimerRef.current) {
@@ -1509,7 +1522,7 @@ function GraphWorkspacePage({
     const rootType = editorRootType.trim();
     const parsed = parseRelationStepsText(editorSteps);
     if (!id || !label || !rootType || parsed.error || parsed.steps.length === 0) {
-      toast.error(parsed.error || "View id, label, root type and at least one step are required");
+      toast.error(parsed.error || t("graph.requiredViewFields"));
       return;
     }
     const nextView: GraphViewDefinition = {
@@ -1524,14 +1537,14 @@ function GraphWorkspacePage({
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to save graph view");
+      toast.error(result.error?.message || t("graph.saveFailed"));
       return;
     }
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
     setSelection({ viewID: id, centerID: "" }, { replace: true });
     setEditorOpen(false);
-    toast.success("Graph view saved");
+    toast.success(t("graph.viewSaved"));
   }
 
   async function deleteGraphView() {
@@ -1542,28 +1555,28 @@ function GraphWorkspacePage({
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to delete graph view");
+      toast.error(result.error?.message || t("graph.deleteFailed"));
       return;
     }
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
     setSelection({ viewID: normalized.views[0]?.id ?? fullGraphViewID, centerID: "" }, { replace: true });
     setEditorOpen(false);
-    toast.success("Graph view deleted");
+    toast.success(t("graph.viewDeleted"));
   }
 
   return (
     <section className="graph-workspace-page">
       <div className="graph-workspace-header">
         <Header
-          eyebrow="Graph Views"
-          title="Graph workspace"
-          description={showingFullGraph ? "Explore the full vault graph, or pick a configured view to answer a focused relation question." : activeDefinition?.description || "Run a configured graph view from a chosen center object."}
+          eyebrow={t("graph.viewsEyebrow")}
+          title={t("graph.workspace")}
+          description={showingFullGraph ? t("graph.fullGraphDescription") : activeDefinition?.description || t("graph.focusedDescription")}
         />
         <div className="graph-workspace-actions">
           <Button variant="secondary" className="rounded-md" onClick={() => openEditor()}>
             <Edit3 className="size-4" />
-            Configure
+            {t("graph.configure")}
           </Button>
         </div>
       </div>
@@ -1576,17 +1589,17 @@ function GraphWorkspacePage({
             </button>
           ))}
           <button className={`relation-view-chip ${showingFullGraph ? "is-active" : ""}`} onClick={() => setSelection({ viewID: fullGraphViewID, centerID: "" })}>
-            Full map
+            {t("graph.fullMap")}
           </button>
         </div>
         {!showingFullGraph && activeDefinition && (
           <div className="graph-center-control">
             <label className="graph-center-search">
               <Search className="size-3.5" />
-              <Input value={centerSearch} onChange={(event) => setCenterSearch(event.target.value)} placeholder={`Search ${rootType}`} />
+              <Input value={centerSearch} onChange={(event) => setCenterSearch(event.target.value)} placeholder={t("graph.search", { type: rootType })} />
             </label>
             <label className="graph-center-select">
-              <span>Center</span>
+              <span>{t("graph.center")}</span>
               <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
                 {centerSelectOptions.map((object) => (
                   <option key={object.id} value={object.id}>{object.title || object.id}</option>
@@ -1601,33 +1614,33 @@ function GraphWorkspacePage({
         <div className="graph-workspace-editor">
           <div className="graph-view-editor">
             <label>
-              <span>ID</span>
+              <span>{t("graph.id")}</span>
               <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="portfolio" />
             </label>
             <label>
-              <span>Label</span>
+              <span>{t("graph.label")}</span>
               <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Portfolio" />
             </label>
             <label>
-              <span>Root type</span>
+              <span>{t("graph.rootType")}</span>
               <select value={editorRootType} onChange={(event) => setEditorRootType(event.target.value)}>
-                <option value="">Select type</option>
+                <option value="">{t("graph.selectType")}</option>
                 {rootTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </label>
             <label>
-              <span>Steps</span>
+              <span>{t("graph.steps")}</span>
               <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
             </label>
-            <div className="graph-view-editor-help">One step per line: direction relation target_type. Example Portfolio view: <code>in investor investment</code>, then <code>out company company</code>.</div>
+            <div className="graph-view-editor-help">{t("graph.editorHelp")} <code>in investor investment</code>, <code>out company company</code>.</div>
             <div className="graph-view-editor-actions">
               <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
                 <Save className="size-3.5" />
-                Save
+                {t("graph.save")}
               </Button>
               <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !activeDefinition}>
                 <X className="size-3.5" />
-                Delete
+                {t("graph.delete")}
               </Button>
             </div>
           </div>
@@ -1649,18 +1662,18 @@ function GraphWorkspacePage({
             <GraphCanvas graphView={fullGraph.graphView} selectedID={fullGraph.selectedGraphNode} select={fullGraph.setSelectedGraphNode} open={openObject} layoutKey={fullGraph.graphLayoutKey} relayout={fullGraph.relayoutGraph} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} />
           </div>
           <aside className="space-y-4">
-            <Panel title="Full map mode" icon={<Network className="size-4" />}>
+            <Panel title={t("graph.fullMapMode")} icon={<Network className="size-4" />}>
               <Tabs value={fullGraph.graphMode} onValueChange={fullGraph.setGraphMode}>
                 <TabsList className="acrylic rounded-lg">
-                  <TabsTrigger value="core" className="rounded-md text-xs">Core</TabsTrigger>
-                  <TabsTrigger value="all" className="rounded-md text-xs">All</TabsTrigger>
-                  <TabsTrigger value="founders" className="rounded-md text-xs">Founders</TabsTrigger>
-                  <TabsTrigger value="sources" className="rounded-md text-xs">Sources</TabsTrigger>
+                  <TabsTrigger value="core" className="rounded-md text-xs">{t("graph.core")}</TabsTrigger>
+                  <TabsTrigger value="all" className="rounded-md text-xs">{t("graph.all")}</TabsTrigger>
+                  <TabsTrigger value="founders" className="rounded-md text-xs">{t("graph.founders")}</TabsTrigger>
+                  <TabsTrigger value="sources" className="rounded-md text-xs">{t("graph.sources")}</TabsTrigger>
                 </TabsList>
               </Tabs>
-              <div className="mt-3 text-sm text-muted-foreground">{fullGraph.graphView.nodes.length} visible nodes, {fullGraph.graphView.edges.length} visible links.</div>
+              <div className="mt-3 text-sm text-muted-foreground">{t("graph.visibleStats", { nodes: fullGraph.graphView.nodes.length, links: fullGraph.graphView.edges.length })}</div>
             </Panel>
-            <Panel title="Visible Types" icon={<Braces className="size-4" />}>
+            <Panel title={t("graph.visibleTypes")} icon={<Braces className="size-4" />}>
               <div className="space-y-2">
                 {fullGraph.graphTypeControls.map((lane) => (
                   <button key={lane.type} type="button" className={`graph-type-row ${lane.hidden ? "graph-type-row-hidden" : ""}`} onClick={() => fullGraph.toggleGraphType(lane.type)}>
@@ -1668,15 +1681,15 @@ function GraphWorkspacePage({
                       <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
                       <span className="truncate">{lane.type}</span>
                     </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">{lane.hidden ? "hidden" : lane.count}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{lane.hidden ? t("graph.hidden") : lane.count}</span>
                   </button>
                 ))}
               </div>
               <button type="button" className="mt-3 rounded-md px-2.5 py-1.5 text-xs text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04] disabled:text-muted-foreground/45" onClick={fullGraph.showAllGraphTypes} disabled={fullGraph.hiddenGraphTypes.size === 0}>
-                Show all types
+                {t("graph.showAllTypes")}
               </button>
             </Panel>
-            <Panel title="Selection" icon={<Network className="size-4" />}>
+            <Panel title={t("graph.selection")} icon={<Network className="size-4" />}>
               {fullGraph.selectedGraphObject ? (
                 <div className="space-y-3">
                   <div>
@@ -1684,10 +1697,10 @@ function GraphWorkspacePage({
                     <div className="mt-1 font-mono text-xs text-muted-foreground">{fullGraph.selectedGraphObject.id}</div>
                   </div>
                   <Badge>{fullGraph.selectedGraphObject.type_id}</Badge>
-                  <button className="rounded-xl px-3 py-2 text-sm text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => openObject(fullGraph.selectedGraphObject!.id)}>Open object</button>
+                  <button className="rounded-xl px-3 py-2 text-sm text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => openObject(fullGraph.selectedGraphObject!.id)}>{t("graph.openObject")}</button>
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground">Select a node to inspect it. Click previews Markdown; double click makes it the center when a view exists for its type.</div>
+                <div className="text-sm text-muted-foreground">{t("graph.selectionHelp")}</div>
               )}
             </Panel>
           </aside>
@@ -1695,20 +1708,20 @@ function GraphWorkspacePage({
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
           <div className="graph-lab-canvas">
-            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} /> : <EmptyState title="No graph view result" description={centerCandidates.length === 0 ? `No ${rootType} objects found for this view.` : "Select a center object to run the graph view."} />}
+            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} /> : <EmptyState title={t("graph.noResultTitle")} description={centerCandidates.length === 0 ? t("graph.noTypeObjects", { type: rootType }) : t("graph.selectCenterDescription")} />}
           </div>
           <aside className="graph-lab-panel">
-            <Panel title="Current view" icon={<Play className="size-4" />}>
+            <Panel title={t("graph.currentView")} icon={<Play className="size-4" />}>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <div><span className="text-foreground/80">View:</span> {activeDefinition?.label}</div>
-                <div><span className="text-foreground/80">Center type:</span> {rootType}</div>
-                <div><span className="text-foreground/80">Center:</span> {centerObject?.title || centerObject?.id || "none"}</div>
-                <div><span className="text-foreground/80">Source:</span> {configLoading ? "loading config" : "vault config"}</div>
-                <div><span className="text-foreground/80">Nodes:</span> {queryNodes.length}</div>
-                <div><span className="text-foreground/80">Edges:</span> {queryGraph?.edges.length ?? 0}</div>
+                <div><span className="text-foreground/80">{t("graph.view")}:</span> {activeDefinition?.label}</div>
+                <div><span className="text-foreground/80">{t("graph.centerType")}:</span> {rootType}</div>
+                <div><span className="text-foreground/80">{t("graph.center")}:</span> {centerObject?.title || centerObject?.id || t("common.none")}</div>
+                <div><span className="text-foreground/80">{t("graph.source")}:</span> {configLoading ? t("graph.loadingConfig") : t("graph.vaultConfig")}</div>
+                <div><span className="text-foreground/80">{t("graph.nodes")}:</span> {queryNodes.length}</div>
+                <div><span className="text-foreground/80">{t("graph.edges")}:</span> {queryGraph?.edges.length ?? 0}</div>
               </div>
             </Panel>
-            <Panel title="Groups" icon={<Braces className="size-4" />}>
+            <Panel title={t("graph.groups")} icon={<Braces className="size-4" />}>
               <div className="graph-lab-groups">
                 {queryGroups.map((group) => (
                   <div key={group.id} className="graph-lab-group">
@@ -1735,9 +1748,9 @@ function GraphWorkspacePage({
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="graph-markdown-dialog">
           <DialogHeader>
-            <DialogTitle>{previewObject?.title || previewObject?.id || "Loading object"}</DialogTitle>
+            <DialogTitle>{previewObject?.title || previewObject?.id || t("graph.loadingObject")}</DialogTitle>
             <DialogDescription>
-              {previewObject ? `${previewObject.type_id} · ${previewObject.id}` : "Loading Markdown body"}
+              {previewObject ? `${previewObject.type_id} · ${previewObject.id}` : t("graph.loadingMarkdownBody")}
             </DialogDescription>
           </DialogHeader>
           <div className="graph-markdown-actions">
@@ -1745,12 +1758,12 @@ function GraphWorkspacePage({
               <>
                 <Button variant="secondary" size="sm" className="rounded-md" onClick={() => openObject(previewObject.id)}>
                   <Eye className="size-3.5" />
-                  Open object
+                  {t("graph.openObject")}
                 </Button>
                 {configuredViews.some((view) => view.root_type === previewObject.type_id) && (
                   <Button size="sm" className="rounded-md" onClick={() => void setCenterFromNode(previewObject.id)}>
                     <Network className="size-3.5" />
-                    Set center
+                    {t("graph.setCenter")}
                   </Button>
                 )}
               </>
@@ -1760,7 +1773,7 @@ function GraphWorkspacePage({
             {previewLoading && (
               <div className="graph-markdown-loading">
                 <Loader2 className="size-4 animate-spin" />
-                Loading body
+                {t("graph.loadingBody")}
               </div>
             )}
             {!previewLoading && previewObject && (
@@ -1776,6 +1789,7 @@ function GraphWorkspacePage({
 }
 
 function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { object: Obj | null; graph: GraphData; links: Link[]; backlinks: Link[]; vault: string; openObject: (id: string) => void }) {
+  const { t } = useTranslation();
   const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
@@ -1833,7 +1847,7 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
     const label = editorLabel.trim();
     const parsed = parseRelationStepsText(editorSteps);
     if (!id || !label || parsed.error || parsed.steps.length === 0) {
-      toast.error(parsed.error || "View id, label and at least one step are required");
+      toast.error(parsed.error || t("graph.requiredViewFields"));
       return;
     }
     const nextView: GraphViewDefinition = {
@@ -1851,14 +1865,14 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to save graph view");
+      toast.error(result.error?.message || t("graph.saveFailed"));
       return;
     }
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
     setActiveTemplateID(id);
     setEditorOpen(false);
-    toast.success("Graph view saved");
+    toast.success(t("graph.viewSaved"));
   }
 
   async function deleteGraphView() {
@@ -1869,22 +1883,24 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to delete graph view");
+      toast.error(result.error?.message || t("graph.deleteFailed"));
       return;
     }
     setViewConfig(normalizeGraphViewConfigForUI(result.data));
     setActiveTemplateID("nearby");
     setEditorOpen(false);
-    toast.success("Graph view deleted");
+    toast.success(t("graph.viewDeleted"));
   }
+
+  const viewSource = activeTemplate.configurable ? t("graph.vaultConfig") : configLoading ? t("graph.loadingConfig") : t("graph.builtIn");
 
   return (
     <section className="graph-lab-page">
       <div className="graph-lab-header">
         <div>
-          <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Graph Viewer</div>
-          <h1 className="font-serif text-3xl font-medium tracking-tight">{object?.title || object?.id || "No object loaded"}</h1>
-          <div className="mt-1 font-mono text-xs text-muted-foreground">{object?.id || "Use ?view=graph-lab&object=<id>"}</div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{t("graph.viewer")}</div>
+          <h1 className="font-serif text-3xl font-medium tracking-tight">{object?.title || object?.id || t("graph.noObjectLoaded")}</h1>
+          <div className="mt-1 font-mono text-xs text-muted-foreground">{object?.id || t("graph.useGraphLabUrl")}</div>
         </div>
         <div className="graph-lab-actions">
           {templates.map((template) => (
@@ -1893,62 +1909,62 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
             </button>
           ))}
           <button className="relation-view-chip" onClick={toggleGraphViewEditor}>
-            Configure
+            {t("graph.configure")}
           </button>
         </div>
       </div>
       <div className="graph-lab-layout">
         <div className="graph-lab-canvas">
-          {labGraph ? <RelationGraphCanvas graph={labGraph} openObject={openObject} /> : <EmptyState title="No graph" description="Open a graph-lab URL with an object id." />}
+          {labGraph ? <RelationGraphCanvas graph={labGraph} openObject={openObject} /> : <EmptyState title={t("common.noGraph")} description={t("graph.openGraphLabUrl")} />}
         </div>
         <aside className="graph-lab-panel">
-          <Panel title="Current view" icon={<Play className="size-4" />}>
+          <Panel title={t("graph.currentView")} icon={<Play className="size-4" />}>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <div><span className="text-foreground/80">Path:</span> {activeTemplate.label}</div>
+              <div><span className="text-foreground/80">{t("graph.path")}:</span> {activeTemplate.label}</div>
               <div>{activeTemplate.description}</div>
-              <div><span className="text-foreground/80">Source:</span> {activeTemplate.configurable ? "vault config" : configLoading ? "loading config" : "built in"}</div>
-              <div><span className="text-foreground/80">Nodes:</span> {nodes.length}</div>
-              <div><span className="text-foreground/80">Edges:</span> {labGraph?.edges.length ?? 0}</div>
+              <div><span className="text-foreground/80">{t("graph.source")}:</span> {viewSource}</div>
+              <div><span className="text-foreground/80">{t("graph.nodes")}:</span> {nodes.length}</div>
+              <div><span className="text-foreground/80">{t("graph.edges")}:</span> {labGraph?.edges.length ?? 0}</div>
             </div>
           </Panel>
           {editorOpen && (
-            <Panel title="Configure view" icon={<Edit3 className="size-4" />}>
+            <Panel title={t("graph.configureView")} icon={<Edit3 className="size-4" />}>
               <div className="graph-view-editor">
                 <label>
-                  <span>ID</span>
+                  <span>{t("graph.id")}</span>
                   <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="investment-chain" />
                 </label>
                 <label>
-                  <span>Label</span>
+                  <span>{t("graph.label")}</span>
                   <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Investment chain" />
                 </label>
                 <label>
-                  <span>Steps</span>
+                  <span>{t("graph.steps")}</span>
                   <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
                 </label>
-                <div className="graph-view-editor-help">One step per line: direction relation target_type. Direction is <code>in</code> or <code>out</code>.</div>
+                <div className="graph-view-editor-help">{t("graph.editorHelp")}</div>
                 <div className="graph-view-editor-actions">
                   <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving || !object}>
                     <Save className="size-3.5" />
-                    Save
+                    {t("graph.save")}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !editableTemplate}>
                     <X className="size-3.5" />
-                    Delete
+                    {t("graph.delete")}
                   </Button>
                 </div>
               </div>
             </Panel>
           )}
-          <Panel title="How to use" icon={<Move className="size-4" />}>
+          <Panel title={t("graph.howToUse")} icon={<Move className="size-4" />}>
             <div className="graph-lab-help">
-              <div><Move className="size-3.5" /> Drag empty space to pan.</div>
-              <div><ZoomIn className="size-3.5" /> Wheel or buttons to zoom.</div>
-              <div><Network className="size-3.5" /> Hover a node to isolate its links.</div>
-              <div><Eye className="size-3.5" /> Click a node to open that object.</div>
+              <div><Move className="size-3.5" /> {t("graph.helpPan")}</div>
+              <div><ZoomIn className="size-3.5" /> {t("graph.helpZoom")}</div>
+              <div><Network className="size-3.5" /> {t("graph.helpHover")}</div>
+              <div><Eye className="size-3.5" /> {t("graph.helpClick")}</div>
             </div>
           </Panel>
-          <Panel title="Groups" icon={<Braces className="size-4" />}>
+          <Panel title={t("graph.groups")} icon={<Braces className="size-4" />}>
             <div className="graph-lab-groups">
               {groups.map((group) => (
                 <div key={group.id} className="graph-lab-group">
@@ -1963,7 +1979,7 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
                         <span>{item.type}</span>
                       </button>
                     ))}
-                    {group.items.length > 10 && <div className="graph-lab-more">+{group.items.length - 10} more</div>}
+                    {group.items.length > 10 && <div className="graph-lab-more">{t("graph.more", { count: group.items.length - 10 })}</div>}
                   </div>
                 </div>
               ))}
@@ -2539,6 +2555,7 @@ function ObjectBodyWorkspace({
   inspectorPanel?: React.ReactNode;
   initialEditing?: boolean;
 }) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [editing, setEditing] = useState(initialEditing);
   const [draft, setDraft] = useState(body || `# ${object.title || object.id}\n\n`);
@@ -2575,7 +2592,7 @@ function ObjectBodyWorkspace({
       setEditing(false);
       setJustSaved(true);
       window.setTimeout(() => setJustSaved(false), 1800);
-      toast.success("Body saved");
+      toast.success(t("status.saved"));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`Could not save body: ${message}`);
@@ -2619,7 +2636,7 @@ function ObjectBodyWorkspace({
         }
         insertText(`\n\n${result.data.markdown}\n\n`);
       }
-      toast.success(images.length === 1 ? "Image inserted" : `${images.length} images inserted`);
+      toast.success(images.length === 1 ? t("bodyEditor.insertImage") : `${images.length} ${t("bodyEditor.insertImage")}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       toast.error(`Could not insert image: ${message}`);
@@ -2637,7 +2654,7 @@ function ObjectBodyWorkspace({
     }
   }
 
-  const status = saving ? "Saving..." : uploading ? "Importing image..." : dirty ? "Unsaved changes" : justSaved ? "Saved" : "Saved";
+  const status = saving ? t("status.saving") : uploading ? t("status.importingImage") : dirty ? t("status.unsavedChanges") : justSaved ? t("status.saved") : t("status.saved");
   return (
     <div className="body-workspace">
       <div className="body-workspace-header">
@@ -2657,11 +2674,11 @@ function ObjectBodyWorkspace({
           {inspectorToggle}
           {editing ? (
             <>
-              <Button variant="ghost" className="h-8 rounded-md px-2.5" onClick={cancelEdit} disabled={saving}><X className="size-3.5" />Cancel</Button>
-              <Button className="h-8 rounded-md px-3" onClick={() => void commitBody()} disabled={saving || uploading || !dirty}><Save className="size-3.5" />Save</Button>
+              <Button variant="ghost" className="h-8 rounded-md px-2.5" onClick={cancelEdit} disabled={saving}><X className="size-3.5" />{t("common.cancel")}</Button>
+              <Button className="h-8 rounded-md px-3" onClick={() => void commitBody()} disabled={saving || uploading || !dirty}><Save className="size-3.5" />{t("bodyEditor.save")}</Button>
             </>
           ) : (
-            <Button className="h-8 rounded-md px-3" onClick={beginEdit}><Edit3 className="size-3.5" />Edit body</Button>
+            <Button className="h-8 rounded-md px-3" onClick={beginEdit}><Edit3 className="size-3.5" />{t("bodyEditor.write")}</Button>
           )}
           {inspectorPanel}
         </div>
@@ -2671,21 +2688,21 @@ function ObjectBodyWorkspace({
         <div className="body-editor-shell">
           <div className="body-editor-toolbar">
             <div className="flex items-center gap-1">
-              <ToolbarButton active={viewMode === "write"} onClick={() => setViewMode("write")} title="Write"><Edit3 className="size-3.5" />Write</ToolbarButton>
-              <ToolbarButton active={viewMode === "split"} onClick={() => setViewMode("split")} title="Split"><SplitSquareHorizontal className="size-3.5" />Split</ToolbarButton>
-              <ToolbarButton active={viewMode === "preview"} onClick={() => setViewMode("preview")} title="Preview"><Eye className="size-3.5" />Preview</ToolbarButton>
+              <ToolbarButton active={viewMode === "write"} onClick={() => setViewMode("write")} title={t("bodyEditor.write")}><Edit3 className="size-3.5" />{t("bodyEditor.write")}</ToolbarButton>
+              <ToolbarButton active={viewMode === "split"} onClick={() => setViewMode("split")} title={t("bodyEditor.split")}><SplitSquareHorizontal className="size-3.5" />{t("bodyEditor.split")}</ToolbarButton>
+              <ToolbarButton active={viewMode === "preview"} onClick={() => setViewMode("preview")} title={t("bodyEditor.read")}><Eye className="size-3.5" />{t("bodyEditor.read")}</ToolbarButton>
             </div>
             <div className="flex items-center gap-1">
               <Popover open={linkPickerOpen} onOpenChange={setLinkPickerOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" className="h-8 rounded-md px-2.5"><Link2 className="size-3.5" />Link</Button>
+                  <Button variant="ghost" className="h-8 rounded-md px-2.5"><Link2 className="size-3.5" />{t("bodyEditor.linkObjects")}</Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-96 rounded-2xl p-0">
                   <Command shouldFilter>
-                    <CommandInput placeholder="Search objects..." />
+                    <CommandInput placeholder={t("bodyEditor.linkObjects")} />
                     <CommandList>
-                      <CommandEmpty>No object found.</CommandEmpty>
-                      <CommandGroup heading="Objects">
+                      <CommandEmpty>{t("objects.emptyTitle")}</CommandEmpty>
+                      <CommandGroup heading={t("nav.objects")}>
                         {candidates.map((candidate) => (
                           <CommandItem key={candidate.id} value={`${candidate.id} ${candidate.title} ${candidate.type_id}`} onSelect={() => insertLink(candidate)}>
                             <span className="min-w-0 flex-1 truncate">{candidate.title || candidate.id}</span>
@@ -2697,9 +2714,9 @@ function ObjectBodyWorkspace({
                   </Command>
                 </PopoverContent>
               </Popover>
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground">
+	              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground">
                 <ImagePlus className="size-3.5" />
-                Image
+                {t("bodyEditor.insertImage")}
                 <input className="hidden" type="file" accept="image/*" multiple onChange={(event) => { if (event.target.files) void importFiles(event.target.files); event.currentTarget.value = ""; }} />
               </label>
             </div>
@@ -2726,7 +2743,7 @@ function ObjectBodyWorkspace({
                     }
                   }}
                 />
-                <div className="body-drop-hint"><FileImage className="size-3.5" />Drop or paste images here. Type [[ to link an object.</div>
+                <div className="body-drop-hint"><FileImage className="size-3.5" />{t("bodyEditor.dropHint")}</div>
               </div>
             )}
             {viewMode !== "write" && (
@@ -3051,7 +3068,27 @@ function Header({ eyebrow, title, description }: { eyebrow: string; title: strin
   );
 }
 
+function LanguageSwitcher() {
+  const { i18n, t } = useTranslation();
+  const current = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  return (
+    <Select value={current} onValueChange={(value) => void i18n.changeLanguage(value)}>
+      <SelectTrigger className="h-8 w-[112px] rounded-md bg-background/60 px-2.5 text-xs" aria-label={t("app.language")}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {languageOptions.map((language) => (
+          <SelectItem key={language.value} value={language.value}>
+            {language.value === "zh" ? t("app.chinese") : t("app.english")}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; activeType: string; activeObject: Obj | null }) {
+  const { t } = useTranslation();
   const parts = ["mbase"];
   if (view === "objects") {
     if (activeType) parts.push(activeType);
@@ -3059,9 +3096,13 @@ function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; act
     if (activeObject?.type_id || activeType) parts.push(activeObject?.type_id || activeType);
     if (activeObject?.id) parts.push(activeObject.id);
   } else if (view === "types") {
-    parts.push("schema");
+    parts.push(t("nav.schema"));
   } else if (view === "vi") {
     parts.push("visual inventory");
+  } else if (view === "graph") {
+    parts.push(t("nav.graph"));
+  } else if (view === "health") {
+    parts.push(t("nav.health"));
   } else {
     parts.push(view);
   }
@@ -3094,6 +3135,7 @@ function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.Reac
 }
 
 function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVault }: { vault: string; draft: string; setDraft: (path: string) => void; recentVaults: string[]; vaultOK: boolean | null; openVault: (path: string) => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [manualPath, setManualPath] = useState(draft || vault);
   const visibleRecent = recentVaults.filter((path) => path !== vault).slice(0, 7);
@@ -3111,7 +3153,7 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
     <div className="sidebar-tool-card">
       <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         <FolderOpen className="size-3" />
-        Vault
+        {t("vault.label")}
       </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -3122,23 +3164,23 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-sm break-all font-mono">{vault || "server default vault"}</TooltipContent>
             </Tooltip>
-            <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? "ready" : "missing"}</span>
+            <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? t("status.ready") : t("status.missing")}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 rounded-3xl p-0">
           <Command shouldFilter>
-            <CommandInput placeholder="Search recent vaults..." />
+            <CommandInput placeholder={t("vault.pathPlaceholder")} />
             <CommandList>
-              <CommandEmpty>No recent vault found.</CommandEmpty>
-              <CommandGroup heading="Current">
+              <CommandEmpty>{t("objects.emptyTitle")}</CommandEmpty>
+              <CommandGroup heading={t("vault.label")}>
                 <CommandItem value={vault || "default"} onSelect={() => vault && commit(vault)}>
                   <Check className="size-4 opacity-100" />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs">{vault ? shortPath(vault) : "server default"}</span>
-                  <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? "ready" : "missing"}</span>
+                  <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? t("status.ready") : t("status.missing")}</span>
                 </CommandItem>
               </CommandGroup>
               {visibleRecent.length > 0 && (
-                <CommandGroup heading="Recent">
+                <CommandGroup heading={t("vault.recent")}>
                   {visibleRecent.map((path) => (
                     <CommandItem key={path} value={path} onSelect={() => commit(path)}>
                       <History className="size-4 text-muted-foreground" />
@@ -3151,10 +3193,10 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
           </Command>
           <Separator />
           <div className="space-y-2 p-3">
-            <div className="text-xs font-medium text-muted-foreground">Open path</div>
+            <div className="text-xs font-medium text-muted-foreground">{t("vault.open")}</div>
             <div className="flex gap-2">
               <Input value={manualPath} onChange={(event) => { setManualPath(event.target.value); setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter") commit(manualPath); }} placeholder="/path/to/vault" className="h-9 flex-1 font-mono text-xs" />
-              <Button className="h-9 px-3" disabled={!manualPath.trim()} onClick={() => commit(manualPath)}>Open</Button>
+              <Button className="h-9 px-3" disabled={!manualPath.trim()} onClick={() => commit(manualPath)}>{t("vault.open")}</Button>
             </div>
           </div>
         </PopoverContent>
@@ -3408,13 +3450,14 @@ function GraphCanvas({
 }
 
 function GraphZoomControls({ zoom, setZoom, reset }: { zoom: number; setZoom: React.Dispatch<React.SetStateAction<number>>; reset: () => void }) {
+  const { t } = useTranslation();
   const change = (delta: number) => setZoom((value) => clampZoom(Number((value + delta).toFixed(2))));
   return (
     <div className="absolute right-4 top-4 z-20 flex items-center gap-1 rounded-lg bg-card/72 p-1 text-xs shadow-[0_8px_18px_-14px_hsl(var(--shadow-warm)/0.12)] backdrop-blur">
-      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(-0.12)} title="Zoom out">-</button>
-      <button className="min-w-12 rounded-md px-2.5 py-1.5 font-mono text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setZoom(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
-      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(0.12)} title="Zoom in">+</button>
-      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={reset} title="Relayout visible graph">Relayout</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(-0.12)} title={t("common.zoomOut")}>-</button>
+      <button className="min-w-12 rounded-md px-2.5 py-1.5 font-mono text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setZoom(1)} title={t("common.resetZoom")}>{Math.round(zoom * 100)}%</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => change(0.12)} title={t("common.zoomIn")}>+</button>
+      <button className="rounded-md px-2.5 py-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={reset} title={t("common.relayout")}>{t("common.relayout")}</button>
     </div>
   );
 }
@@ -3777,6 +3820,7 @@ type GraphViewStepDefinition = {
 };
 
 function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, vault, automationRef, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; vault: string; automationRef?: React.MutableRefObject<RelationGraphAutomationController | null>; open: (id: string) => void }) {
+  const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
   const [configLoading, setConfigLoading] = useState(false);
@@ -3857,7 +3901,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
     const stepsText = patch.steps ?? editorSteps;
     const parsed = parseRelationStepsText(stepsText);
     if (!id || !label || parsed.error || parsed.steps.length === 0) {
-      toast.error(parsed.error || "View id, label and at least one step are required");
+      toast.error(parsed.error || t("graph.requiredViewFields"));
       return relationGraphState();
     }
     const nextView: GraphViewDefinition = {
@@ -3872,13 +3916,13 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to save graph view");
+      toast.error(result.error?.message || t("graph.saveFailed"));
       return relationGraphState();
     }
     setViewConfig(normalizeGraphViewConfigForUI(result.data));
     setActiveTemplateID(id);
     setEditorOpen(false);
-    toast.success("Graph view saved");
+    toast.success(t("graph.viewSaved"));
     await nextFrame();
     return automationRef?.current?.state() ?? relationGraphState();
   }
@@ -3890,13 +3934,13 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
     const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
-      toast.error(result.error?.message || "Failed to delete graph view");
+      toast.error(result.error?.message || t("graph.deleteFailed"));
       return relationGraphState();
     }
     setViewConfig(normalizeGraphViewConfigForUI(result.data));
     setActiveTemplateID("nearby");
     setEditorOpen(false);
-    toast.success("Graph view deleted");
+    toast.success(t("graph.viewDeleted"));
     await nextFrame();
     return automationRef?.current?.state() ?? relationGraphState();
   }
@@ -3959,25 +4003,27 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
     };
   }, [automationRef, automationController]);
   if (allGraph.incoming.length === 0 && allGraph.outgoing.length === 0) {
-    return <div className="inspector-graph-empty">No links yet.</div>;
+    return <div className="inspector-graph-empty">{t("graph.noLinksYet")}</div>;
   }
+  const visibleNodeCount = graph.incoming.length + graph.outgoing.length + 1;
+  const viewSourceLabel = activeTemplate.configurable ? t("graph.vaultConfig") : configLoading ? t("graph.loadingConfig") : t("graph.builtIn");
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <div className="inspector-graph-launcher">
         <div className="inspector-graph-launcher-copy">
-          <div className="inspector-graph-launcher-title">Local relation graph</div>
-          <div className="inspector-graph-launcher-meta">{allGraph.incoming.length} upstream, {allGraph.outgoing.length} downstream</div>
+          <div className="inspector-graph-launcher-title">{t("graph.localRelationGraph")}</div>
+          <div className="inspector-graph-launcher-meta">{t("graph.relationSummary", { upstream: allGraph.incoming.length, downstream: allGraph.outgoing.length })}</div>
         </div>
         <Button variant="secondary" className="h-8 rounded-md px-2.5" onClick={() => setDialogOpen(true)}>
           <Maximize2 className="size-3.5" />
-          Open canvas
+          {t("graph.openCanvas")}
         </Button>
       </div>
       <DialogContent className="relation-graph-dialog" style={{ width: "clamp(720px, calc(100vw - 44px), 1380px)", height: "clamp(560px, calc(100vh - 44px), 880px)", maxWidth: "none" }}>
         <DialogHeader className="relation-graph-header">
           <div>
             <DialogTitle className="font-serif text-2xl font-medium">{object.title || object.id}</DialogTitle>
-            <DialogDescription>{activeTemplate.description}. {graph.incoming.length + graph.outgoing.length} nodes visible. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
+            <DialogDescription>{activeTemplate.description}. {t("graph.graphVisibleDescription", { count: visibleNodeCount })}</DialogDescription>
           </div>
         </DialogHeader>
         <RelationGraphFilters
@@ -4001,38 +4047,38 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
         <div className="relation-graph-config-section">
           <div className="relation-graph-config-bar">
             <div className="relation-graph-config-copy">
-              <span>View source</span>
-              <strong>{activeTemplate.configurable ? "vault config" : configLoading ? "loading config" : "built in"}</strong>
+              <span>{t("graph.viewSource")}</span>
+              <strong>{viewSourceLabel}</strong>
             </div>
             <Button variant="secondary" className="h-8 rounded-md px-2.5" onClick={() => toggleGraphViewEditor()}>
               <Edit3 className="size-3.5" />
-              Configure view
+              {t("graph.configureView")}
             </Button>
           </div>
           {editorOpen && (
             <div className="relation-graph-config-editor">
               <div className="graph-view-editor">
                 <label>
-                  <span>ID</span>
+                  <span>{t("graph.id")}</span>
                   <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="investment-chain" />
                 </label>
                 <label>
-                  <span>Label</span>
+                  <span>{t("graph.label")}</span>
                   <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Investment chain" />
                 </label>
                 <label>
-                  <span>Steps</span>
+                  <span>{t("graph.steps")}</span>
                   <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
                 </label>
-                <div className="graph-view-editor-help">One step per line: direction relation target_type. Direction is <code>in</code> or <code>out</code>.</div>
+                <div className="graph-view-editor-help">{t("graph.editorHelp")}</div>
                 <div className="graph-view-editor-actions">
                   <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
                     <Save className="size-3.5" />
-                    Save
+                    {t("graph.save")}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !editableTemplate}>
                     <X className="size-3.5" />
-                    Delete
+                    {t("graph.delete")}
                   </Button>
                 </div>
               </div>
@@ -4083,10 +4129,11 @@ function RelationGraphFilters({
   setHiddenRelations: React.Dispatch<React.SetStateAction<string[]>>;
   resetFilters: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="relation-filter-panel">
       <div className="relation-filter-row">
-        <span className="relation-filter-label">View</span>
+        <span className="relation-filter-label">{t("graph.view")}</span>
         <div className="relation-filter-chips">
           {templates.map((template) => (
           <button key={template.id} className={`relation-view-chip ${activeTemplateID === template.id ? "is-active" : ""}`} onClick={() => setActiveTemplateID(template.id)}>
@@ -4096,14 +4143,14 @@ function RelationGraphFilters({
         </div>
       </div>
       <div className="relation-filter-row">
-        <span className="relation-filter-label">Kind</span>
-        <RelationFilterChip label="Field" count={kindCounts.field} active={showFieldLinks && kindCounts.field > 0} disabled={kindCounts.field === 0} onClick={() => setShowFieldLinks(!showFieldLinks)} />
-        <RelationFilterChip label="Body" count={kindCounts.body} active={showBodyLinks && kindCounts.body > 0} disabled={kindCounts.body === 0 || kindCounts.field === 0} onClick={() => setShowBodyLinks(!showBodyLinks)} />
-        <button className="relation-filter-reset" disabled={!hasFilter} onClick={resetFilters}>Reset</button>
+        <span className="relation-filter-label">{t("graph.kind")}</span>
+        <RelationFilterChip label={t("graph.field")} count={kindCounts.field} active={showFieldLinks && kindCounts.field > 0} disabled={kindCounts.field === 0} onClick={() => setShowFieldLinks(!showFieldLinks)} />
+        <RelationFilterChip label={t("graph.body")} count={kindCounts.body} active={showBodyLinks && kindCounts.body > 0} disabled={kindCounts.body === 0 || kindCounts.field === 0} onClick={() => setShowBodyLinks(!showBodyLinks)} />
+        <button className="relation-filter-reset" disabled={!hasFilter} onClick={resetFilters}>{t("graph.reset")}</button>
       </div>
       {types.length > 0 && (
         <div className="relation-filter-row">
-          <span className="relation-filter-label">Types</span>
+          <span className="relation-filter-label">{t("graph.types")}</span>
           <div className="relation-filter-chips">
             {types.map((type) => (
               <RelationFilterChip
@@ -4119,7 +4166,7 @@ function RelationGraphFilters({
       )}
       {relations.length > 0 && (
         <div className="relation-filter-row">
-          <span className="relation-filter-label">Paths</span>
+          <span className="relation-filter-label">{t("graph.paths")}</span>
           <div className="relation-filter-chips">
             {relations.map((relation) => (
               <RelationFilterChip
@@ -4157,6 +4204,7 @@ function RelationGraphCanvas({
   onNodeClick?: (id: string) => void;
   onNodeDoubleClick?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(0.86);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -4286,12 +4334,12 @@ function RelationGraphCanvas({
   return (
     <div className="relation-canvas-shell">
       <div className="relation-canvas-toolbar">
-        <div className="relation-canvas-stat"><Move className="size-3.5" />{nodes.length} nodes</div>
+        <div className="relation-canvas-stat"><Move className="size-3.5" />{nodes.length} {t("graph.nodes").toLowerCase()}</div>
         <div className="flex items-center gap-1">
-          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 0.9)} title="Zoom out"><ZoomOut className="size-3.5" /></button>
-          <button className="relation-canvas-tool relation-canvas-zoom" onClick={() => zoomAt(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
-          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 1.1)} title="Zoom in"><ZoomIn className="size-3.5" /></button>
-          <button className="relation-canvas-tool" onClick={resetView} title={graph.fitMode === "bounds" ? "Fit graph" : "Reset view"}><RotateCcw className="size-3.5" /></button>
+          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 0.9)} title={t("common.zoomOut")}><ZoomOut className="size-3.5" /></button>
+          <button className="relation-canvas-tool relation-canvas-zoom" onClick={() => zoomAt(1)} title={t("common.resetZoom")}>{Math.round(zoom * 100)}%</button>
+          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 1.1)} title={t("common.zoomIn")}><ZoomIn className="size-3.5" /></button>
+          <button className="relation-canvas-tool" onClick={resetView} title={graph.fitMode === "bounds" ? t("common.fitGraph") : t("common.resetView")}><RotateCcw className="size-3.5" /></button>
         </div>
       </div>
       <div
