@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -398,20 +399,154 @@ func (r *Runner) runLinks(args []string, back bool) Result {
 }
 
 func (r *Runner) runGraph(args []string) Result {
-	if len(args) == 0 || args[0] != "export" {
-		return Fail("usage", "usage: graph export")
+	if len(args) == 0 {
+		return Fail("usage", "usage: graph export|views")
 	}
-	return r.withStore(func(s *store.Store) Result {
-		objects, err := s.ListObjects("", 10000)
+	switch args[0] {
+	case "export":
+		return r.withStore(func(s *store.Store) Result {
+			objects, err := s.ListObjects("", 10000)
+			if err != nil {
+				return fromErr(err)
+			}
+			links, err := s.AllLinks()
+			if err != nil {
+				return fromErr(err)
+			}
+			return OK(map[string]any{"nodes": objects, "edges": links})
+		})
+	case "views":
+		return r.runGraphViews(args[1:])
+	default:
+		return Fail("unknown_command", "unknown graph command: "+args[0])
+	}
+}
+
+type graphViewConfig struct {
+	Version int         `json:"version"`
+	Views   []graphView `json:"views"`
+}
+
+type graphView struct {
+	ID          string          `json:"id"`
+	Label       string          `json:"label"`
+	RootType    string          `json:"root_type"`
+	Description string          `json:"description,omitempty"`
+	Steps       []graphViewStep `json:"steps"`
+}
+
+type graphViewStep struct {
+	Relation   string `json:"relation"`
+	Direction  string `json:"direction"`
+	TargetType string `json:"target_type,omitempty"`
+}
+
+func (r *Runner) runGraphViews(args []string) Result {
+	if len(args) == 0 || args[0] == "list" {
+		config, err := r.readGraphViewConfig()
 		if err != nil {
 			return fromErr(err)
 		}
-		links, err := s.AllLinks()
-		if err != nil {
-			return fromErr(err)
+		return OK(config)
+	}
+	if args[0] != "write" {
+		return Fail("usage", "usage: graph views [list]|write --stdin")
+	}
+	flags := parseFlags(args[1:])
+	if !flags.Bool("stdin") {
+		return Fail("usage", "usage: graph views write --stdin")
+	}
+	if r.Stdin == nil {
+		return Fail("bad_request", "stdin is required")
+	}
+	raw, err := io.ReadAll(r.Stdin)
+	if err != nil {
+		return fromErr(err)
+	}
+	var config graphViewConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return fromErr(err)
+	}
+	config, err = normalizeGraphViewConfig(config)
+	if err != nil {
+		return fromErr(err)
+	}
+	if err := r.writeGraphViewConfig(config); err != nil {
+		return fromErr(err)
+	}
+	return OK(config, Effect{Kind: "graph.views.write"})
+}
+
+func (r *Runner) readGraphViewConfig() (graphViewConfig, error) {
+	path := filepath.Join(r.Root, "mbase.graph-views.json")
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return graphViewConfig{Version: 1, Views: []graphView{}}, nil
+	}
+	if err != nil {
+		return graphViewConfig{}, err
+	}
+	var config graphViewConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return graphViewConfig{}, err
+	}
+	return normalizeGraphViewConfig(config)
+}
+
+func (r *Runner) writeGraphViewConfig(config graphViewConfig) error {
+	if err := os.MkdirAll(r.Root, 0755); err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	raw = append(raw, '\n')
+	return os.WriteFile(filepath.Join(r.Root, "mbase.graph-views.json"), raw, 0644)
+}
+
+func normalizeGraphViewConfig(config graphViewConfig) (graphViewConfig, error) {
+	if config.Version == 0 {
+		config.Version = 1
+	}
+	seen := make(map[string]bool)
+	out := make([]graphView, 0, len(config.Views))
+	for _, view := range config.Views {
+		view.ID = strings.TrimSpace(view.ID)
+		view.Label = strings.TrimSpace(view.Label)
+		view.RootType = strings.TrimSpace(view.RootType)
+		view.Description = strings.TrimSpace(view.Description)
+		if view.ID == "" {
+			return graphViewConfig{}, fmt.Errorf("graph view id is required")
 		}
-		return OK(map[string]any{"nodes": objects, "edges": links})
-	})
+		if seen[view.ID] {
+			return graphViewConfig{}, fmt.Errorf("duplicate graph view id: %s", view.ID)
+		}
+		if view.Label == "" {
+			view.Label = view.ID
+		}
+		if view.RootType == "" {
+			return graphViewConfig{}, fmt.Errorf("graph view %s root_type is required", view.ID)
+		}
+		if len(view.Steps) == 0 {
+			return graphViewConfig{}, fmt.Errorf("graph view %s requires at least one step", view.ID)
+		}
+		for i := range view.Steps {
+			view.Steps[i].Relation = strings.TrimSpace(view.Steps[i].Relation)
+			view.Steps[i].Direction = strings.TrimSpace(view.Steps[i].Direction)
+			view.Steps[i].TargetType = strings.TrimSpace(view.Steps[i].TargetType)
+			if view.Steps[i].Relation == "" {
+				return graphViewConfig{}, fmt.Errorf("graph view %s step relation is required", view.ID)
+			}
+			if view.Steps[i].Direction != "in" && view.Steps[i].Direction != "out" {
+				return graphViewConfig{}, fmt.Errorf("graph view %s step direction must be in or out", view.ID)
+			}
+		}
+		seen[view.ID] = true
+		out = append(out, view)
+	}
+	config.Views = out
+	return config, nil
 }
 
 func (r *Runner) runBody(args []string) Result {
@@ -817,6 +952,7 @@ func usage() string {
   links <id>
   backlinks <id>
   graph export
+  graph views [list]|write --stdin
   body path|refresh|write|append <id>
   asset import <file> [--name <filename>]
   refresh

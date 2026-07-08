@@ -1118,6 +1118,7 @@ function App() {
             graph={graph}
             links={links}
             backlinks={backlinks}
+            vault={vault}
             openObject={(id) => {
               void openObject(id, { syncURL: false, view: "graph-lab" });
               updateSearch({ view: "graph-lab", object: id }, { replace: true });
@@ -1130,12 +1131,36 @@ function App() {
   );
 }
 
-function GraphLabPage({ object, graph, links, backlinks, openObject }: { object: Obj | null; graph: GraphData; links: Link[]; backlinks: Link[]; openObject: (id: string) => void }) {
-  const templates = useMemo(() => relationQueryTemplatesFor(object?.type_id ?? ""), [object?.type_id]);
+function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { object: Obj | null; graph: GraphData; links: Link[]; backlinks: Link[]; vault: string; openObject: (id: string) => void }) {
+  const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorID, setEditorID] = useState("");
+  const [editorLabel, setEditorLabel] = useState("");
+  const [editorSteps, setEditorSteps] = useState("");
+  const templates = useMemo(() => relationQueryTemplatesFor(object?.type_id ?? "", viewConfig), [object?.type_id, viewConfig]);
   const [activeTemplateID, setActiveTemplateID] = useState(templates[0]?.id ?? "nearby");
   useEffect(() => {
-    setActiveTemplateID(templates[0]?.id ?? "nearby");
-  }, [object?.id, templates]);
+    let cancelled = false;
+    setConfigLoading(true);
+    run<GraphViewConfig>(["graph", "views"], vault).then((result) => {
+      if (cancelled) return;
+      setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    }).catch(() => {
+      if (!cancelled) setViewConfig({ version: 1, views: [] });
+    }).finally(() => {
+      if (!cancelled) setConfigLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [vault]);
+  useEffect(() => {
+    if (!templates.some((template) => template.id === activeTemplateID) || (activeTemplateID === "nearby" && templates[0]?.id !== "nearby")) {
+      setActiveTemplateID(templates[0]?.id ?? "nearby");
+    }
+  }, [activeTemplateID, templates]);
   const activeTemplate = templates.find((template) => template.id === activeTemplateID) ?? templates[0] ?? relationNearbyTemplate();
   const labGraph = useMemo(() => {
     if (!object) return null;
@@ -1144,6 +1169,66 @@ function GraphLabPage({ object, graph, links, backlinks, openObject }: { object:
   }, [object, activeTemplate, links, backlinks, graph.nodes, graph.edges]);
   const nodes = labGraph ? [labGraph.focus, ...labGraph.incoming, ...labGraph.outgoing] : [];
   const groups = labGraph ? relationGraphGroups(labGraph, nodes) : [];
+  const editableTemplate = activeTemplate.configurable ? activeTemplate : templates.find((template) => template.configurable);
+
+  useEffect(() => {
+    if (!editorOpen) return;
+    const source = editableTemplate;
+    setEditorID(source?.id ?? slugifyGraphViewLabel(`${object?.type_id || "object"} view`));
+    setEditorLabel(source?.label ?? `${object?.type_id || "object"} view`);
+    setEditorSteps(source ? relationStepsToText(source.steps) : "");
+  }, [editorOpen, editableTemplate, object?.type_id]);
+
+  async function saveGraphView() {
+    if (!object) return;
+    const id = editorID.trim();
+    const label = editorLabel.trim();
+    const parsed = parseRelationStepsText(editorSteps);
+    if (!id || !label || parsed.error || parsed.steps.length === 0) {
+      toast.error(parsed.error || "View id, label and at least one step are required");
+      return;
+    }
+    const nextView: GraphViewDefinition = {
+      id,
+      label,
+      root_type: object.type_id,
+      description: `Follow ${relationQueryPathLabel(object.type_id, parsed.steps)} from the current ${object.type_id}`,
+      steps: parsed.steps.map((step) => ({ relation: step.relation, direction: step.direction, target_type: step.targetType }))
+    };
+    const nextConfig = {
+      version: 1,
+      views: [...viewConfig.views.filter((view) => view.id !== id), nextView]
+    };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to save graph view");
+      return;
+    }
+    const normalized = normalizeGraphViewConfigForUI(result.data);
+    setViewConfig(normalized);
+    setActiveTemplateID(id);
+    setEditorOpen(false);
+    toast.success("Graph view saved");
+  }
+
+  async function deleteGraphView() {
+    const id = editorID.trim();
+    if (!id) return;
+    const nextConfig = { version: 1, views: viewConfig.views.filter((view) => view.id !== id) };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to delete graph view");
+      return;
+    }
+    setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    setActiveTemplateID("nearby");
+    setEditorOpen(false);
+    toast.success("Graph view deleted");
+  }
 
   return (
     <section className="graph-lab-page">
@@ -1159,6 +1244,9 @@ function GraphLabPage({ object, graph, links, backlinks, openObject }: { object:
               {template.label}
             </button>
           ))}
+          <button className="relation-view-chip" onClick={() => setEditorOpen((open) => !open)}>
+            Configure
+          </button>
         </div>
       </div>
       <div className="graph-lab-layout">
@@ -1170,10 +1258,40 @@ function GraphLabPage({ object, graph, links, backlinks, openObject }: { object:
             <div className="space-y-2 text-sm text-muted-foreground">
               <div><span className="text-foreground/80">Path:</span> {activeTemplate.label}</div>
               <div>{activeTemplate.description}</div>
+              <div><span className="text-foreground/80">Source:</span> {activeTemplate.configurable ? "vault config" : configLoading ? "loading config" : "built in"}</div>
               <div><span className="text-foreground/80">Nodes:</span> {nodes.length}</div>
               <div><span className="text-foreground/80">Edges:</span> {labGraph?.edges.length ?? 0}</div>
             </div>
           </Panel>
+          {editorOpen && (
+            <Panel title="Configure view" icon={<Edit3 className="size-4" />}>
+              <div className="graph-view-editor">
+                <label>
+                  <span>ID</span>
+                  <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="investment-chain" />
+                </label>
+                <label>
+                  <span>Label</span>
+                  <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Investment chain" />
+                </label>
+                <label>
+                  <span>Steps</span>
+                  <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
+                </label>
+                <div className="graph-view-editor-help">One step per line: direction relation target_type. Direction is <code>in</code> or <code>out</code>.</div>
+                <div className="graph-view-editor-actions">
+                  <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving || !object}>
+                    <Save className="size-3.5" />
+                    Save
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !editableTemplate}>
+                    <X className="size-3.5" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </Panel>
+          )}
           <Panel title="How to use" icon={<Move className="size-4" />}>
             <div className="graph-lab-help">
               <div><Move className="size-3.5" /> Drag empty space to pan.</div>
@@ -2961,6 +3079,26 @@ type RelationQueryTemplate = {
   label: string;
   description: string;
   steps: RelationQueryStep[];
+  configurable?: boolean;
+};
+
+type GraphViewConfig = {
+  version: number;
+  views: GraphViewDefinition[];
+};
+
+type GraphViewDefinition = {
+  id: string;
+  label: string;
+  root_type: string;
+  description?: string;
+  steps: GraphViewStepDefinition[];
+};
+
+type GraphViewStepDefinition = {
+  relation: string;
+  direction: "in" | "out";
+  target_type?: string;
 };
 
 function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; open: (id: string) => void }) {
@@ -3639,27 +3777,12 @@ function relationNearbyTemplate(): RelationQueryTemplate {
   return { id: "nearby", label: "Direct links", description: "Direct field and body links around the current object", steps: [] };
 }
 
-function relationQueryTemplatesFor(typeID: string): RelationQueryTemplate[] {
+function relationQueryTemplatesFor(typeID: string, config: GraphViewConfig = { version: 1, views: [] }): RelationQueryTemplate[] {
   const nearby = relationNearbyTemplate();
-  if (typeID === "investor") {
-    return [
-      relationQueryTemplate(typeID, [
-        { relation: "investor", direction: "in", targetType: "investment" },
-        { relation: "company", direction: "out", targetType: "company" }
-      ]),
-      nearby
-    ];
-  }
-  if (typeID === "company") {
-    return [
-      relationQueryTemplate(typeID, [
-        { relation: "company", direction: "in", targetType: "investment" },
-        { relation: "investor", direction: "out", targetType: "investor" }
-      ]),
-      nearby
-    ];
-  }
-  return [nearby];
+  const configured = config.views
+    .filter((view) => view.root_type === typeID)
+    .map((view) => graphViewDefinitionToTemplate(view, typeID));
+  return configured.length > 0 ? [...configured, nearby] : [nearby];
 }
 
 function relationQueryTemplate(rootType: string, steps: RelationQueryStep[]): RelationQueryTemplate {
@@ -3672,6 +3795,64 @@ function relationQueryTemplate(rootType: string, steps: RelationQueryStep[]): Re
     description: `Follow ${label} from the current ${rootType}`,
     steps
   };
+}
+
+function graphViewDefinitionToTemplate(view: GraphViewDefinition, rootType: string): RelationQueryTemplate {
+  const steps = view.steps.map((step) => ({
+    relation: step.relation,
+    direction: step.direction,
+    targetType: step.target_type
+  }));
+  return {
+    id: view.id,
+    label: view.label || relationQueryPathLabel(rootType, steps),
+    description: view.description || `Follow ${relationQueryPathLabel(rootType, steps)} from the current ${rootType}`,
+    steps,
+    configurable: true
+  };
+}
+
+function normalizeGraphViewConfigForUI(input: GraphViewConfig | undefined): GraphViewConfig {
+  const views = Array.isArray(input?.views) ? input.views : [];
+  return {
+    version: input?.version || 1,
+    views: views
+      .filter((view) => view && typeof view.id === "string" && typeof view.root_type === "string")
+      .map((view) => ({
+        id: view.id,
+        label: view.label || view.id,
+        root_type: view.root_type,
+        description: view.description,
+        steps: Array.isArray(view.steps) ? view.steps.filter((step) => step.direction === "in" || step.direction === "out").map((step) => ({
+          relation: step.relation,
+          direction: step.direction,
+          target_type: step.target_type
+        })) : []
+      }))
+      .filter((view) => view.steps.length > 0)
+  };
+}
+
+function parseRelationStepsText(text: string): { steps: RelationQueryStep[]; error?: string } {
+  const steps: RelationQueryStep[] = [];
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const [direction, relation, targetType] = line.split(/\s+/);
+    if (direction !== "in" && direction !== "out") return { steps: [], error: `Invalid direction in: ${line}` };
+    if (!relation) return { steps: [], error: `Missing relation in: ${line}` };
+    if (!targetType) return { steps: [], error: `Missing target_type in: ${line}` };
+    steps.push({ direction, relation, targetType });
+  }
+  return { steps };
+}
+
+function relationStepsToText(steps: RelationQueryStep[]) {
+  return steps.map((step) => `${step.direction} ${step.relation} ${step.targetType || ""}`.trim()).join("\n");
+}
+
+function slugifyGraphViewLabel(label: string) {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "graph-view";
 }
 
 function relationQueryPathLabel(rootType: string, steps: RelationQueryStep[]) {

@@ -1401,6 +1401,58 @@ body {
   gap: 0.5rem;
 }
 
+.graph-view-editor {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.graph-view-editor label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.graph-view-editor label > span {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.graph-view-editor textarea {
+  min-height: 118px;
+  resize: vertical;
+  border: 1px solid hsl(var(--border) / 0.42);
+  background: hsl(var(--surface));
+  color: hsl(var(--foreground));
+  padding: 0.7rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.55;
+  outline: none;
+}
+
+.graph-view-editor textarea:focus {
+  border-color: hsl(var(--teal) / 0.72);
+  box-shadow: 0 0 0 3px hsl(var(--teal) / 0.12);
+}
+
+.graph-view-editor-help {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.graph-view-editor-help code {
+  color: hsl(var(--foreground) / 0.8);
+  font-family: var(--font-mono);
+}
+
+.graph-view-editor-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
 .graph-lab-groups {
   display: grid;
   gap: 0.9rem;
