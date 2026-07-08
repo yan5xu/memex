@@ -3,34 +3,34 @@
 @tailwind utilities;
 
 :root {
-  --background: 42 28% 94%;
-  --foreground: 36 18% 16%;
-  --card: 48 32% 98%;
-  --card-foreground: 36 18% 16%;
-  --muted: 42 21% 90%;
-  --muted-foreground: 36 9% 47%;
-  --border: 40 18% 84%;
-  --input: 40 18% 84%;
-  --ring: 173 25% 43%;
-  --popover: 48 32% 98%;
-  --popover-foreground: 36 18% 16%;
-  --primary: 14 58% 52%;
-  --primary-foreground: 45 38% 96%;
-  --secondary: 42 21% 90%;
-  --secondary-foreground: 36 18% 16%;
-  --accent: 42 21% 90%;
-  --accent-foreground: 36 18% 16%;
-  --destructive: 0 62% 48%;
-  --destructive-foreground: 45 38% 96%;
-  --sidebar: 42 24% 90%;
-  --surface: 48 33% 97%;
-  --surface-soft: 42 24% 92%;
-  --earth: 31 38% 43%;
+  --background: 60 17% 98%;
+  --foreground: 165 7% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 165 7% 11%;
+  --muted: 90 9% 96%;
+  --muted-foreground: 160 5% 37%;
+  --border: 150 8% 91%;
+  --input: 150 8% 91%;
+  --ring: 177 64% 25%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 165 7% 11%;
+  --primary: 14 38% 53%;
+  --primary-foreground: 60 17% 98%;
+  --secondary: 90 9% 96%;
+  --secondary-foreground: 165 7% 11%;
+  --accent: 166 46% 93%;
+  --accent-foreground: 176 65% 20%;
+  --destructive: 0 67% 47%;
+  --destructive-foreground: 60 17% 98%;
+  --sidebar: 90 9% 96%;
+  --surface: 0 0% 100%;
+  --surface-soft: 90 9% 96%;
+  --earth: 177 64% 25%;
   --moss: 116 13% 42%;
-  --clay: 18 35% 46%;
-  --teal: 173 25% 43%;
-  --teal-soft: 173 26% 89%;
-  --shadow-warm: 38 24% 34%;
+  --clay: 14 38% 53%;
+  --teal: 177 64% 25%;
+  --teal-soft: 169 49% 77%;
+  --shadow-warm: 25 18% 33%;
 }
 
 body {
@@ -1067,6 +1067,17 @@ body {
   white-space: nowrap;
 }
 
+.vi-color-hex {
+  margin-top: 0.14rem;
+  overflow: hidden;
+  color: hsl(var(--foreground) / 0.42);
+  font-family: var(--font-mono);
+  font-size: 0.61rem;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .vi-surface-stack {
   display: grid;
   gap: 0.8rem;
@@ -1165,6 +1176,10 @@ body {
 
 .vi-page-shot .vi-color-role {
   font-size: 0.6rem;
+}
+
+.vi-page-shot .vi-color-hex {
+  display: none;
 }
 
 .vi-page-shot .vi-surface-sample {

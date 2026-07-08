@@ -1188,10 +1188,10 @@ function VIFoundations() {
     ["destructive-foreground", "on danger"]
   ];
   const accentColors = [
-    ["earth", "legacy warmth"],
-    ["clay", "warm emphasis"],
-    ["teal", "state/focus"],
-    ["teal-soft", "state wash"],
+    ["earth", "mineral link"],
+    ["clay", "fired clay"],
+    ["teal", "selection/focus"],
+    ["teal-soft", "mint auxiliary"],
     ["moss", "success/organic"],
     ["shadow-warm", "shadow tone"]
   ];
@@ -1266,6 +1266,37 @@ function VIFoundations() {
   );
 }
 
+const viColorHex: Record<string, string> = {
+  background: "#FAFAF8",
+  foreground: "#1B1F1E",
+  card: "#FFFFFF",
+  "card-foreground": "#1B1F1E",
+  surface: "#FFFFFF",
+  "surface-soft": "#F4F5F3",
+  muted: "#F4F5F3",
+  "muted-foreground": "#5B6461",
+  border: "#E5E9E7",
+  input: "#E5E9E7",
+  ring: "#176A66",
+  popover: "#FFFFFF",
+  "popover-foreground": "#1B1F1E",
+  sidebar: "#F4F5F3",
+  primary: "#B46F5A",
+  "primary-foreground": "#FAFAF8",
+  secondary: "#F4F5F3",
+  "secondary-foreground": "#1B1F1E",
+  accent: "#E4F5F1",
+  "accent-foreground": "#125652",
+  destructive: "#C72727",
+  "destructive-foreground": "#FAFAF8",
+  earth: "#176A66",
+  clay: "#B46F5A",
+  teal: "#176A66",
+  "teal-soft": "#A7E1D6",
+  moss: "#61795D",
+  "shadow-warm": "#635149"
+};
+
 function VIColorSwatch({ name, role }: { name: string; role: string }) {
   return (
     <div className="vi-color-swatch">
@@ -1273,6 +1304,7 @@ function VIColorSwatch({ name, role }: { name: string; role: string }) {
       <div className="min-w-0">
         <div className="vi-color-name">--{name}</div>
         <div className="vi-color-role">{role}</div>
+        <div className="vi-color-hex">{viColorHex[name]}</div>
       </div>
     </div>
   );
