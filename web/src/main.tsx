@@ -91,6 +91,38 @@ type AutomationSnapshot = {
   graphEdgesCount: number;
 };
 
+type RelationGraphAutomationState = {
+  available: boolean;
+  dialogOpen: boolean;
+  activeViewID: string | null;
+  activeViewLabel: string | null;
+  viewSource: "vault config" | "built in" | "loading config";
+  views: Array<{ id: string; label: string; configurable: boolean }>;
+  editorOpen: boolean;
+  editorID: string;
+  editorLabel: string;
+  editorSteps: string;
+  nodesCount: number;
+  edgesCount: number;
+};
+
+type AutomationUISnapshot = {
+  sidebarCollapsed: boolean;
+  inspectorOpen: boolean;
+  relationGraph: RelationGraphAutomationState | null;
+};
+
+type RelationGraphAutomationController = {
+  state: () => RelationGraphAutomationState;
+  open: () => Promise<RelationGraphAutomationState>;
+  close: () => Promise<RelationGraphAutomationState>;
+  setView: (id: string) => Promise<RelationGraphAutomationState>;
+  configure: (open?: boolean) => Promise<RelationGraphAutomationState>;
+  setEditor: (patch: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState>;
+  saveView: (patch?: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState>;
+  deleteView: (id?: string) => Promise<RelationGraphAutomationState>;
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -272,6 +304,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 25);
+  });
+}
+
 function objectImageScale(width: number, height: number) {
   const deviceScale = Math.min(2, window.devicePixelRatio || 1);
   const maxEdge = 32000;
@@ -308,14 +346,28 @@ declare global {
       run: typeof run;
       getVault: () => string;
       recentVaults: () => string[];
+      uiState: () => AutomationUISnapshot;
+      setSidebarCollapsed: (collapsed: boolean) => AutomationSnapshot;
+      setInspectorOpen: (open: boolean) => AutomationSnapshot;
       switchVault: (path: string) => Promise<AutomationSnapshot>;
       openVault: (path: string) => Promise<AutomationSnapshot>;
       reload: () => Promise<AutomationSnapshot>;
       selectType: (type: string) => Promise<AutomationSnapshot>;
       setFilter: (filter: string) => Promise<AutomationSnapshot>;
+      openView: (view: ViewID) => Promise<AutomationSnapshot>;
       openObject: (id: string) => Promise<AutomationSnapshot>;
       openGraph: () => Promise<AutomationSnapshot>;
       openHealth: () => Promise<AutomationSnapshot>;
+      relationGraph: {
+        state: () => RelationGraphAutomationState | null;
+        open: () => Promise<RelationGraphAutomationState | null>;
+        close: () => Promise<RelationGraphAutomationState | null>;
+        setView: (id: string) => Promise<RelationGraphAutomationState | null>;
+        configure: (open?: boolean) => Promise<RelationGraphAutomationState | null>;
+        setEditor: (patch: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState | null>;
+        saveView: (patch?: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState | null>;
+        deleteView: (id?: string) => Promise<RelationGraphAutomationState | null>;
+      };
       saveObjectImage: () => Promise<{ filename: string }>;
       state: () => AutomationSnapshot;
     };
@@ -327,6 +379,7 @@ function App() {
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
   const objectExportRef = useRef<HTMLDivElement | null>(null);
+  const relationGraphAutomationRef = useRef<RelationGraphAutomationController | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
@@ -705,6 +758,16 @@ function App() {
       graph,
       ...overrides
     });
+    const uiState = (): AutomationUISnapshot => ({
+      sidebarCollapsed,
+      inspectorOpen,
+      relationGraph: relationGraphAutomationRef.current?.state() ?? null
+    });
+    const relationGraphCall = async <T,>(fn: (controller: RelationGraphAutomationController) => Promise<T>): Promise<T | null> => {
+      const controller = relationGraphAutomationRef.current;
+      if (!controller) return null;
+      return fn(controller);
+    };
 
     const runAndSync = async <T,>(argv: string[], vaultOverride = vault, options: { stdin?: string } = {}) => {
       const result = await run<T>(argv, vaultOverride, options);
@@ -720,6 +783,15 @@ function App() {
       run: runAndSync,
       getVault: () => vault,
       recentVaults: () => getRecentVaults(),
+      uiState,
+      setSidebarCollapsed: (collapsed: boolean) => {
+        setSidebarCollapsed(collapsed);
+        return currentState();
+      },
+      setInspectorOpen: (open: boolean) => {
+        setInspectorOpen(open);
+        return currentState();
+      },
       switchVault: async (path: string) => {
         const loaded = await openVaultPath(path);
         if (!loaded) return currentState({ vaultOK: false });
@@ -768,6 +840,14 @@ function App() {
         const nextRows = activeType ? await loadRows(activeType, nextFilter) : [];
         return currentState({ view: "objects", rows: nextRows });
       },
+      openView: async (nextView: ViewID) => {
+        if (nextView === "graph") {
+          const nextGraph = await openGraph();
+          return currentState({ view: "graph", graph: nextGraph });
+        }
+        setView(nextView);
+        return currentState({ view: nextView });
+      },
       openObject: async (id: string) => {
         const data = await openObject(id);
         return currentState({
@@ -786,13 +866,23 @@ function App() {
         setView("health");
         return currentState({ view: "health" });
       },
+      relationGraph: {
+        state: () => relationGraphAutomationRef.current?.state() ?? null,
+        open: () => relationGraphCall((controller) => controller.open()),
+        close: () => relationGraphCall((controller) => controller.close()),
+        setView: (id: string) => relationGraphCall((controller) => controller.setView(id)),
+        configure: (open?: boolean) => relationGraphCall((controller) => controller.configure(open)),
+        setEditor: (patch) => relationGraphCall((controller) => controller.setEditor(patch)),
+        saveView: (patch) => relationGraphCall((controller) => controller.saveView(patch)),
+        deleteView: (id) => relationGraphCall((controller) => controller.deleteView(id))
+      },
       saveObjectImage,
       state: () => currentState()
     };
     return () => {
       delete window.mbase;
     };
-  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter]);
+  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen]);
 
   const viMode = view === "vi";
   const graphLabMode = view === "graph-lab";
@@ -947,7 +1037,7 @@ function App() {
                         <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
                       </Panel>
                       <Panel title="Relation Graph" icon={<Network className="size-4" />}>
-                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} open={(id) => void openObject(id)} />
+                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} vault={vault} automationRef={relationGraphAutomationRef} open={(id) => void openObject(id)} />
                       </Panel>
                       <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
                       <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
@@ -1171,13 +1261,17 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
   const groups = labGraph ? relationGraphGroups(labGraph, nodes) : [];
   const editableTemplate = activeTemplate.configurable ? activeTemplate : templates.find((template) => template.configurable);
 
-  useEffect(() => {
-    if (!editorOpen) return;
+  function toggleGraphViewEditor() {
+    if (editorOpen) {
+      setEditorOpen(false);
+      return;
+    }
     const source = editableTemplate;
     setEditorID(source?.id ?? slugifyGraphViewLabel(`${object?.type_id || "object"} view`));
     setEditorLabel(source?.label ?? `${object?.type_id || "object"} view`);
     setEditorSteps(source ? relationStepsToText(source.steps) : "");
-  }, [editorOpen, editableTemplate, object?.type_id]);
+    setEditorOpen(true);
+  }
 
   async function saveGraphView() {
     if (!object) return;
@@ -1244,7 +1338,7 @@ function GraphLabPage({ object, graph, links, backlinks, vault, openObject }: { 
               {template.label}
             </button>
           ))}
-          <button className="relation-view-chip" onClick={() => setEditorOpen((open) => !open)}>
+          <button className="relation-view-chip" onClick={toggleGraphViewEditor}>
             Configure
           </button>
         </div>
@@ -3101,9 +3195,16 @@ type GraphViewStepDefinition = {
   target_type?: string;
 };
 
-function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; open: (id: string) => void }) {
+function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, vault, automationRef, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; vault: string; automationRef?: React.MutableRefObject<RelationGraphAutomationController | null>; open: (id: string) => void }) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const templates = useMemo(() => relationQueryTemplatesFor(object.type_id), [object.type_id]);
+  const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorID, setEditorID] = useState("");
+  const [editorLabel, setEditorLabel] = useState("");
+  const [editorSteps, setEditorSteps] = useState("");
+  const templates = useMemo(() => relationQueryTemplatesFor(object.type_id, viewConfig), [object.type_id, viewConfig]);
   const [activeTemplateID, setActiveTemplateID] = useState(() => templates[0]?.id ?? "nearby");
   const [showFieldLinks, setShowFieldLinks] = useState(true);
   const [showBodyLinks, setShowBodyLinks] = useState(false);
@@ -3111,8 +3212,23 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
   const [hiddenRelations, setHiddenRelations] = useState<string[]>([]);
   const relationEdges = graphEdges.length > 0 ? graphEdges : [...links, ...backlinks];
   const activeTemplate = templates.find((template) => template.id === activeTemplateID) ?? templates[0] ?? relationNearbyTemplate();
+  const editableTemplate = activeTemplate.configurable ? activeTemplate : templates.find((template) => template.configurable);
   useEffect(() => {
-    if (!templates.some((template) => template.id === activeTemplateID)) {
+    let cancelled = false;
+    setConfigLoading(true);
+    run<GraphViewConfig>(["graph", "views"], vault).then((result) => {
+      if (!cancelled) setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    }).catch(() => {
+      if (!cancelled) setViewConfig({ version: 1, views: [] });
+    }).finally(() => {
+      if (!cancelled) setConfigLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [vault]);
+  useEffect(() => {
+    if (!templates.some((template) => template.id === activeTemplateID) || (activeTemplateID === "nearby" && templates[0]?.id !== "nearby")) {
       setActiveTemplateID(templates[0]?.id ?? "nearby");
     }
   }, [activeTemplateID, templates]);
@@ -3132,9 +3248,6 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
       graphNodes
     );
   }, [activeTemplate, object, graphNodes, relationEdges, links, backlinks, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field]);
-  if (allGraph.incoming.length === 0 && allGraph.outgoing.length === 0) {
-    return <div className="inspector-graph-empty">No links yet.</div>;
-  }
   const activeKindCount = (showFieldLinks && filterMeta.kindCounts.field > 0 ? 1 : 0) + ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0 ? 1 : 0);
   const hasFilter = activeTemplate.id !== templates[0]?.id || activeKindCount < Number(filterMeta.kindCounts.field > 0) + Number(filterMeta.kindCounts.body > 0) || hiddenTypes.length > 0 || hiddenRelations.length > 0;
   function resetFilters() {
@@ -3143,6 +3256,129 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
     setShowBodyLinks(false);
     setHiddenTypes([]);
     setHiddenRelations([]);
+  }
+  function graphViewEditorSource() {
+    return activeTemplate.configurable ? activeTemplate : templates.find((template) => template.configurable);
+  }
+  function fillGraphViewEditor(source = graphViewEditorSource()) {
+    setEditorID(source?.id ?? slugifyGraphViewLabel(`${object.type_id} view`));
+    setEditorLabel(source?.label ?? `${object.type_id} view`);
+    setEditorSteps(source ? relationStepsToText(source.steps) : "");
+  }
+  function toggleGraphViewEditor(nextOpen?: boolean) {
+    const shouldOpen = nextOpen ?? !editorOpen;
+    if (shouldOpen) fillGraphViewEditor();
+    setEditorOpen(shouldOpen);
+  }
+  async function saveGraphView(patch: { id?: string; label?: string; steps?: string } = {}) {
+    const id = (patch.id ?? editorID).trim();
+    const label = (patch.label ?? editorLabel).trim();
+    const stepsText = patch.steps ?? editorSteps;
+    const parsed = parseRelationStepsText(stepsText);
+    if (!id || !label || parsed.error || parsed.steps.length === 0) {
+      toast.error(parsed.error || "View id, label and at least one step are required");
+      return relationGraphState();
+    }
+    const nextView: GraphViewDefinition = {
+      id,
+      label,
+      root_type: object.type_id,
+      description: `Follow ${relationQueryPathLabel(object.type_id, parsed.steps)} from the current ${object.type_id}`,
+      steps: parsed.steps.map((step) => ({ relation: step.relation, direction: step.direction, target_type: step.targetType }))
+    };
+    const nextConfig = { version: 1, views: [...viewConfig.views.filter((view) => view.id !== id), nextView] };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to save graph view");
+      return relationGraphState();
+    }
+    setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    setActiveTemplateID(id);
+    setEditorOpen(false);
+    toast.success("Graph view saved");
+    await nextFrame();
+    return automationRef?.current?.state() ?? relationGraphState();
+  }
+  async function deleteGraphView(idOverride?: string) {
+    const id = (idOverride ?? editorID).trim();
+    if (!id) return relationGraphState();
+    const nextConfig = { version: 1, views: viewConfig.views.filter((view) => view.id !== id) };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to delete graph view");
+      return relationGraphState();
+    }
+    setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    setActiveTemplateID("nearby");
+    setEditorOpen(false);
+    toast.success("Graph view deleted");
+    await nextFrame();
+    return automationRef?.current?.state() ?? relationGraphState();
+  }
+  function relationGraphState(): RelationGraphAutomationState {
+    return {
+      available: true,
+      dialogOpen,
+      activeViewID: activeTemplate.id,
+      activeViewLabel: activeTemplate.label,
+      viewSource: activeTemplate.configurable ? "vault config" : configLoading ? "loading config" : "built in",
+      views: templates.map((template) => ({ id: template.id, label: template.label, configurable: Boolean(template.configurable) })),
+      editorOpen,
+      editorID,
+      editorLabel,
+      editorSteps,
+      nodesCount: graph.incoming.length + graph.outgoing.length + 1,
+      edgesCount: graph.edges.length
+    };
+  }
+  const automationController: RelationGraphAutomationController = {
+    state: relationGraphState,
+    open: async () => {
+      setDialogOpen(true);
+      await nextFrame();
+      return automationRef?.current?.state() ?? relationGraphState();
+    },
+    close: async () => {
+      setDialogOpen(false);
+      await nextFrame();
+      return automationRef?.current?.state() ?? relationGraphState();
+    },
+    setView: async (id: string) => {
+      if (!templates.some((template) => template.id === id)) {
+        throw new Error(`unknown relation graph view: ${id}`);
+      }
+      setActiveTemplateID(id);
+      await nextFrame();
+      return automationRef?.current?.state() ?? relationGraphState();
+    },
+    configure: async (openNext = true) => {
+      toggleGraphViewEditor(openNext);
+      await nextFrame();
+      return automationRef?.current?.state() ?? relationGraphState();
+    },
+    setEditor: async (patch) => {
+      if (patch.id !== undefined) setEditorID(patch.id);
+      if (patch.label !== undefined) setEditorLabel(patch.label);
+      if (patch.steps !== undefined) setEditorSteps(patch.steps);
+      await nextFrame();
+      return automationRef?.current?.state() ?? relationGraphState();
+    },
+    saveView: saveGraphView,
+    deleteView: deleteGraphView
+  };
+  useEffect(() => {
+    if (!automationRef) return;
+    automationRef.current = automationController;
+    return () => {
+      if (automationRef.current === automationController) automationRef.current = null;
+    };
+  }, [automationRef, automationController]);
+  if (allGraph.incoming.length === 0 && allGraph.outgoing.length === 0) {
+    return <div className="inspector-graph-empty">No links yet.</div>;
   }
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -3181,6 +3417,47 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
           setHiddenRelations={setHiddenRelations}
           resetFilters={resetFilters}
         />
+        <div className="relation-graph-config-section">
+          <div className="relation-graph-config-bar">
+            <div className="relation-graph-config-copy">
+              <span>View source</span>
+              <strong>{activeTemplate.configurable ? "vault config" : configLoading ? "loading config" : "built in"}</strong>
+            </div>
+            <Button variant="secondary" className="h-8 rounded-md px-2.5" onClick={() => toggleGraphViewEditor()}>
+              <Edit3 className="size-3.5" />
+              Configure view
+            </Button>
+          </div>
+          {editorOpen && (
+            <div className="relation-graph-config-editor">
+              <div className="graph-view-editor">
+                <label>
+                  <span>ID</span>
+                  <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="investment-chain" />
+                </label>
+                <label>
+                  <span>Label</span>
+                  <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Investment chain" />
+                </label>
+                <label>
+                  <span>Steps</span>
+                  <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
+                </label>
+                <div className="graph-view-editor-help">One step per line: direction relation target_type. Direction is <code>in</code> or <code>out</code>.</div>
+                <div className="graph-view-editor-actions">
+                  <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
+                    <Save className="size-3.5" />
+                    Save
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !editableTemplate}>
+                    <X className="size-3.5" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <RelationGraphCanvas graph={graph} openObject={(id) => {
           setDialogOpen(false);
           open(id);

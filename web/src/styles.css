@@ -1633,7 +1633,7 @@ body {
   width: clamp(720px, calc(100vw - 44px), 1380px);
   height: clamp(560px, calc(100vh - 44px), 880px);
   max-width: none;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 0.75rem;
   border-color: hsl(var(--border) / 0.32);
   border-radius: 14px;
@@ -1730,6 +1730,60 @@ body {
 .relation-filter-reset {
   margin-left: auto;
   border-style: dashed;
+}
+
+.relation-graph-config-section {
+  display: grid;
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.relation-graph-config-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid hsl(var(--border) / 0.22);
+  background: hsl(var(--surface) / 0.28);
+  padding: 0.5rem 0.6rem;
+}
+
+.relation-graph-config-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.72rem;
+}
+
+.relation-graph-config-copy span {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.relation-graph-config-copy strong {
+  color: hsl(var(--foreground) / 0.82);
+  font-weight: 620;
+}
+
+.relation-graph-config-editor {
+  max-height: min(28vh, 260px);
+  overflow: auto;
+  border: 1px solid hsl(var(--border) / 0.24);
+  background: hsl(var(--surface) / 0.22);
+  padding: 0.75rem;
+}
+
+.relation-graph-config-editor .graph-view-editor {
+  grid-template-columns: minmax(140px, 0.7fr) minmax(180px, 1fr) minmax(240px, 1.25fr);
+  align-items: start;
+}
+
+.relation-graph-config-editor .graph-view-editor-help,
+.relation-graph-config-editor .graph-view-editor-actions {
+  grid-column: 3;
 }
 
 .relation-canvas-shell {
