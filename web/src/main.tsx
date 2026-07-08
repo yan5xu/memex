@@ -47,7 +47,7 @@ type GraphData = { nodes: Obj[]; edges: Link[] };
 type SchemaEdge = { source: string; target: string; relation: string; kind: string; required?: boolean };
 type Point = { x: number; y: number };
 type ObjectLinkCandidate = { id: string; title: string; type_id: string };
-type ViewID = "objects" | "detail" | "types" | "graph" | "health" | "vi";
+type ViewID = "objects" | "detail" | "types" | "graph" | "health" | "vi" | "graph-lab";
 type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string; section?: string; frame?: string; shot?: string };
 type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
 type AppState = {
@@ -198,7 +198,7 @@ function RootRoute() {
 }
 
 function normalizeView(view: unknown): ViewID {
-  return view === "detail" || view === "types" || view === "graph" || view === "health" || view === "vi" ? view : "objects";
+  return view === "detail" || view === "types" || view === "graph" || view === "health" || view === "vi" || view === "graph-lab" ? view : "objects";
 }
 
 function getVaultUIStates(): Record<string, VaultUIState> {
@@ -488,16 +488,17 @@ function App() {
     return nextRows;
   }
 
-  async function openObject(id: string, options: { syncURL?: boolean } = {}): Promise<ObjectLoadResult | null> {
+  async function openObject(id: string, options: { syncURL?: boolean; view?: ViewID } = {}): Promise<ObjectLoadResult | null> {
     const res = await cachedRun<ObjectLoadResult>(["object", "get", id]);
     if (res.data) {
       setActiveObject(res.data.object);
       setActiveBody(res.data.body ?? "");
       setLinks(res.data.links ?? []);
       setBacklinks(res.data.backlinks ?? []);
-      setViewState("detail");
+      const nextView = options.view ?? "detail";
+      setViewState(nextView);
       if (options.syncURL !== false) {
-        updateSearch({ view: "detail", object: id });
+        updateSearch({ view: nextView, object: id });
       }
       return res.data;
     }
@@ -585,7 +586,7 @@ function App() {
     view,
     type: activeType || undefined,
     filter: filter || undefined,
-    object: view === "detail" ? activeObject?.id : undefined,
+    object: view === "detail" || view === "graph-lab" ? activeObject?.id : undefined,
     graphMode,
     graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined
   }), [view, activeType, filter, activeObject?.id, graphMode, hiddenGraphTypes]);
@@ -603,11 +604,16 @@ function App() {
     if (serializeGraphHiddenTypes(nextHiddenGraphTypes) !== serializeGraphHiddenTypes(hiddenGraphTypes)) {
       setHiddenGraphTypesState(nextHiddenGraphTypes);
     }
-    if (nextView === "detail" && routeSearch.object && routeSearch.object !== activeObject?.id) {
-      void openObject(routeSearch.object, { syncURL: false });
+    if ((nextView === "detail" || nextView === "graph-lab") && routeSearch.object && routeSearch.object !== activeObject?.id) {
+      void openObject(routeSearch.object, { syncURL: false, view: nextView });
     }
     if (nextView === "graph" && graph.nodes.length === 0) {
       void openGraph({ syncURL: false });
+    }
+    if (nextView === "graph-lab" && graph.nodes.length === 0) {
+      void cachedRun<GraphData>(["graph", "export"]).then((res) => {
+        if (res.data) setGraph(res.data);
+      });
     }
   }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
 
@@ -789,11 +795,13 @@ function App() {
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter]);
 
   const viMode = view === "vi";
+  const graphLabMode = view === "graph-lab";
+  const standaloneMode = viMode || graphLabMode;
   const shotMode = viMode && viShot;
 
   return (
-    <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${viMode ? "vi-standalone-shell" : ""}`}>
-      {!viMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
+    <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${standaloneMode ? "vi-standalone-shell" : ""}`}>
+      {!standaloneMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
         <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">m</div>
           {!sidebarCollapsed && (
@@ -853,8 +861,8 @@ function App() {
         </div>
       </aside>}
 
-      <main className={`${viMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
-        {!viMode && <div className="console-topbar">
+      <main className={`${standaloneMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
+        {!standaloneMode && <div className="console-topbar">
           <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
@@ -1104,9 +1112,91 @@ function App() {
             setShot={(enabled) => updateSearch({ view: "vi", section: viSection, frame: enabled ? "shot" : undefined, shot: undefined }, { replace: true })}
           />
         )}
+        {view === "graph-lab" && (
+          <GraphLabPage
+            object={activeObject}
+            graph={graph}
+            links={links}
+            backlinks={backlinks}
+            openObject={(id) => {
+              void openObject(id, { syncURL: false, view: "graph-lab" });
+              updateSearch({ view: "graph-lab", object: id }, { replace: true });
+            }}
+          />
+        )}
         </div>
       </main>
     </div>
+  );
+}
+
+function GraphLabPage({ object, graph, links, backlinks, openObject }: { object: Obj | null; graph: GraphData; links: Link[]; backlinks: Link[]; openObject: (id: string) => void }) {
+  const templates = useMemo(() => relationQueryTemplatesFor(object?.type_id ?? ""), [object?.type_id]);
+  const [activeTemplateID, setActiveTemplateID] = useState(templates[0]?.id ?? "nearby");
+  useEffect(() => {
+    setActiveTemplateID(templates[0]?.id ?? "nearby");
+  }, [object?.id, templates]);
+  const activeTemplate = templates.find((template) => template.id === activeTemplateID) ?? templates[0] ?? relationNearbyTemplate();
+  const labGraph = useMemo(() => {
+    if (!object) return null;
+    if (activeTemplate.id === "nearby") return buildInspectorRelationGraph(object, links, backlinks, graph.nodes);
+    return buildInspectorQueryGraph(object, graph.nodes, graph.edges, activeTemplate, []);
+  }, [object, activeTemplate, links, backlinks, graph.nodes, graph.edges]);
+  const nodes = labGraph ? [labGraph.focus, ...labGraph.incoming, ...labGraph.outgoing] : [];
+  const columns = nodes.reduce<Record<string, Array<{ title: string; relation: string; top: number }>>>((acc, node) => {
+    const key = `${node.type}@${Math.round(node.x)}`;
+    acc[key] = [...(acc[key] ?? []), { title: node.title, relation: node.relation, top: Math.round(node.y) }];
+    return acc;
+  }, {});
+
+  return (
+    <section className="graph-lab-page">
+      <div className="graph-lab-header">
+        <div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Graph Query Lab</div>
+          <h1 className="font-serif text-3xl font-medium tracking-tight">{object?.title || object?.id || "No object loaded"}</h1>
+          <div className="mt-1 font-mono text-xs text-muted-foreground">{object?.id || "Use ?view=graph-lab&object=<id>"}</div>
+        </div>
+        <div className="graph-lab-actions">
+          {templates.map((template) => (
+            <button key={template.id} className={`relation-view-chip ${activeTemplate.id === template.id ? "is-active" : ""}`} onClick={() => setActiveTemplateID(template.id)}>
+              {template.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="graph-lab-layout">
+        <div className="graph-lab-canvas">
+          {labGraph ? <RelationGraphCanvas graph={labGraph} openObject={openObject} /> : <EmptyState title="No graph" description="Open a graph-lab URL with an object id." />}
+        </div>
+        <aside className="graph-lab-panel">
+          <Panel title="Run" icon={<Play className="size-4" />}>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <div><span className="text-foreground/80">View:</span> {activeTemplate.label}</div>
+              <div><span className="text-foreground/80">Nodes:</span> {nodes.length}</div>
+              <div><span className="text-foreground/80">Edges:</span> {labGraph?.edges.length ?? 0}</div>
+            </div>
+          </Panel>
+          <Panel title="Columns" icon={<Braces className="size-4" />}>
+            <div className="space-y-3">
+              {Object.entries(columns).map(([column, items]) => (
+                <div key={column}>
+                  <div className="mb-1 font-mono text-[11px] text-muted-foreground">{column}</div>
+                  <div className="space-y-1">
+                    {items.sort((a, b) => a.top - b.top).map((item) => (
+                      <div key={`${column}-${item.title}-${item.top}`} className="graph-lab-order-row">
+                        <span className="truncate">{item.title}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{item.top}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -3348,21 +3438,34 @@ function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Li
 
 function executeRelationQuery(rootID: string, graphEdges: Link[], objectByID: Map<string, Obj>, template: RelationQueryTemplate, hiddenTypes: string[]) {
   let frontier = new Set([rootID]);
+  let orderByID = new Map([[rootID, 0]]);
   const nodesByStep: InspectorGraphNode[][] = [];
   const resultEdges = new Map<string, InspectorGraphEdge>();
+  const sortedEdges = [...graphEdges].sort((a, b) => {
+    const aFrom = objectByID.get(a.from_id)?.title || a.from_id;
+    const bFrom = objectByID.get(b.from_id)?.title || b.from_id;
+    if (aFrom !== bFrom) return aFrom.localeCompare(bFrom);
+    const aTo = objectByID.get(a.to_id)?.title || a.to_id;
+    const bTo = objectByID.get(b.to_id)?.title || b.to_id;
+    return aTo.localeCompare(bTo);
+  });
   for (const step of template.steps) {
     const nextIDs = new Set<string>();
     const nodeMap = new Map<string, InspectorGraphNode>();
-    for (const edge of graphEdges) {
+    const nextOrderByID = new Map<string, number>();
+    for (const edge of sortedEdges) {
       if (edge.kind !== "field" || edge.relation !== step.relation) continue;
       const sourceMatches = step.direction === "out" ? frontier.has(edge.from_id) : frontier.has(edge.to_id);
       if (!sourceMatches) continue;
+      const sourceID = step.direction === "out" ? edge.from_id : edge.to_id;
       const targetID = step.direction === "out" ? edge.to_id : edge.from_id;
       const target = objectByID.get(targetID);
       const targetType = target?.type_id || inferObjectType(targetID);
       if (step.targetType && targetType !== step.targetType) continue;
       if (hiddenTypes.includes(targetType)) continue;
       nextIDs.add(targetID);
+      const sourceOrder = orderByID.get(sourceID) ?? 0;
+      nextOrderByID.set(targetID, Math.min(nextOrderByID.get(targetID) ?? Number.POSITIVE_INFINITY, sourceOrder));
       const existing = nodeMap.get(targetID);
       if (existing) {
         existing.count += 1;
@@ -3387,8 +3490,14 @@ function executeRelationQuery(rootID: string, graphEdges: Link[], objectByID: Ma
         resultEdges.set(edgeKey, toInspectorGraphEdge(edge));
       }
     }
-    nodesByStep.push([...nodeMap.values()].sort(compareInspectorNodes));
-    frontier = nextIDs;
+    const sortedNodes = [...nodeMap.values()].sort((a, b) => {
+      const orderDelta = (nextOrderByID.get(a.id) ?? 0) - (nextOrderByID.get(b.id) ?? 0);
+      return orderDelta || compareInspectorNodes(a, b);
+    });
+    sortedNodes.forEach((node, index) => nextOrderByID.set(node.id, index));
+    nodesByStep.push(sortedNodes);
+    frontier = new Set(sortedNodes.map((node) => node.id));
+    orderByID = nextOrderByID;
   }
   return { nodesByStep, edges: [...resultEdges.values()] };
 }

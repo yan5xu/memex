@@ -1345,6 +1345,57 @@ body {
   white-space: nowrap;
 }
 
+.graph-lab-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  padding: 1.15rem;
+}
+
+.graph-lab-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0.2rem 1rem;
+}
+
+.graph-lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.graph-lab-layout {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1rem;
+}
+
+.graph-lab-canvas {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.graph-lab-panel {
+  min-height: 0;
+  overflow: auto;
+}
+
+.graph-lab-order-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  border-top: 1px solid hsl(var(--border) / 0.22);
+  padding: 0.38rem 0;
+  font-size: 0.72rem;
+}
+
 .vi-control-example-active {
   border-left-color: hsl(var(--teal) / 0.62);
 }
