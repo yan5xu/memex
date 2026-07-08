@@ -577,6 +577,7 @@ function App() {
   const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed), [graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed]);
   const graphTypeControls = useMemo(() => buildGraphTypeControls(graph, graphMode, hiddenGraphTypes), [graph, graphMode, hiddenGraphTypes]);
   const objectLinkCandidates = useMemo(() => buildObjectLinkCandidates(activeObject, activeType, rows, graph.nodes), [activeObject, activeType, rows, graph.nodes]);
+  const objectTitleByID = useMemo(() => buildObjectTitleByID(activeObject, rows, graph.nodes), [activeObject, rows, graph.nodes]);
   const selectedGraphObject = useMemo(() => graph.nodes.find((n) => n.id === selectedGraphNode) ?? null, [graph.nodes, selectedGraphNode]);
   const graphLayoutKey = useMemo(() => `${graphMode}:${serializeGraphHiddenTypes(hiddenGraphTypes)}:${graphLayoutSeed}`, [graphMode, hiddenGraphTypes, graphLayoutSeed]);
   const currentVaultState = useMemo<VaultUIState>(() => ({
@@ -608,6 +609,13 @@ function App() {
       void openGraph({ syncURL: false });
     }
   }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
+
+  useEffect(() => {
+    if (view !== "detail" || graph.nodes.length > 0 || !markdownHasWikiLinks(activeBody)) return;
+    void cachedRun<GraphData>(["graph", "export"]).then((res) => {
+      if (res.data) setGraph(res.data);
+    });
+  }, [view, activeBody, graph.nodes.length]);
 
   useEffect(() => {
     if (selectedGraphNode && !graphView.nodes.some((node) => node.id === selectedGraphNode)) {
@@ -898,6 +906,7 @@ function App() {
                   body={activeBody}
                   vault={vault}
                   candidates={objectLinkCandidates}
+                  objectTitleByID={objectTitleByID}
                   openObject={(id) => void openObject(id)}
                   saveBody={saveObjectBody}
                   onBeginEdit={() => setInspectorOpen(false)}
@@ -917,7 +926,7 @@ function App() {
 
             <div className="object-export-host" aria-hidden="true">
               <article ref={objectExportRef} className="object-export-page">
-                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} openObject={() => undefined} imageLoading="eager" />
+                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} objectTitleByID={objectTitleByID} openObject={() => undefined} imageLoading="eager" />
               </article>
             </div>
 
@@ -1412,10 +1421,11 @@ function VIControls() {
 
 function VIObject() {
   const object = viObject();
+  const titleByID = viObjectTitleByID();
   return (
     <div className="vi-grid">
       <VIBlock title="Object Header">
-        <ObjectPageContent object={object} body={"# Lightsprint\n\nA focused product profile with [[source.yc-launch.lightsprint]]."} vault="" openObject={() => undefined} />
+        <ObjectPageContent object={object} body={"# Lightsprint\n\nA focused product profile with [[source.yc-launch.lightsprint]]."} vault="" objectTitleByID={titleByID} openObject={() => undefined} />
       </VIBlock>
       <VIBlock title="Inspector Blocks">
         <Panel title="Fields" icon={<Braces className="size-4" />}>
@@ -1435,6 +1445,7 @@ function VIObject() {
 
 function VIBodyEditor() {
   const object = viObject();
+  const titleByID = viObjectTitleByID();
   return (
     <div className="vi-wide">
       <ObjectBodyWorkspace
@@ -1442,6 +1453,7 @@ function VIBodyEditor() {
         body={viMarkdownBody()}
         vault=""
         candidates={[{ id: "source.yc-launch.lightsprint", title: "YC Launch", type_id: "source.item" }, { id: "concept.agentic-sdlc", title: "Agentic SDLC", type_id: "concept" }]}
+        objectTitleByID={titleByID}
         openObject={() => undefined}
         saveBody={async () => null}
         initialEditing
@@ -1453,7 +1465,7 @@ function VIBodyEditor() {
 function VIMarkdown() {
   return (
     <div className="vi-reader markdown">
-      <MarkdownBody body={viMarkdownBody()} object={viObject()} vault="" openObject={() => undefined} />
+      <MarkdownBody body={viMarkdownBody()} object={viObject()} vault="" objectTitleByID={viObjectTitleByID()} openObject={() => undefined} />
     </div>
   );
 }
@@ -1550,6 +1562,14 @@ function viObject(): Obj {
   };
 }
 
+function viObjectTitleByID() {
+  return {
+    "company.lightsprint": "Lightsprint",
+    "source.yc-launch.lightsprint": "YC Launch",
+    "concept.agentic-sdlc": "Agentic SDLC"
+  };
+}
+
 function viMarkdownBody() {
   return `# Lightsprint
 
@@ -1602,6 +1622,25 @@ function buildObjectLinkCandidates(activeObject: Obj | null, activeType: string,
   return out.sort((a, b) => `${a.type_id}:${a.title || a.id}`.localeCompare(`${b.type_id}:${b.title || b.id}`));
 }
 
+function buildObjectTitleByID(activeObject: Obj | null, rows: Record<string, unknown>[], graphNodes: Obj[]) {
+  const titles: Record<string, string> = {};
+  const add = (id: string, title: unknown) => {
+    if (!id || titles[id]) return;
+    const cleanTitle = typeof title === "string" && title.trim() ? title.trim() : id;
+    titles[id] = cleanTitle;
+  };
+  if (activeObject) add(activeObject.id, activeObject.title);
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+    if (!id) continue;
+    add(id, row.title || row.name || id);
+  }
+  for (const node of graphNodes) {
+    add(node.id, node.title || node.id);
+  }
+  return titles;
+}
+
 function objectBodyForDisplay(object: Obj, body: string) {
   return body || `# ${object.title || object.id}\n\nBody file: \`${object.body_path}\``;
 }
@@ -1611,6 +1650,7 @@ function ObjectBodyWorkspace({
   body,
   vault,
   candidates,
+  objectTitleByID,
   openObject,
   saveBody,
   onBeginEdit,
@@ -1621,6 +1661,7 @@ function ObjectBodyWorkspace({
   body: string;
   vault: string;
   candidates: ObjectLinkCandidate[];
+  objectTitleByID?: Record<string, string>;
   openObject: (id: string) => void;
   saveBody: (id: string, markdown: string) => Promise<ObjectLoadResult | null>;
   onBeginEdit?: () => void;
@@ -1818,14 +1859,14 @@ function ObjectBodyWorkspace({
             )}
             {viewMode !== "write" && (
               <div className="body-preview-pane markdown">
-                <MarkdownBody body={draft || objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} />
+                <MarkdownBody body={draft || objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
               </div>
             )}
           </div>
         </div>
       ) : (
         <div className="markdown body-reader-surface">
-          <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} />
+          <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
         </div>
       )}
     </div>
@@ -1844,12 +1885,14 @@ function ObjectPageContent({
   object,
   body,
   vault,
+  objectTitleByID,
   openObject,
   imageLoading = "lazy"
 }: {
   object: Obj;
   body: string;
   vault: string;
+  objectTitleByID?: Record<string, string>;
   openObject: (id: string) => void;
   imageLoading?: "lazy" | "eager";
 }) {
@@ -1864,7 +1907,7 @@ function ObjectPageContent({
         <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
       </div>
       <div className="markdown">
-        <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} imageLoading={imageLoading} />
+        <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} imageLoading={imageLoading} />
       </div>
     </>
   );
@@ -1874,16 +1917,18 @@ function MarkdownBody({
   body,
   object,
   vault,
+  objectTitleByID = {},
   openObject,
   imageLoading = "lazy"
 }: {
   body: string;
   object: Obj | null;
   vault: string;
+  objectTitleByID?: Record<string, string>;
   openObject: (id: string) => void;
   imageLoading?: "lazy" | "eager";
 }) {
-  const rendered = useMemo(() => normalizeMarkdownBody(body), [body]);
+  const rendered = useMemo(() => normalizeMarkdownBody(body, objectTitleByID), [body, objectTitleByID]);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -2034,8 +2079,12 @@ function stripAlertMarker(children: React.ReactNode) {
   return strip(children);
 }
 
-function normalizeMarkdownBody(markdown: string) {
-  return transformMarkdownOutsideFences(markdown, (line) => normalizeWikiLinks(normalizeObsidianImages(line)));
+function normalizeMarkdownBody(markdown: string, objectTitleByID: Record<string, string> = {}) {
+  return transformMarkdownOutsideFences(markdown, (line) => normalizeWikiLinks(normalizeObsidianImages(line), objectTitleByID));
+}
+
+function markdownHasWikiLinks(markdown: string) {
+  return /\[\[[^\]\n]+\]\]/.test(markdown);
 }
 
 function transformMarkdownOutsideFences(markdown: string, transform: (line: string) => string) {
@@ -2058,11 +2107,11 @@ function normalizeObsidianImages(line: string) {
   });
 }
 
-function normalizeWikiLinks(line: string) {
+function normalizeWikiLinks(line: string, objectTitleByID: Record<string, string> = {}) {
   return line.replace(/\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
     const [target, label] = raw.split("|").map((part) => part.trim());
     if (!target) return "";
-    const title = label || target;
+    const title = label || objectTitleByID[target] || target;
     return `[${escapeMarkdownAlt(title)}](#mbase-object:${encodeURIComponent(target)})`;
   });
 }
