@@ -733,6 +733,10 @@ body {
   min-height: 100%;
 }
 
+.body-object-column:has(.body-editor-shell) {
+  max-width: none;
+}
+
 .body-workspace-header {
   display: flex;
   align-items: flex-start;

@@ -842,7 +842,7 @@ function App() {
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
             <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "object-reader-with-inspector" : ""}`}>
-              <div className="mx-auto max-w-[760px]">
+              <div className="body-object-column mx-auto max-w-[760px]">
                 <ObjectBodyWorkspace
                   object={activeObject}
                   body={activeBody}
