@@ -129,6 +129,184 @@ func TestUpsertObjectWithBodyCreatesAndUpdates(t *testing.T) {
 	}
 }
 
+func TestObjectTitleDerivesFromNameForCreateUpsertAndSet(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "name", domain.FieldText, true, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "status", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	obj, err := s.CreateObjectWithBody("company", "company.acme", "", map[string]string{"name": "Acme"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.Title != "Acme" || obj.Fields["title"] != "Acme" {
+		t.Fatalf("expected title derived from name and synced to title field, got %#v", obj)
+	}
+
+	if _, err := s.DB.Exec(`UPDATE objects SET title = '' WHERE id = 'company.acme'`); err != nil {
+		t.Fatal(err)
+	}
+	obj, created, err := s.UpsertObjectWithBody("company", "company.acme", "", map[string]string{"status": "active"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || obj.Title != "Acme" || obj.Fields["title"] != "Acme" {
+		t.Fatalf("expected upsert to backfill empty object title from existing name, created=%v obj=%#v", created, obj)
+	}
+
+	if _, err := s.DB.Exec(`UPDATE objects SET title = '' WHERE id = 'company.acme'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetField("company.acme", "name", "Acme Labs"); err != nil {
+		t.Fatal(err)
+	}
+	obj, err = s.GetObject("company.acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.Title != "Acme Labs" || obj.Fields["title"] != "Acme Labs" {
+		t.Fatalf("expected set name to fill empty object title and title field, got %#v", obj)
+	}
+}
+
+func TestObjectTitleWorksWithoutTitleField(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("batch"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("batch", "code", domain.FieldText, true, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	obj, err := s.CreateObjectWithBody("batch", "batch.yc-p26", "YC P26", map[string]string{"code": "P26"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.Title != "YC P26" {
+		t.Fatalf("expected core title without title schema field, got %#v", obj)
+	}
+	if err := s.SetField("batch.yc-p26", "title", "YC P26 Updated"); err != nil {
+		t.Fatal(err)
+	}
+	obj, err = s.GetObject("batch.yc-p26")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.Title != "YC P26 Updated" {
+		t.Fatalf("expected object set title to update core title without schema field, got %#v", obj)
+	}
+	obj, created, err := s.UpsertObjectWithBody("batch", "batch.yc-p26", "YC P26 Final", map[string]string{"code": "P26"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || obj.Title != "YC P26 Final" {
+		t.Fatalf("expected upsert title to update core title without schema field, created=%v obj=%#v", created, obj)
+	}
+}
+
+func TestQueryTitleUsesObjectTitleOverFieldTitle(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObjectWithBody("company", "company.acme", "Object Title", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	fd, err := s.GetField("company", "title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.DB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.setValueTx(tx, "company.acme", fd, "Field Title"); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Query("company", QueryOptions{Select: []string{"title"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Count != 1 || result.Rows[0]["title"] != "Object Title" {
+		t.Fatalf("expected query title to use object title, got %#v", result.Rows)
+	}
+}
+
+func TestBackfillObjectTitlesSyncsObjectAndFieldTitle(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("investor"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("investor", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("investor", "name", domain.FieldText, true, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObjectWithBody("investor", "investor.lightspeed", "Lightspeed", map[string]string{"name": "Lightspeed"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`UPDATE objects SET title = '' WHERE id = 'investor.lightspeed'`); err != nil {
+		t.Fatal(err)
+	}
+	fd, err := s.GetField("investor", "title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`DELETE FROM field_values WHERE object_id = ? AND field_id = ?`, "investor.lightspeed", fd.ID); err != nil {
+		t.Fatal(err)
+	}
+	objectsUpdated, fieldsSynced, err := s.BackfillObjectTitles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if objectsUpdated != 1 || fieldsSynced != 1 {
+		t.Fatalf("expected one object and field title update, got objects=%d fields=%d", objectsUpdated, fieldsSynced)
+	}
+	obj, err := s.GetObject("investor.lightspeed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.Title != "Lightspeed" || obj.Fields["title"] != "Lightspeed" {
+		t.Fatalf("expected backfilled title, got %#v", obj)
+	}
+}
+
 func TestFilteredLinksMatchesTypeKindRelationAndText(t *testing.T) {
 	s, err := Init(t.TempDir())
 	if err != nil {

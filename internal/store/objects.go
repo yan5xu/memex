@@ -22,6 +22,7 @@ func (s *Store) UpsertObjectWithBody(typeID, id, title string, fields map[string
 	if fields == nil {
 		fields = make(map[string]string)
 	}
+	fields = cloneStringMap(fields)
 	if !s.objectExists(id) {
 		created, createErr := s.CreateObjectWithBody(typeID, id, title, fields, body)
 		return created, true, createErr
@@ -33,8 +34,14 @@ func (s *Store) UpsertObjectWithBody(typeID, id, title string, fields map[string
 	if obj.TypeID != typeID {
 		return nil, false, fmt.Errorf("object %q already exists as type %q, not %q", id, obj.TypeID, typeID)
 	}
-	if title == "" {
-		title = fields["title"]
+	nextTitle := requestedObjectTitle(title, fields)
+	if nextTitle == "" && strings.TrimSpace(obj.Title) == "" {
+		nextTitle = deriveObjectTitle(id, "", mergeObjectFieldStrings(obj.Fields, fields))
+	}
+	if nextTitle != "" && s.hasField(typeID, "title") {
+		fields["title"] = nextTitle
+	} else if !s.hasField(typeID, "title") {
+		delete(fields, "title")
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -44,8 +51,8 @@ func (s *Store) UpsertObjectWithBody(typeID, id, title string, fields map[string
 	if err := s.setFieldsTx(tx, id, typeID, fields); err != nil {
 		return nil, false, err
 	}
-	if title != "" {
-		if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, title, id); err != nil {
+	if nextTitle != "" {
+		if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, nextTitle, id); err != nil {
 			return nil, false, err
 		}
 	} else {
@@ -74,14 +81,16 @@ func (s *Store) CreateObjectWithBody(typeID, id, title string, fields map[string
 	if fields == nil {
 		fields = make(map[string]string)
 	}
+	fields = cloneStringMap(fields)
 	if _, err := s.GetType(typeID); err != nil {
 		return nil, err
 	}
 	if id == "" {
 		return nil, fmt.Errorf("object id is required")
 	}
+	title = deriveObjectTitle(id, title, fields)
 	if title == "" {
-		title = fields["title"]
+		return nil, fmt.Errorf("object title is required")
 	}
 	bodyPath := filepath.Join("bodies", id+".md")
 	absBody := filepath.Join(s.Root, bodyPath)
@@ -106,8 +115,10 @@ func (s *Store) CreateObjectWithBody(typeID, id, title string, fields map[string
 	if _, err := tx.Exec(`INSERT INTO objects(id, type_id, title, body_path, body_hash) VALUES(?, ?, ?, ?, ?)`, id, typeID, title, bodyPath, hash); err != nil {
 		return nil, err
 	}
-	if title != "" {
+	if s.hasField(typeID, "title") {
 		fields["title"] = title
+	} else {
+		delete(fields, "title")
 	}
 	if err := s.setFieldsTx(tx, id, typeID, fields); err != nil {
 		return nil, err
@@ -193,22 +204,39 @@ func (s *Store) SetField(objectID, name, value string) error {
 	if err != nil {
 		return err
 	}
+	cleanValue := strings.TrimSpace(value)
+	if name == "title" && cleanValue == "" {
+		return fmt.Errorf("object title is required")
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := s.setFieldsTx(tx, objectID, obj.TypeID, map[string]string{name: value}); err != nil {
+	fields := map[string]string{name: value}
+	if name == "title" && !s.hasField(obj.TypeID, "title") {
+		fields = nil
+	}
+	if err := s.setFieldsTx(tx, objectID, obj.TypeID, fields); err != nil {
 		return err
 	}
+	nextTitle := ""
 	if name == "title" {
-		if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, value, objectID); err != nil {
+		nextTitle = cleanValue
+	} else if strings.TrimSpace(obj.Title) == "" && titleCandidateField(name) {
+		nextTitle = deriveObjectTitle(objectID, "", map[string]string{name: value})
+		if nextTitle != "" {
+			if err := s.setTitleFieldIfPresentTx(tx, objectID, obj.TypeID, nextTitle); err != nil {
+				return err
+			}
+		}
+	}
+	if nextTitle != "" {
+		if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, nextTitle, objectID); err != nil {
 			return err
 		}
-	} else {
-		if _, err := tx.Exec(`UPDATE objects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, objectID); err != nil {
-			return err
-		}
+	} else if _, err := tx.Exec(`UPDATE objects SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`, objectID); err != nil {
+		return err
 	}
 	if _, err := tx.Exec(`INSERT INTO ops(op, object_id, payload_json) VALUES('object.set', ?, ?)`, objectID, mustJSON(map[string]any{"field": name, "value": value})); err != nil {
 		return err
@@ -217,6 +245,48 @@ func (s *Store) SetField(objectID, name, value string) error {
 		return err
 	}
 	return s.RevalidateObject(objectID)
+}
+
+func (s *Store) BackfillObjectTitles() (int, int, error) {
+	objects, err := s.ListObjects("", 100000)
+	if err != nil {
+		return 0, 0, err
+	}
+	objectsUpdated := 0
+	fieldsSynced := 0
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	for _, obj := range objects {
+		title := strings.TrimSpace(obj.Title)
+		if title == "" {
+			title = deriveObjectTitle(obj.ID, "", objectFieldStrings(obj.Fields))
+			if _, err := tx.Exec(`UPDATE objects SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, title, obj.ID); err != nil {
+				return 0, 0, err
+			}
+			objectsUpdated++
+		}
+		if title != "" && fieldString(obj.Fields["title"]) == "" {
+			changed, err := s.setTitleFieldIfPresentChangedTx(tx, obj.ID, obj.TypeID, title)
+			if err != nil {
+				return 0, 0, err
+			}
+			if changed {
+				fieldsSynced++
+			}
+		}
+	}
+	if objectsUpdated > 0 || fieldsSynced > 0 {
+		if _, err := tx.Exec(`INSERT INTO ops(op, object_id, payload_json) VALUES('object.title_backfill', '', ?)`, mustJSON(map[string]any{"objects_updated": objectsUpdated, "fields_synced": fieldsSynced})); err != nil {
+			return 0, 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return objectsUpdated, fieldsSynced, nil
 }
 
 func (s *Store) LinkObject(objectID, fieldName, targetID string) error {
@@ -356,6 +426,92 @@ func (s *Store) setFieldsTx(tx *sql.Tx, objectID, typeID string, fields map[stri
 		}
 	}
 	return nil
+}
+
+func (s *Store) hasField(typeID, name string) bool {
+	_, err := s.GetField(typeID, name)
+	return err == nil
+}
+
+func (s *Store) setTitleFieldIfPresentTx(tx *sql.Tx, objectID, typeID, title string) error {
+	_, err := s.setTitleFieldIfPresentChangedTx(tx, objectID, typeID, title)
+	return err
+}
+
+func (s *Store) setTitleFieldIfPresentChangedTx(tx *sql.Tx, objectID, typeID, title string) (bool, error) {
+	fd, err := s.GetField(typeID, "title")
+	if err != nil {
+		return false, nil
+	}
+	if err := s.setValueTx(tx, objectID, fd, title); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func requestedObjectTitle(title string, fields map[string]string) string {
+	if title = strings.TrimSpace(title); title != "" {
+		return title
+	}
+	return strings.TrimSpace(fields["title"])
+}
+
+func deriveObjectTitle(id, title string, fields map[string]string) string {
+	if title = strings.TrimSpace(title); title != "" {
+		return title
+	}
+	for _, name := range []string{"title", "name", "label", "url", "handle"} {
+		if value := strings.TrimSpace(fields[name]); value != "" {
+			return value
+		}
+	}
+	return strings.TrimSpace(id)
+}
+
+func titleCandidateField(name string) bool {
+	switch name {
+	case "name", "label", "url", "handle":
+		return true
+	default:
+		return false
+	}
+}
+
+func mergeObjectFieldStrings(existing map[string]any, updates map[string]string) map[string]string {
+	out := objectFieldStrings(existing)
+	for k, v := range updates {
+		out[k] = v
+	}
+	return out
+}
+
+func objectFieldStrings(fields map[string]any) map[string]string {
+	out := make(map[string]string, len(fields))
+	for k, v := range fields {
+		if text := fieldString(v); text != "" {
+			out[k] = text
+		}
+	}
+	return out
+}
+
+func fieldString(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
 }
 
 func (s *Store) setValueTx(tx *sql.Tx, objectID string, fd *domain.FieldDef, value any) error {

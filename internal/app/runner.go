@@ -97,7 +97,16 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 			return OK(map[string]any{"issues": issues, "count": len(issues)})
 		})
 	case "doctor":
+		flags := parseFlags(argv[1:])
 		return r.withStore(func(s *store.Store) Result {
+			titleFix := map[string]any{"objects_updated": 0, "fields_synced": 0}
+			if flags.Bool("fix-titles") {
+				objectsUpdated, fieldsSynced, err := s.BackfillObjectTitles()
+				if err != nil {
+					return fromErr(err)
+				}
+				titleFix = map[string]any{"objects_updated": objectsUpdated, "fields_synced": fieldsSynced}
+			}
 			if err := s.RefreshAllBodies(); err != nil {
 				return fromErr(err)
 			}
@@ -108,7 +117,7 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 			if err != nil {
 				return fromErr(err)
 			}
-			return OK(map[string]any{"issues": issues, "count": len(issues)})
+			return OK(map[string]any{"issues": issues, "count": len(issues), "title_fix": titleFix})
 		})
 	default:
 		return Fail("unknown_command", "unknown command: "+argv[0])
@@ -1116,7 +1125,7 @@ func usage() string {
   asset import <file> [--name <filename>]
   refresh
   issues
-  doctor`
+  doctor [--fix-titles]`
 }
 
 func (f Flags) Index(name string, i int) string {

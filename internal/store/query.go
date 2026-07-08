@@ -37,10 +37,13 @@ func (s *Store) Query(typeID string, opts QueryOptions) (*QueryResult, error) {
 	}
 	var rows []map[string]any
 	for _, obj := range objects {
-		row := map[string]any{"id": obj.ID, "type": obj.TypeID, "title": obj.Title}
+		row := map[string]any{"id": obj.ID, "type": obj.TypeID}
 		for k, v := range obj.Fields {
-			row[k] = v
+			if k != "title" {
+				row[k] = v
+			}
 		}
+		row["title"] = obj.Title
 		if matchWhere(row, opts.Where) {
 			rows = append(rows, row)
 		}
