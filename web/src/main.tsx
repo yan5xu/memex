@@ -22,7 +22,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, use
 import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Save, Search, SplitSquareHorizontal, X } from "lucide-react";
+import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Save, Search, SplitSquareHorizontal, X } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
@@ -46,8 +46,8 @@ type GraphData = { nodes: Obj[]; edges: Link[] };
 type SchemaEdge = { source: string; target: string; relation: string; kind: string; required?: boolean };
 type Point = { x: number; y: number };
 type ObjectLinkCandidate = { id: string; title: string; type_id: string };
-type ViewID = "objects" | "detail" | "types" | "graph" | "health";
-type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
+type ViewID = "objects" | "detail" | "types" | "graph" | "health" | "vi";
+type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string; section?: string; frame?: string; shot?: string };
 type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
 type AppState = {
   view: string;
@@ -134,6 +134,27 @@ const markdownSanitizeSchema = {
   }
 };
 
+const viSections = [
+  "foundations",
+  "controls",
+  "object",
+  "body-editor",
+  "markdown",
+  "data",
+  "graph",
+  "states"
+] as const;
+
+type VISectionID = typeof viSections[number];
+
+function normalizeVISection(section: unknown): VISectionID {
+  return viSections.includes(section as VISectionID) ? section as VISectionID : "foundations";
+}
+
+function viewIsShot(search: RouteSearch) {
+  return search.frame === "shot" || search.shot === "1" || search.shot === "true";
+}
+
 const rootRoute = createRootRoute({
   component: RootRoute
 });
@@ -148,7 +169,10 @@ const indexRoute = createRoute({
     filter: typeof search.filter === "string" ? search.filter : undefined,
     object: typeof search.object === "string" ? search.object : undefined,
     graphMode: typeof search.graphMode === "string" ? search.graphMode : undefined,
-    graphHiddenTypes: typeof search.graphHiddenTypes === "string" ? search.graphHiddenTypes : undefined
+    graphHiddenTypes: typeof search.graphHiddenTypes === "string" ? search.graphHiddenTypes : undefined,
+    section: typeof search.section === "string" ? search.section : undefined,
+    frame: typeof search.frame === "string" ? search.frame : undefined,
+    shot: typeof search.shot === "string" ? search.shot : undefined
   }),
   component: App
 });
@@ -173,7 +197,7 @@ function RootRoute() {
 }
 
 function normalizeView(view: unknown): ViewID {
-  return view === "detail" || view === "types" || view === "graph" || view === "health" ? view : "objects";
+  return view === "detail" || view === "types" || view === "graph" || view === "health" || view === "vi" ? view : "objects";
 }
 
 function getVaultUIStates(): Record<string, VaultUIState> {
@@ -303,6 +327,8 @@ function App() {
   const queryClient = useQueryClient();
   const objectExportRef = useRef<HTMLDivElement | null>(null);
   const initialVault = routeSearch.vault?.trim() || getCurrentVault();
+  const viSection = normalizeVISection(routeSearch.section);
+  const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
   const [types, setTypes] = useState<TypeDef[]>([]);
@@ -329,10 +355,31 @@ function App() {
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
-      search: (prev) => ({
-        ...prev,
-        ...next
-      }),
+      search: (prev) => {
+        const current = prev as Partial<RouteSearch>;
+        const nextView = next.view ?? current.view ?? routeSearch.view ?? view;
+        if (nextView === "vi") {
+          const hasSection = Object.prototype.hasOwnProperty.call(next, "section");
+          const hasFrame = Object.prototype.hasOwnProperty.call(next, "frame");
+          const hasShot = Object.prototype.hasOwnProperty.call(next, "shot");
+          return {
+            view: "vi",
+            section: hasSection ? next.section : current.section ?? routeSearch.section,
+            frame: hasFrame ? next.frame : current.frame ?? routeSearch.frame,
+            shot: hasShot ? next.shot : current.shot ?? routeSearch.shot
+          };
+        }
+        const merged = {
+          ...current,
+          ...next
+        };
+        delete merged.section;
+        delete merged.frame;
+        delete merged.shot;
+        return {
+          ...merged
+        };
+      },
       replace: options.replace ?? false
     });
   }
@@ -731,9 +778,11 @@ function App() {
     };
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter]);
 
+  const shotMode = view === "vi" && viShot;
+
   return (
-    <div className="app-shell flex h-screen w-screen overflow-hidden text-foreground">
-      <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
+    <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${shotMode ? "vi-shot-shell" : ""}`}>
+      {!shotMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
         <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">m</div>
           {!sidebarCollapsed && (
@@ -793,10 +842,10 @@ function App() {
             {!sidebarCollapsed && <span>Collapse sidebar</span>}
           </button>
         </div>
-      </aside>
+      </aside>}
 
-      <main className="console-inset my-3 mr-3 min-w-0 flex-1 overflow-hidden">
-        <div className="console-topbar">
+      <main className={`${shotMode ? "vi-shot-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
+        {!shotMode && <div className="console-topbar">
           <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
@@ -804,7 +853,7 @@ function App() {
               {vaultOK ? "vault ready" : "vault missing"}
             </span>
           </div>
-        </div>
+        </div>}
         <div className="mb-scroll min-h-0 flex-1 overflow-auto">
         {view === "objects" && (
           <section className="mx-auto flex h-full w-full max-w-[1100px] flex-col px-7 py-6">
@@ -1034,10 +1083,341 @@ function App() {
             </div>
           </section>
         )}
+
+        {view === "vi" && (
+          <VisualInventoryPage
+            section={viSection}
+            shot={viShot}
+            setSection={(section) => updateSearch({ view: "vi", section }, { replace: true })}
+            setShot={(enabled) => updateSearch({ view: "vi", section: viSection, frame: enabled ? "shot" : undefined, shot: undefined }, { replace: true })}
+          />
+        )}
         </div>
       </main>
     </div>
   );
+}
+
+function VisualInventoryPage({ section, shot, setSection, setShot }: { section: VISectionID; shot: boolean; setSection: (section: VISectionID) => void; setShot: (enabled: boolean) => void }) {
+  return (
+    <section className={`vi-page ${shot ? "vi-page-shot" : ""}`}>
+      <div className="vi-canvas">
+        <div className="vi-header">
+          <div>
+            <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Visual Inventory</div>
+            <h1 className="font-serif text-3xl font-medium tracking-tight">{viSectionTitle(section)}</h1>
+          </div>
+          {!shot && (
+            <Button variant="secondary" className="h-8 rounded-md" onClick={() => setShot(true)}>
+              <Download className="size-3.5" />
+              Shot mode
+            </Button>
+          )}
+          {shot && (
+            <Button variant="secondary" className="h-8 rounded-md" onClick={() => setShot(false)}>
+              <PanelLeftOpen className="size-3.5" />
+              Full UI
+            </Button>
+          )}
+        </div>
+        <div className="vi-layout">
+          {!shot && (
+            <aside className="vi-section-nav">
+              {viSections.map((item) => (
+                <button key={item} className={`vi-section-button ${item === section ? "vi-section-button-active" : ""}`} onClick={() => setSection(item)}>
+                  {viSectionTitle(item)}
+                </button>
+              ))}
+            </aside>
+          )}
+          <div className="vi-section-stage">
+            {section === "foundations" && <VIFoundations />}
+            {section === "controls" && <VIControls />}
+            {section === "object" && <VIObject />}
+            {section === "body-editor" && <VIBodyEditor />}
+            {section === "markdown" && <VIMarkdown />}
+            {section === "data" && <VIData />}
+            {section === "graph" && <VIGraph />}
+            {section === "states" && <VIStates />}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function viSectionTitle(section: VISectionID) {
+  return section.split("-").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
+}
+
+function VIBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="vi-block">
+      <div className="vi-block-title">{title}</div>
+      <div className="vi-block-body">{children}</div>
+    </section>
+  );
+}
+
+function VIFoundations() {
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Palette">
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            ["foreground", "hsl(var(--foreground))"],
+            ["earth", "hsl(var(--earth))"],
+            ["moss", "hsl(var(--moss))"],
+            ["clay", "hsl(var(--clay))"],
+            ["card", "hsl(var(--card))"],
+            ["surface", "hsl(var(--surface))"],
+            ["muted", "hsl(var(--muted))"],
+            ["border", "hsl(var(--border))"]
+          ].map(([name, color]) => (
+            <div key={name} className="space-y-2">
+              <div className="h-10 rounded-md border border-border/40" style={{ background: color }} />
+              <div className="font-mono text-[11px] text-muted-foreground">{name}</div>
+            </div>
+          ))}
+        </div>
+      </VIBlock>
+      <VIBlock title="Typography">
+        <div className="space-y-3">
+          <h2 className="font-serif text-4xl font-medium tracking-tight">Editorial title</h2>
+          <div className="text-sm text-foreground/82">Interface body text keeps the product quiet, readable, and useful for repeated work.</div>
+          <code className="font-mono text-xs text-muted-foreground">note.lightsprint.product-takeaway</code>
+        </div>
+      </VIBlock>
+      <VIBlock title="Badges">
+        <div className="flex flex-wrap gap-2">
+          <Badge>company</Badge>
+          <Badge>source.item</Badge>
+          <Badge>resolved</Badge>
+          <Badge>active</Badge>
+        </div>
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIControls() {
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Buttons">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="rounded-md"><Save className="size-4" />Save</Button>
+          <Button variant="secondary" className="rounded-md"><Download className="size-4" />Export</Button>
+          <Button variant="ghost" className="rounded-md"><Link2 className="size-4" />Link</Button>
+          <Button className="rounded-md" disabled><Loader2 className="size-4 animate-spin" />Saving</Button>
+        </div>
+      </VIBlock>
+      <VIBlock title="Inputs">
+        <div className="grid max-w-xl gap-3">
+          <Input placeholder="where, e.g. status=active" className="h-9 rounded-md bg-background/68 font-mono text-xs" />
+          <Select defaultValue="split">
+            <SelectTrigger className="h-9 w-40 rounded-md"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="write">Write</SelectItem>
+              <SelectItem value="split">Split</SelectItem>
+              <SelectItem value="preview">Preview</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </VIBlock>
+      <VIBlock title="Command Popover">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="secondary" className="rounded-md"><Search className="size-4" />Open command</Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 rounded-2xl p-0">
+            <Command>
+              <CommandInput placeholder="Search objects..." />
+              <CommandList>
+                <CommandGroup heading="Objects">
+                  <CommandItem>Lightsprint <span className="ml-auto font-mono text-[10px] text-muted-foreground">company</span></CommandItem>
+                  <CommandItem>YC Launch <span className="ml-auto font-mono text-[10px] text-muted-foreground">source.item</span></CommandItem>
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </VIBlock>
+      <VIBlock title="Tabs">
+        <Tabs defaultValue="table" className="w-full max-w-md">
+          <TabsList className="rounded-lg bg-muted/35">
+            <TabsTrigger value="table" className="rounded-md">Table</TabsTrigger>
+            <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
+          </TabsList>
+          <TabsContent value="table" className="mt-3 text-sm text-muted-foreground">Table view state.</TabsContent>
+          <TabsContent value="api" className="mt-3 text-sm text-muted-foreground">API view state.</TabsContent>
+        </Tabs>
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIObject() {
+  const object = viObject();
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Object Header">
+        <ObjectPageContent object={object} body={"# Lightsprint\n\nA focused product profile with [[source.yc-launch.lightsprint]]."} vault="" openObject={() => undefined} />
+      </VIBlock>
+      <VIBlock title="Inspector Blocks">
+        <Panel title="Fields" icon={<Braces className="size-4" />}>
+          <KV k="status" v={<Badge>active</Badge>} />
+          <KV k="tags" v={<span className="flex flex-wrap gap-1"><Badge>agentic-sdlc</Badge><Badge>demo-led</Badge></span>} />
+        </Panel>
+        <Panel title="Body Links" icon={<GitBranch className="size-4" />}>
+          <LinkRow link={{ from_id: "company.lightsprint", to_id: "source.yc-launch.lightsprint", kind: "body", relation: "mentions", text: "YC Launch", resolved: true }} open={() => undefined} />
+        </Panel>
+      </VIBlock>
+      <VIBlock title="Object ID">
+        <ObjectIDCell id="social.post.wechat.yan5xu.0D6fd1etd-launch" activeType="social.post" open={() => undefined} />
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIBodyEditor() {
+  const object = viObject();
+  return (
+    <div className="vi-wide">
+      <ObjectBodyWorkspace
+        object={object}
+        body={viMarkdownBody()}
+        vault=""
+        candidates={[{ id: "source.yc-launch.lightsprint", title: "YC Launch", type_id: "source.item" }, { id: "concept.agentic-sdlc", title: "Agentic SDLC", type_id: "concept" }]}
+        openObject={() => undefined}
+        saveBody={async () => null}
+        initialEditing
+      />
+    </div>
+  );
+}
+
+function VIMarkdown() {
+  return (
+    <div className="vi-reader markdown">
+      <MarkdownBody body={viMarkdownBody()} object={viObject()} vault="" openObject={() => undefined} />
+    </div>
+  );
+}
+
+function VIData() {
+  const fields: FieldDef[] = [
+    { name: "status", kind: "enum" },
+    { name: "url", kind: "url" },
+    { name: "about_company", kind: "ref", target_type: "company" }
+  ];
+  const rows = [
+    { id: "source.yc-launch.lightsprint", title: "YC Launch", status: "parsed", url: "https://www.ycombinator.com/launches", about_company: "company.lightsprint" },
+    { id: "source.docs.lightsprint", title: "Docs snapshot", status: "linked", url: "https://lightsprint.com/docs", about_company: "company.lightsprint" }
+  ];
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Object Table">
+        <div className="vi-table-frame">
+          <ObjectDataTable rows={rows} fields={fields} activeType="source.item" open={() => undefined} />
+        </div>
+      </VIBlock>
+      <VIBlock title="Empty State">
+        <EmptyState title="No objects" description="Create objects from the CLI or switch to another type." />
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIGraph() {
+  const [zoom, setZoom] = useState(1);
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Type Chips">
+        <div className="flex flex-wrap gap-2">
+          {["company", "source.item", "note", "concept"].map((type) => (
+            <button key={type} className="graph-type-chip">
+              <span className="graph-type-dot" style={{ background: graphTypeColor(type) }} />
+              <span>{type}</span>
+              <span className="font-mono opacity-60">4</span>
+            </button>
+          ))}
+        </div>
+      </VIBlock>
+      <VIBlock title="Node Labels">
+        <div className="grid max-w-xl grid-cols-2 gap-3">
+          <div className="rounded-xl border border-border/45 bg-card/90 px-2 py-2"><GraphNodeLabel object={viObject()} /></div>
+          <div className="rounded-xl border border-border/45 bg-card/90 px-2 py-2 opacity-40"><GraphNodeLabel object={{ ...viObject(), id: "note.lightsprint-gtm", type_id: "note", title: "GTM takeaway" }} /></div>
+        </div>
+      </VIBlock>
+      <VIBlock title="Zoom Controls">
+        <div className="relative h-20 rounded-lg border border-border/35 bg-card/40">
+          <GraphZoomControls zoom={zoom} setZoom={setZoom} reset={() => setZoom(1)} />
+        </div>
+      </VIBlock>
+    </div>
+  );
+}
+
+function VIStates() {
+  return (
+    <div className="vi-grid">
+      <VIBlock title="Save States">
+        <div className="flex flex-wrap gap-4">
+          <span className="body-save-state">Saved</span>
+          <span className="body-save-state body-save-state-dirty">Unsaved changes</span>
+          <span className="body-save-state"><Loader2 className="size-3.5 animate-spin" />Saving...</span>
+        </div>
+      </VIBlock>
+      <VIBlock title="Vault Status">
+        <div className="flex flex-wrap gap-2">
+          <span className="vault-status-chip vault-status-ready">ready</span>
+          <span className="vault-status-chip vault-status-missing">missing</span>
+        </div>
+      </VIBlock>
+      <VIBlock title="Graph Visibility">
+        <button className="graph-type-chip graph-type-chip-hidden">
+          <span className="graph-type-dot" style={{ background: graphTypeColor("note") }} />
+          <span>note</span>
+          <span className="font-mono opacity-60">hidden</span>
+        </button>
+      </VIBlock>
+    </div>
+  );
+}
+
+function viObject(): Obj {
+  return {
+    id: "company.lightsprint",
+    type_id: "company",
+    title: "Lightsprint",
+    body_path: "bodies/company.lightsprint.md",
+    body_abs_path: "/tmp/mbase-yc-model/bodies/company.lightsprint.md",
+    fields: { status: "active", tags: ["agentic-sdlc", "demo-led"], homepage_url: "https://lightsprint.com" }
+  };
+}
+
+function viMarkdownBody() {
+  return `# Lightsprint
+
+Lightsprint is a concise sample profile linked to [[source.yc-launch.lightsprint]] and [[concept.agentic-sdlc]].
+
+## Evidence
+
+- [Website](https://lightsprint.com)
+- [x] YC launch captured
+
+> [!NOTE]
+> Keep source evidence separate from human judgement.
+
+| Signal | Reading |
+| --- | --- |
+| Launch | Strong developer demo |
+| Motion | Product-led |
+
+\`\`\`ts
+const relation = "supports";
+\`\`\`
+`;
 }
 
 function renderCell(v: unknown) {
@@ -1079,7 +1459,8 @@ function ObjectBodyWorkspace({
   candidates,
   openObject,
   saveBody,
-  onBeginEdit
+  onBeginEdit,
+  initialEditing = false
 }: {
   object: Obj;
   body: string;
@@ -1088,9 +1469,10 @@ function ObjectBodyWorkspace({
   openObject: (id: string) => void;
   saveBody: (id: string, markdown: string) => Promise<ObjectLoadResult | null>;
   onBeginEdit?: () => void;
+  initialEditing?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const [draft, setDraft] = useState(body || `# ${object.title || object.id}\n\n`);
   const [viewMode, setViewMode] = useState<"write" | "split" | "preview">("split");
   const [saving, setSaving] = useState(false);
@@ -1101,9 +1483,9 @@ function ObjectBodyWorkspace({
   useEffect(() => {
     if (editing && dirty) return;
     setDraft(body || `# ${object.title || object.id}\n\n`);
-    setEditing(false);
+    setEditing(initialEditing);
     setJustSaved(false);
-  }, [object.id, body]);
+  }, [object.id, body, initialEditing]);
 
   function beginEdit() {
     setDraft(body || `# ${object.title || object.id}\n\n`);
@@ -1600,6 +1982,8 @@ function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; act
     if (activeObject?.id) parts.push(activeObject.id);
   } else if (view === "types") {
     parts.push("schema");
+  } else if (view === "vi") {
+    parts.push("visual inventory");
   } else {
     parts.push(view);
   }

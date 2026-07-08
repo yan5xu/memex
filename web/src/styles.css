@@ -892,6 +892,127 @@ body {
   height: auto;
 }
 
+.vi-shot-shell {
+  background: hsl(var(--background));
+}
+
+.vi-shot-main {
+  margin: 0;
+  border-radius: 0;
+  background: hsl(var(--background));
+}
+
+.vi-page {
+  min-height: 100%;
+  padding: 1.5rem;
+}
+
+.vi-page-shot {
+  padding: 0;
+}
+
+.vi-canvas {
+  min-height: 100%;
+  border: 1px solid hsl(var(--border) / 0.38);
+  border-radius: 0.9rem;
+  background: hsl(var(--card));
+  padding: 1.4rem;
+}
+
+.vi-page-shot .vi-canvas {
+  width: 1280px;
+  min-height: 720px;
+  border-radius: 0;
+  border: 0;
+  padding: 1.5rem;
+}
+
+.vi-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.vi-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 1.2rem;
+}
+
+.vi-page-shot .vi-layout {
+  display: block;
+}
+
+.vi-section-nav {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  border-right: 1px solid hsl(var(--border) / 0.38);
+  padding-right: 0.85rem;
+}
+
+.vi-section-button {
+  display: block;
+  width: 100%;
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.78rem;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vi-section-button:hover,
+.vi-section-button-active {
+  background: hsl(var(--foreground) / 0.04);
+  color: hsl(var(--foreground));
+}
+
+.vi-section-stage {
+  min-width: 0;
+}
+
+.vi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.vi-wide {
+  min-width: 0;
+}
+
+.vi-block {
+  min-width: 0;
+  border-top: 1px solid hsl(var(--border) / 0.36);
+  padding-top: 0.8rem;
+}
+
+.vi-block-title {
+  margin-bottom: 0.7rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.vi-block-body {
+  min-width: 0;
+}
+
+.vi-reader {
+  max-width: 820px;
+}
+
+.vi-table-frame {
+  height: 360px;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .object-inspector {
   position: absolute;
   bottom: 22px;
