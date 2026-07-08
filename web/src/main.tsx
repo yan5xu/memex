@@ -1341,14 +1341,14 @@ function GraphWorkspacePage({
     if (!rootType) return [] as Obj[];
     return graph.nodes
       .filter((node) => node.type_id === rootType)
-      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+      .sort((a, b) => objectDisplayTitle(a).localeCompare(objectDisplayTitle(b)));
   }, [graph.nodes, rootType]);
   const centerObject = graph.nodes.find((node) => node.id === activeCenterID) ?? centerCandidates[0] ?? null;
   const filteredCenterCandidates = useMemo(() => {
     const needle = centerSearch.trim().toLowerCase();
     if (!needle) return centerCandidates;
     return centerCandidates.filter((object) => {
-      const values = [object.id, object.title, object.type_id, object.body_path];
+      const values = [object.id, objectDisplayTitle(object), object.fields?.name, object.type_id, object.body_path];
       return values.some((value) => String(value || "").toLowerCase().includes(needle));
     });
   }, [centerCandidates, centerSearch]);
@@ -1602,7 +1602,7 @@ function GraphWorkspacePage({
               <span>{t("graph.center")}</span>
               <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
                 {centerSelectOptions.map((object) => (
-                  <option key={object.id} value={object.id}>{object.title || object.id}</option>
+                  <option key={object.id} value={object.id}>{objectDisplayTitle(object)}</option>
                 ))}
               </select>
             </label>
@@ -1715,7 +1715,7 @@ function GraphWorkspacePage({
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div><span className="text-foreground/80">{t("graph.view")}:</span> {activeDefinition?.label}</div>
                 <div><span className="text-foreground/80">{t("graph.centerType")}:</span> {rootType}</div>
-                <div><span className="text-foreground/80">{t("graph.center")}:</span> {centerObject?.title || centerObject?.id || t("common.none")}</div>
+                <div><span className="text-foreground/80">{t("graph.center")}:</span> {centerObject ? objectDisplayTitle(centerObject) : t("common.none")}</div>
                 <div><span className="text-foreground/80">{t("graph.source")}:</span> {configLoading ? t("graph.loadingConfig") : t("graph.vaultConfig")}</div>
                 <div><span className="text-foreground/80">{t("graph.nodes")}:</span> {queryNodes.length}</div>
                 <div><span className="text-foreground/80">{t("graph.edges")}:</span> {queryGraph?.edges.length ?? 0}</div>
@@ -2483,6 +2483,15 @@ function renderCell(v: unknown) {
   if (Array.isArray(v)) return <span className="flex flex-wrap gap-1">{v.map((x) => <Badge key={String(x)}>{String(x)}</Badge>)}</span>;
   if (v === undefined || v === null || v === "") return <span className="text-muted-foreground">—</span>;
   return String(v);
+}
+
+function cleanDisplayValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function objectDisplayTitle(object: Obj | null | undefined) {
+  if (!object) return "";
+  return cleanDisplayValue(object.title) || cleanDisplayValue(object.fields?.name) || cleanDisplayValue(object.fields?.label) || object.id;
 }
 
 function buildObjectLinkCandidates(activeObject: Obj | null, activeType: string, rows: Record<string, unknown>[], graphNodes: Obj[]): ObjectLinkCandidate[] {
@@ -5123,7 +5132,7 @@ function placeRemaining(nodes: Obj[], positions: Record<string, { x: number; y: 
 }
 
 function sortObject(a: Obj, b: Obj) {
-  return (a.title || a.id).localeCompare(b.title || b.id);
+  return objectDisplayTitle(a).localeCompare(objectDisplayTitle(b));
 }
 
 function graphNodeStyle(type: string, selected: boolean) {
@@ -5144,7 +5153,7 @@ function graphNodeStyle(type: string, selected: boolean) {
 function GraphNodeLabel({ object }: { object: Obj }) {
   return (
     <div className="px-2 py-1.5 text-left">
-      <div className="truncate text-xs font-semibold">{object.title || object.id}</div>
+      <div className="truncate text-xs font-semibold">{objectDisplayTitle(object)}</div>
       <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{object.type_id}</div>
     </div>
   );
