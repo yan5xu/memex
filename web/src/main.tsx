@@ -48,8 +48,8 @@ type SchemaEdge = { source: string; target: string; relation: string; kind: stri
 type Point = { x: number; y: number };
 type ObjectLinkCandidate = { id: string; title: string; type_id: string };
 type ViewID = "objects" | "detail" | "types" | "graph" | "health" | "vi" | "graph-lab";
-type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string; section?: string; frame?: string; shot?: string };
-type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
+type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphView?: string; graphMode?: string; graphHiddenTypes?: string; section?: string; frame?: string; shot?: string };
+type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphView?: string; graphMode?: string; graphHiddenTypes?: string };
 type AppState = {
   view: string;
   vault: string;
@@ -63,6 +63,8 @@ type AppState = {
   backlinks: Link[];
   issues: unknown[];
   graph: GraphData;
+  activeGraphViewID: string;
+  activeGraphCenterID: string;
 };
 type BaseLoadResult = {
   types: TypeDef[];
@@ -89,6 +91,8 @@ type AutomationSnapshot = {
   issuesCount: number;
   graphNodesCount: number;
   graphEdgesCount: number;
+  graphViewID: string | null;
+  graphCenterID: string | null;
 };
 
 type RelationGraphAutomationState = {
@@ -178,6 +182,8 @@ const viSections = [
   "states"
 ] as const;
 
+const fullGraphViewID = "__full_graph__";
+
 type VISectionID = typeof viSections[number];
 
 function normalizeVISection(section: unknown): VISectionID {
@@ -201,6 +207,7 @@ const indexRoute = createRoute({
     type: typeof search.type === "string" ? search.type : undefined,
     filter: typeof search.filter === "string" ? search.filter : undefined,
     object: typeof search.object === "string" ? search.object : undefined,
+    graphView: typeof search.graphView === "string" ? search.graphView : undefined,
     graphMode: typeof search.graphMode === "string" ? search.graphMode : undefined,
     graphHiddenTypes: typeof search.graphHiddenTypes === "string" ? search.graphHiddenTypes : undefined,
     section: typeof search.section === "string" ? search.section : undefined,
@@ -336,7 +343,9 @@ function automationState(state: AppState): AutomationSnapshot {
     backlinksCount: state.backlinks.length,
     issuesCount: state.issues.length,
     graphNodesCount: state.graph.nodes.length,
-    graphEdgesCount: state.graph.edges.length
+    graphEdgesCount: state.graph.edges.length,
+    graphViewID: state.activeGraphViewID || null,
+    graphCenterID: state.activeGraphCenterID || null
   };
 }
 
@@ -357,6 +366,12 @@ declare global {
       openView: (view: ViewID) => Promise<AutomationSnapshot>;
       openObject: (id: string) => Promise<AutomationSnapshot>;
       openGraph: () => Promise<AutomationSnapshot>;
+      graphWorkspace: {
+        state: () => { activeViewID: string | null; activeCenterID: string | null; fullMap: boolean };
+        setView: (id: string) => Promise<AutomationSnapshot>;
+        setCenter: (id: string) => Promise<AutomationSnapshot>;
+        openFullMap: () => Promise<AutomationSnapshot>;
+      };
       openHealth: () => Promise<AutomationSnapshot>;
       relationGraph: {
         state: () => RelationGraphAutomationState | null;
@@ -395,6 +410,8 @@ function App() {
   const [issues, setIssues] = useState<unknown[]>([]);
   const [graph, setGraph] = useState<GraphData>({ nodes: [], edges: [] });
   const [graphMode, setGraphModeState] = useState(routeSearch.graphMode ?? "core");
+  const [activeGraphViewID, setActiveGraphViewID] = useState(routeSearch.graphView ?? "");
+  const [activeGraphCenterID, setActiveGraphCenterID] = useState(routeSearch.object ?? "");
   const [hiddenGraphTypes, setHiddenGraphTypesState] = useState(() => parseGraphHiddenTypes(routeSearch.graphHiddenTypes));
   const [graphLayoutSeed, setGraphLayoutSeed] = useState(0);
   const [selectedGraphNode, setSelectedGraphNode] = useState<string | null>(null);
@@ -485,6 +502,16 @@ function App() {
     setGraphLayoutSeed((seed) => seed + 1);
   }
 
+  function setGraphWorkspaceSelection(next: { viewID?: string; centerID?: string }, options: { replace?: boolean } = {}) {
+    if (next.viewID !== undefined) setActiveGraphViewID(next.viewID);
+    if (next.centerID !== undefined) setActiveGraphCenterID(next.centerID);
+    updateSearch({
+      view: "graph",
+      graphView: next.viewID !== undefined ? next.viewID || undefined : activeGraphViewID || undefined,
+      object: next.centerID !== undefined ? next.centerID || undefined : activeGraphCenterID || undefined
+    }, options);
+  }
+
   function cachedRun<T>(argv: string[], vaultOverride = vault) {
     const key = ["run", vaultOverride || "default", ...argv];
     return queryClient.fetchQuery({
@@ -564,7 +591,13 @@ function App() {
     setGraph(nextGraph);
     setViewState("graph");
     if (options.syncURL !== false) {
-      updateSearch({ view: "graph", graphMode, graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined });
+      updateSearch({
+        view: "graph",
+        object: activeGraphCenterID || undefined,
+        graphView: activeGraphViewID || undefined,
+        graphMode,
+        graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined
+      });
     }
     return nextGraph;
   }
@@ -639,21 +672,26 @@ function App() {
     view,
     type: activeType || undefined,
     filter: filter || undefined,
-    object: view === "detail" || view === "graph-lab" ? activeObject?.id : undefined,
+    object: view === "detail" || view === "graph-lab" ? activeObject?.id : view === "graph" ? activeGraphCenterID || undefined : undefined,
+    graphView: view === "graph" ? activeGraphViewID || undefined : undefined,
     graphMode,
     graphHiddenTypes: serializeGraphHiddenTypes(hiddenGraphTypes) || undefined
-  }), [view, activeType, filter, activeObject?.id, graphMode, hiddenGraphTypes]);
+  }), [view, activeType, filter, activeObject?.id, activeGraphCenterID, activeGraphViewID, graphMode, hiddenGraphTypes]);
 
   useEffect(() => {
     const nextView = routeSearch.view;
     const nextType = routeSearch.type ?? "";
     const nextFilter = routeSearch.filter ?? "";
     const nextGraphMode = routeSearch.graphMode ?? "core";
+    const nextGraphView = routeSearch.graphView ?? "";
+    const nextGraphCenter = routeSearch.object ?? "";
     const nextHiddenGraphTypes = parseGraphHiddenTypes(routeSearch.graphHiddenTypes);
     if (nextView !== view) setViewState(nextView);
     if (nextType !== activeType) setActiveTypeState(nextType);
     if (nextFilter !== filter) setFilterState(nextFilter);
     if (nextGraphMode !== graphMode) setGraphModeState(nextGraphMode);
+    if (nextGraphView !== activeGraphViewID) setActiveGraphViewID(nextGraphView);
+    if (nextView === "graph" && nextGraphCenter !== activeGraphCenterID) setActiveGraphCenterID(nextGraphCenter);
     if (serializeGraphHiddenTypes(nextHiddenGraphTypes) !== serializeGraphHiddenTypes(hiddenGraphTypes)) {
       setHiddenGraphTypesState(nextHiddenGraphTypes);
     }
@@ -668,7 +706,7 @@ function App() {
         if (res.data) setGraph(res.data);
       });
     }
-  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
+  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphView, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
 
   useEffect(() => {
     const needsObjectLookup = markdownHasWikiLinks(activeBody) || links.length > 0 || backlinks.length > 0;
@@ -714,6 +752,8 @@ function App() {
     const nextView = saved?.view ?? "objects";
     const nextType = saved?.type ?? "";
     const nextFilter = saved?.filter ?? "";
+    const nextGraphView = saved?.graphView ?? "";
+    const nextGraphCenter = saved?.view === "graph" ? saved?.object ?? "" : "";
     const nextGraphMode = saved?.graphMode ?? "core";
     const nextHiddenGraphTypes = parseGraphHiddenTypes(saved?.graphHiddenTypes);
     setCurrentVault(nextPath);
@@ -727,10 +767,12 @@ function App() {
     setBacklinks([]);
     setGraph({ nodes: [], edges: [] });
     setFilterState(nextFilter);
+    setActiveGraphViewID(nextGraphView);
+    setActiveGraphCenterID(nextGraphCenter);
     setGraphModeState(nextGraphMode);
     setHiddenGraphTypesState(nextHiddenGraphTypes);
     setViewState(nextView === "detail" ? "objects" : nextView);
-    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
+    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: nextGraphCenter || undefined, graphView: nextGraphView || undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
     const loaded = await loadBase(nextType, nextFilter);
     if (nextView === "graph") {
       await openGraph({ syncURL: false });
@@ -756,6 +798,8 @@ function App() {
       backlinks,
       issues,
       graph,
+      activeGraphViewID,
+      activeGraphCenterID,
       ...overrides
     });
     const uiState = (): AutomationUISnapshot => ({
@@ -862,6 +906,40 @@ function App() {
         const nextGraph = await openGraph();
         return currentState({ view: "graph", graph: nextGraph });
       },
+      graphWorkspace: {
+        state: () => ({
+          activeViewID: activeGraphViewID || null,
+          activeCenterID: activeGraphCenterID || null,
+          fullMap: activeGraphViewID === fullGraphViewID
+        }),
+        setView: async (id: string) => {
+          setGraphWorkspaceSelection({ viewID: id, centerID: "" });
+          if (graph.nodes.length === 0) {
+            const nextGraph = await openGraph({ syncURL: false });
+            await nextFrame();
+            await nextFrame();
+            return window.mbase?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: id, activeGraphCenterID: "" });
+          }
+          await nextFrame();
+          await nextFrame();
+          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphViewID: id, activeGraphCenterID: "" });
+        },
+        setCenter: async (id: string) => {
+          setGraphWorkspaceSelection({ centerID: id });
+          await nextFrame();
+          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphCenterID: id });
+        },
+        openFullMap: async () => {
+          setGraphWorkspaceSelection({ viewID: fullGraphViewID, centerID: "" });
+          if (graph.nodes.length === 0) {
+            const nextGraph = await openGraph({ syncURL: false });
+            await nextFrame();
+            return window.mbase?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+          }
+          await nextFrame();
+          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+        }
+      },
       openHealth: async () => {
         setView("health");
         return currentState({ view: "health" });
@@ -882,7 +960,7 @@ function App() {
     return () => {
       delete window.mbase;
     };
-  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen]);
+  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
 
   const viMode = view === "vi";
   const graphLabMode = view === "graph-lab";
@@ -1097,92 +1175,28 @@ function App() {
         )}
 
         {view === "graph" && (
-          <section className="h-full w-full px-6 py-5">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <Header
-                eyebrow="Link Map"
-                title="Object graph"
-                description={`${graphView.nodes.length} visible nodes, ${graphView.edges.length} visible links${hiddenGraphTypes.size ? `, ${hiddenGraphTypes.size} type${hiddenGraphTypes.size > 1 ? "s" : ""} hidden` : ""}`}
-              />
-              <Tabs value={graphMode} onValueChange={setGraphMode}>
-                <TabsList className="acrylic rounded-lg">
-                  <TabsTrigger value="core" className="rounded-md text-xs">Core</TabsTrigger>
-                  <TabsTrigger value="all" className="rounded-md text-xs">All</TabsTrigger>
-                  <TabsTrigger value="founders" className="rounded-md text-xs">Founders</TabsTrigger>
-                  <TabsTrigger value="sources" className="rounded-md text-xs">Sources</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-            <div className="grid h-[calc(100%-6rem)] grid-cols-[minmax(0,1fr)_280px] gap-4">
-              <div className="graph-surface relative overflow-hidden">
-                <div className="absolute left-5 top-5 z-30 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
-                  {graphTypeControls.map((lane) => (
-                    <button
-                      key={lane.type}
-                      type="button"
-                      className={`graph-type-chip ${lane.hidden ? "graph-type-chip-hidden" : ""}`}
-                      onClick={() => toggleGraphType(lane.type)}
-                      title={lane.hidden ? `Show ${lane.type}` : `Hide ${lane.type}`}
-                    >
-                      <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
-                      <span>{lane.type}</span>
-                      <span className="font-mono opacity-60">{lane.count}</span>
-                    </button>
-                  ))}
-                </div>
-                <GraphCanvas graphView={graphView} selectedID={selectedGraphNode} select={setSelectedGraphNode} open={(id) => void openObject(id)} layoutKey={graphLayoutKey} relayout={relayoutGraph} />
-              </div>
-              <aside className="space-y-4">
-                <Panel title="Visible Types" icon={<Braces className="size-4" />}>
-                  <div className="space-y-2">
-                    {graphTypeControls.map((lane) => (
-                      <button
-                        key={lane.type}
-                        type="button"
-                        className={`graph-type-row ${lane.hidden ? "graph-type-row-hidden" : ""}`}
-                        onClick={() => toggleGraphType(lane.type)}
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
-                          <span className="truncate">{lane.type}</span>
-                        </span>
-                        <span className="font-mono text-[11px] text-muted-foreground">{lane.hidden ? "hidden" : lane.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    className="mt-3 rounded-md px-2.5 py-1.5 text-xs text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04] disabled:text-muted-foreground/45"
-                    onClick={showAllGraphTypes}
-                    disabled={hiddenGraphTypes.size === 0}
-                  >
-                    Show all types
-                  </button>
-                </Panel>
-                <Panel title="Selection" icon={<Network className="size-4" />}>
-                  {selectedGraphObject ? (
-                    <div className="space-y-3">
-                      <div>
-                        <div className="text-sm font-medium">{selectedGraphObject.title || selectedGraphObject.id}</div>
-                        <div className="mt-1 font-mono text-xs text-muted-foreground">{selectedGraphObject.id}</div>
-                      </div>
-                      <Badge>{selectedGraphObject.type_id}</Badge>
-                      <button className="rounded-xl px-3 py-2 text-sm text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => void openObject(selectedGraphObject.id)}>Open object</button>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Select a node to inspect it. Double click opens the object page.</div>
-                  )}
-                </Panel>
-                <Panel title="Relation Legend" icon={<GitBranch className="size-4" />}>
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <LegendRow color="hsl(var(--earth))" label="company / batch" />
-                    <LegendRow color="hsl(var(--moss))" label="founder links" />
-                    <LegendRow color="hsl(var(--clay))" label="touchpoints / sources" />
-                  </div>
-                </Panel>
-              </aside>
-            </div>
-          </section>
+          <GraphWorkspacePage
+            graph={graph}
+            vault={vault}
+            activeViewID={activeGraphViewID}
+            activeCenterID={activeGraphCenterID}
+            setSelection={setGraphWorkspaceSelection}
+            openObject={(id) => void openObject(id)}
+            fullGraph={{
+              graphView,
+              graphTypeControls,
+              selectedGraphNode,
+              setSelectedGraphNode,
+              selectedGraphObject,
+              graphMode,
+              setGraphMode,
+              hiddenGraphTypes,
+              toggleGraphType,
+              showAllGraphTypes,
+              graphLayoutKey,
+              relayoutGraph
+            }}
+          />
         )}
 
         {view === "health" && (
@@ -1218,6 +1232,325 @@ function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+function GraphWorkspacePage({
+  graph,
+  vault,
+  activeViewID,
+  activeCenterID,
+  setSelection,
+  openObject,
+  fullGraph
+}: {
+  graph: GraphData;
+  vault: string;
+  activeViewID: string;
+  activeCenterID: string;
+  setSelection: (next: { viewID?: string; centerID?: string }, options?: { replace?: boolean }) => void;
+  openObject: (id: string) => void;
+  fullGraph: {
+    graphView: ReturnType<typeof buildGraphView>;
+    graphTypeControls: ReturnType<typeof buildGraphTypeControls>;
+    selectedGraphNode: string | null;
+    setSelectedGraphNode: (id: string) => void;
+    selectedGraphObject: Obj | null;
+    graphMode: string;
+    setGraphMode: (mode: string) => void;
+    hiddenGraphTypes: Set<string>;
+    toggleGraphType: (type: string) => void;
+    showAllGraphTypes: () => void;
+    graphLayoutKey: string;
+    relayoutGraph: () => void;
+  };
+}) {
+  const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorID, setEditorID] = useState("");
+  const [editorLabel, setEditorLabel] = useState("");
+  const [editorRootType, setEditorRootType] = useState("");
+  const [editorSteps, setEditorSteps] = useState("");
+  const configuredViews = viewConfig.views;
+  const activeDefinition = configuredViews.find((view) => view.id === activeViewID) ?? configuredViews[0] ?? null;
+  const showingFullGraph = activeViewID === fullGraphViewID || !activeDefinition;
+  const rootType = activeDefinition?.root_type ?? "";
+  const centerCandidates = useMemo(() => {
+    if (!rootType) return [] as Obj[];
+    return graph.nodes
+      .filter((node) => node.type_id === rootType)
+      .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id));
+  }, [graph.nodes, rootType]);
+  const centerObject = graph.nodes.find((node) => node.id === activeCenterID) ?? centerCandidates[0] ?? null;
+  const activeTemplate = activeDefinition ? graphViewDefinitionToTemplate(activeDefinition, activeDefinition.root_type) : null;
+  const queryGraph = useMemo(() => {
+    if (!centerObject || !activeTemplate) return null;
+    return buildInspectorQueryGraph(centerObject, graph.nodes, graph.edges, activeTemplate, []);
+  }, [centerObject, activeTemplate, graph.nodes, graph.edges]);
+  const queryNodes = queryGraph ? [queryGraph.focus, ...queryGraph.incoming, ...queryGraph.outgoing] : [];
+  const queryGroups = queryGraph ? relationGraphGroups(queryGraph, queryNodes) : [];
+  const rootTypes = useMemo(() => graphTypeOrder([...new Set(graph.nodes.map((node) => node.type_id))]), [graph.nodes]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setConfigLoading(true);
+    run<GraphViewConfig>(["graph", "views"], vault).then((result) => {
+      if (cancelled) return;
+      setViewConfig(normalizeGraphViewConfigForUI(result.data));
+    }).catch(() => {
+      if (!cancelled) setViewConfig({ version: 1, views: [] });
+    }).finally(() => {
+      if (!cancelled) setConfigLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [vault]);
+
+  useEffect(() => {
+    if (activeViewID || configuredViews.length === 0) return;
+    setSelection({ viewID: configuredViews[0].id }, { replace: true });
+  }, [activeViewID, configuredViews, setSelection]);
+
+  useEffect(() => {
+    if (showingFullGraph || !centerObject || activeCenterID === centerObject.id) return;
+    setSelection({ centerID: centerObject.id }, { replace: true });
+  }, [showingFullGraph, centerObject, activeCenterID, setSelection]);
+
+  function openEditor(source = activeDefinition) {
+    setEditorID(source?.id ?? slugifyGraphViewLabel(`${rootTypes[0] || "object"} view`));
+    setEditorLabel(source?.label ?? `${rootTypes[0] || "object"} view`);
+    setEditorRootType(source?.root_type ?? rootTypes[0] ?? "");
+    setEditorSteps(source ? relationStepsToText(source.steps.map((step) => ({ relation: step.relation, direction: step.direction, targetType: step.target_type }))) : "");
+    setEditorOpen(true);
+  }
+
+  async function saveGraphView() {
+    const id = editorID.trim();
+    const label = editorLabel.trim();
+    const rootType = editorRootType.trim();
+    const parsed = parseRelationStepsText(editorSteps);
+    if (!id || !label || !rootType || parsed.error || parsed.steps.length === 0) {
+      toast.error(parsed.error || "View id, label, root type and at least one step are required");
+      return;
+    }
+    const nextView: GraphViewDefinition = {
+      id,
+      label,
+      root_type: rootType,
+      description: `Follow ${relationQueryPathLabel(rootType, parsed.steps)} from the current ${rootType}`,
+      steps: parsed.steps.map((step) => ({ relation: step.relation, direction: step.direction, target_type: step.targetType }))
+    };
+    const nextConfig = { version: 1, views: [...viewConfig.views.filter((view) => view.id !== id), nextView] };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to save graph view");
+      return;
+    }
+    const normalized = normalizeGraphViewConfigForUI(result.data);
+    setViewConfig(normalized);
+    setSelection({ viewID: id, centerID: "" }, { replace: true });
+    setEditorOpen(false);
+    toast.success("Graph view saved");
+  }
+
+  async function deleteGraphView() {
+    const id = editorID.trim() || activeDefinition?.id;
+    if (!id) return;
+    const nextConfig = { version: 1, views: viewConfig.views.filter((view) => view.id !== id) };
+    setConfigSaving(true);
+    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    setConfigSaving(false);
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || "Failed to delete graph view");
+      return;
+    }
+    const normalized = normalizeGraphViewConfigForUI(result.data);
+    setViewConfig(normalized);
+    setSelection({ viewID: normalized.views[0]?.id ?? fullGraphViewID, centerID: "" }, { replace: true });
+    setEditorOpen(false);
+    toast.success("Graph view deleted");
+  }
+
+  return (
+    <section className="graph-workspace-page">
+      <div className="graph-workspace-header">
+        <Header
+          eyebrow="Graph Views"
+          title="Graph workspace"
+          description={showingFullGraph ? "Explore the full vault graph, or pick a configured view to answer a focused relation question." : activeDefinition?.description || "Run a configured graph view from a chosen center object."}
+        />
+        <div className="graph-workspace-actions">
+          <Button variant="secondary" className="rounded-md" onClick={() => openEditor()}>
+            <Edit3 className="size-4" />
+            Configure
+          </Button>
+        </div>
+      </div>
+
+      <div className="graph-workspace-viewbar">
+        <div className="relation-filter-chips">
+          {configuredViews.map((view) => (
+            <button key={view.id} className={`relation-view-chip ${!showingFullGraph && activeDefinition?.id === view.id ? "is-active" : ""}`} onClick={() => setSelection({ viewID: view.id, centerID: "" })}>
+              {view.label}
+            </button>
+          ))}
+          <button className={`relation-view-chip ${showingFullGraph ? "is-active" : ""}`} onClick={() => setSelection({ viewID: fullGraphViewID, centerID: "" })}>
+            Full map
+          </button>
+        </div>
+        {!showingFullGraph && activeDefinition && (
+          <label className="graph-center-select">
+            <span>Center</span>
+            <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
+              {centerCandidates.map((object) => (
+                <option key={object.id} value={object.id}>{object.title || object.id}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {editorOpen && (
+        <div className="graph-workspace-editor">
+          <div className="graph-view-editor">
+            <label>
+              <span>ID</span>
+              <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="portfolio" />
+            </label>
+            <label>
+              <span>Label</span>
+              <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Portfolio" />
+            </label>
+            <label>
+              <span>Root type</span>
+              <select value={editorRootType} onChange={(event) => setEditorRootType(event.target.value)}>
+                <option value="">Select type</option>
+                {rootTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Steps</span>
+              <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
+            </label>
+            <div className="graph-view-editor-help">One step per line: direction relation target_type. Example Portfolio view: <code>in investor investment</code>, then <code>out company company</code>.</div>
+            <div className="graph-view-editor-actions">
+              <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
+                <Save className="size-3.5" />
+                Save
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !activeDefinition}>
+                <X className="size-3.5" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showingFullGraph ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] gap-4">
+          <div className="graph-surface relative overflow-hidden">
+            <div className="absolute left-5 top-5 z-30 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
+              {fullGraph.graphTypeControls.map((lane) => (
+                <button key={lane.type} type="button" className={`graph-type-chip ${lane.hidden ? "graph-type-chip-hidden" : ""}`} onClick={() => fullGraph.toggleGraphType(lane.type)} title={lane.hidden ? `Show ${lane.type}` : `Hide ${lane.type}`}>
+                  <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
+                  <span>{lane.type}</span>
+                  <span className="font-mono opacity-60">{lane.count}</span>
+                </button>
+              ))}
+            </div>
+            <GraphCanvas graphView={fullGraph.graphView} selectedID={fullGraph.selectedGraphNode} select={fullGraph.setSelectedGraphNode} open={openObject} layoutKey={fullGraph.graphLayoutKey} relayout={fullGraph.relayoutGraph} />
+          </div>
+          <aside className="space-y-4">
+            <Panel title="Full map mode" icon={<Network className="size-4" />}>
+              <Tabs value={fullGraph.graphMode} onValueChange={fullGraph.setGraphMode}>
+                <TabsList className="acrylic rounded-lg">
+                  <TabsTrigger value="core" className="rounded-md text-xs">Core</TabsTrigger>
+                  <TabsTrigger value="all" className="rounded-md text-xs">All</TabsTrigger>
+                  <TabsTrigger value="founders" className="rounded-md text-xs">Founders</TabsTrigger>
+                  <TabsTrigger value="sources" className="rounded-md text-xs">Sources</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="mt-3 text-sm text-muted-foreground">{fullGraph.graphView.nodes.length} visible nodes, {fullGraph.graphView.edges.length} visible links.</div>
+            </Panel>
+            <Panel title="Visible Types" icon={<Braces className="size-4" />}>
+              <div className="space-y-2">
+                {fullGraph.graphTypeControls.map((lane) => (
+                  <button key={lane.type} type="button" className={`graph-type-row ${lane.hidden ? "graph-type-row-hidden" : ""}`} onClick={() => fullGraph.toggleGraphType(lane.type)}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="graph-type-dot" style={{ background: graphTypeColor(lane.type) }} />
+                      <span className="truncate">{lane.type}</span>
+                    </span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{lane.hidden ? "hidden" : lane.count}</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="mt-3 rounded-md px-2.5 py-1.5 text-xs text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04] disabled:text-muted-foreground/45" onClick={fullGraph.showAllGraphTypes} disabled={fullGraph.hiddenGraphTypes.size === 0}>
+                Show all types
+              </button>
+            </Panel>
+            <Panel title="Selection" icon={<Network className="size-4" />}>
+              {fullGraph.selectedGraphObject ? (
+                <div className="space-y-3">
+                  <div>
+                    <div className="text-sm font-medium">{fullGraph.selectedGraphObject.title || fullGraph.selectedGraphObject.id}</div>
+                    <div className="mt-1 font-mono text-xs text-muted-foreground">{fullGraph.selectedGraphObject.id}</div>
+                  </div>
+                  <Badge>{fullGraph.selectedGraphObject.type_id}</Badge>
+                  <button className="rounded-xl px-3 py-2 text-sm text-[hsl(var(--earth))] transition hover:bg-foreground/[0.04]" onClick={() => openObject(fullGraph.selectedGraphObject!.id)}>Open object</button>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Select a node to inspect it. Double click opens the object page.</div>
+              )}
+            </Panel>
+          </aside>
+        </div>
+      ) : (
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
+          <div className="graph-lab-canvas">
+            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} /> : <EmptyState title="No graph view result" description={centerCandidates.length === 0 ? `No ${rootType} objects found for this view.` : "Select a center object to run the graph view."} />}
+          </div>
+          <aside className="graph-lab-panel">
+            <Panel title="Current view" icon={<Play className="size-4" />}>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <div><span className="text-foreground/80">View:</span> {activeDefinition?.label}</div>
+                <div><span className="text-foreground/80">Center type:</span> {rootType}</div>
+                <div><span className="text-foreground/80">Center:</span> {centerObject?.title || centerObject?.id || "none"}</div>
+                <div><span className="text-foreground/80">Source:</span> {configLoading ? "loading config" : "vault config"}</div>
+                <div><span className="text-foreground/80">Nodes:</span> {queryNodes.length}</div>
+                <div><span className="text-foreground/80">Edges:</span> {queryGraph?.edges.length ?? 0}</div>
+              </div>
+            </Panel>
+            <Panel title="Groups" icon={<Braces className="size-4" />}>
+              <div className="graph-lab-groups">
+                {queryGroups.map((group) => (
+                  <div key={group.id} className="graph-lab-group">
+                    <div className="graph-lab-group-head">
+                      <span>{group.label}</span>
+                      <span>{group.items.length}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {group.items.slice(0, 10).map((item) => (
+                        <button key={item.id} className="graph-lab-order-row" onClick={() => openObject(item.id)}>
+                          <span className="truncate">{item.title}</span>
+                          <span>{item.type}</span>
+                        </button>
+                      ))}
+                      {group.items.length > 10 && <div className="graph-lab-more">+{group.items.length - 10} more</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          </aside>
+        </div>
+      )}
+    </section>
   );
 }
 

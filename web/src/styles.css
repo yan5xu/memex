@@ -1353,6 +1353,94 @@ body {
   padding: 1.15rem;
 }
 
+.graph-workspace-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.25rem;
+}
+
+.graph-workspace-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.graph-workspace-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
+
+.graph-workspace-viewbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid hsl(var(--border) / 0.26);
+  border-bottom: 1px solid hsl(var(--border) / 0.24);
+  padding: 0.72rem 0.1rem;
+}
+
+.graph-center-select {
+  display: flex;
+  min-width: 260px;
+  align-items: center;
+  gap: 0.65rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.graph-center-select select,
+.graph-view-editor select {
+  min-width: 0;
+  border: 1px solid hsl(var(--border) / 0.42);
+  border-radius: 7px;
+  background: hsl(var(--surface) / 0.86);
+  color: hsl(var(--foreground) / 0.86);
+  padding: 0.47rem 0.62rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  outline: none;
+  text-transform: none;
+}
+
+.graph-center-select select {
+  width: min(420px, 36vw);
+}
+
+.graph-center-select select:focus,
+.graph-view-editor select:focus {
+  border-color: hsl(var(--teal) / 0.72);
+  box-shadow: 0 0 0 3px hsl(var(--teal) / 0.12);
+}
+
+.graph-workspace-editor {
+  flex: 0 0 auto;
+  border-top: 1px solid hsl(var(--border) / 0.22);
+  border-bottom: 1px solid hsl(var(--border) / 0.2);
+  padding: 0.9rem 0.1rem;
+}
+
+.graph-workspace-editor .graph-view-editor {
+  grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr) minmax(160px, 0.75fr) minmax(280px, 1.6fr);
+  align-items: end;
+}
+
+.graph-workspace-editor .graph-view-editor-help,
+.graph-workspace-editor .graph-view-editor-actions {
+  grid-column: 1 / -1;
+}
+
 .graph-lab-header {
   display: flex;
   flex: 0 0 auto;
