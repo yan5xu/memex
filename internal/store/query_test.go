@@ -188,3 +188,62 @@ func TestFilteredLinksMatchesTypeKindRelationAndText(t *testing.T) {
 		t.Fatalf("expected no person backlinks, got %#v", personBacklinks)
 	}
 }
+
+func TestRevalidateAllClearsStaleBrokenBodyLinkAfterTargetCreated(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("source.item"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("source.item", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	body := "# Source\n\nMentions [[person.ada]].\n"
+	if _, err := s.CreateObjectWithBody("source.item", "source.ada-profile", "Ada profile", map[string]string{"title": "Ada profile"}, &body); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RefreshBody("source.ada-profile"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevalidateAll(); err != nil {
+		t.Fatal(err)
+	}
+	issues, err := s.Issues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 1 || issues[0].Kind != "broken_link" {
+		t.Fatalf("expected one broken_link before target exists, got %#v", issues)
+	}
+
+	if err := s.CreateType("person"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("person", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("person", "person.ada", "Ada", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RevalidateAll(); err != nil {
+		t.Fatal(err)
+	}
+	issues, err = s.Issues()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("expected stale broken_link to clear after target exists, got %#v", issues)
+	}
+	links, err := s.Links("source.ada-profile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 1 || !links[0].Resolved {
+		t.Fatalf("expected body link resolved flag to be refreshed, got %#v", links)
+	}
+}

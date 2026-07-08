@@ -43,7 +43,7 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 			if err != nil {
 				return fromErr(err)
 			}
-			issues, err := s.Issues()
+			issues, err := currentIssues(s)
 			if err != nil {
 				return fromErr(err)
 			}
@@ -90,7 +90,7 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 		})
 	case "issues":
 		return r.withStore(func(s *store.Store) Result {
-			issues, err := s.Issues()
+			issues, err := currentIssues(s)
 			if err != nil {
 				return fromErr(err)
 			}
@@ -812,6 +812,13 @@ func (r *Runner) withStore(fn func(*store.Store) Result) Result {
 	}
 	defer s.Close()
 	return fn(s)
+}
+
+func currentIssues(s *store.Store) ([]domain.Issue, error) {
+	if err := s.RevalidateAll(); err != nil {
+		return nil, err
+	}
+	return s.Issues()
 }
 
 func fromErr(err error) Result {

@@ -32,6 +32,17 @@ func Execute() error {
 			if err != nil {
 				return err
 			}
+			if hasHelpArg(argv) {
+				result := app.NewRunner(rootDir).Run(context.Background(), nil)
+				if jsonOut {
+					return printJSON(result)
+				}
+				if data, ok := result.Data.(map[string]any); ok {
+					fmt.Println(data["usage"])
+					return nil
+				}
+				return printHuman(nil, result)
+			}
 			if jqExpr != "" && !jsonOut {
 				return fmt.Errorf("--jq requires --json")
 			}
@@ -249,6 +260,15 @@ func hasArg(argv []string, name string) bool {
 		}
 	}
 	return false
+}
+
+func hasHelpArg(argv []string) bool {
+	for _, arg := range argv {
+		if arg == "-h" || arg == "--help" {
+			return true
+		}
+	}
+	return len(argv) == 1 && argv[0] == "help"
 }
 
 func selectJSONFields(v any, fields []string) any {

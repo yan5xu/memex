@@ -41,7 +41,11 @@ func (s *Store) RevalidateObject(id string) error {
 		return err
 	}
 	for _, l := range links {
-		if !l.Resolved {
+		resolved := s.objectExists(l.ToID)
+		if _, err := s.DB.Exec(`UPDATE links SET resolved = ? WHERE id = ?`, boolInt(resolved), l.ID); err != nil {
+			return err
+		}
+		if !resolved {
 			if err := s.addIssue(id, l.FieldID, "broken_link", "error", "link references missing object "+l.ToID); err != nil {
 				return err
 			}
