@@ -814,14 +814,12 @@ function App() {
             <Separator className="mb-3 bg-border/45" />
             <div className="flex items-center justify-between px-1.5">
               <span className="text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Types</span>
-              <span className="font-mono text-[10px] text-muted-foreground/65">{types.length}</span>
             </div>
             <ScrollArea className="mt-2 min-h-0 flex-1 pr-1.5">
               <div className="space-y-0.5">
                 {types.map((t) => (
                   <button key={t.id} onClick={() => setActiveType(t.id)} className={`sidebar-type-row ${activeType === t.id ? "sidebar-type-row-active" : ""}`}>
                     <span className="truncate">{t.id}</span>
-                    <span className="font-mono text-[11px] opacity-60">{t.fields?.length ?? 0}</span>
                   </button>
                 ))}
               </div>
