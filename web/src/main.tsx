@@ -22,12 +22,13 @@ import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, use
 import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Save, Search, SplitSquareHorizontal, X } from "lucide-react";
+import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, RotateCcw, Save, Search, SplitSquareHorizontal, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -611,11 +612,12 @@ function App() {
   }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
 
   useEffect(() => {
-    if (view !== "detail" || graph.nodes.length > 0 || !markdownHasWikiLinks(activeBody)) return;
+    const needsObjectLookup = markdownHasWikiLinks(activeBody) || links.length > 0 || backlinks.length > 0;
+    if (view !== "detail" || graph.nodes.length > 0 || !needsObjectLookup) return;
     void cachedRun<GraphData>(["graph", "export"]).then((res) => {
       if (res.data) setGraph(res.data);
     });
-  }, [view, activeBody, graph.nodes.length]);
+  }, [view, activeObject?.id, activeBody, links.length, backlinks.length, graph.nodes.length]);
 
   useEffect(() => {
     if (selectedGraphNode && !graphView.nodes.some((node) => node.id === selectedGraphNode)) {
@@ -935,6 +937,9 @@ function App() {
                       </Panel>
                       <Panel title="Body" icon={<FileText className="size-4" />}>
                         <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
+                      </Panel>
+                      <Panel title="Relation Graph" icon={<Network className="size-4" />}>
+                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} open={(id) => void openObject(id)} />
                       </Panel>
                       <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
                       <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
@@ -2803,10 +2808,339 @@ function LinkRow({ link, open, reverse }: { link: Link; open: (id: string) => vo
   );
 }
 
+type InspectorGraphNode = {
+  id: string;
+  title: string;
+  type: string;
+  relation: string;
+  kind: string;
+  count: number;
+  direction: "incoming" | "outgoing" | "focus";
+  x: number;
+  y: number;
+};
+
+function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; open: (id: string) => void }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const graph = useMemo(() => buildInspectorRelationGraph(object, links, backlinks, graphNodes), [object, links, backlinks, graphNodes]);
+  if (graph.incoming.length === 0 && graph.outgoing.length === 0) {
+    return <div className="inspector-graph-empty">No links yet.</div>;
+  }
+  return (
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <div className="inspector-graph-launcher">
+        <div className="inspector-graph-launcher-copy">
+          <div className="inspector-graph-launcher-title">Local relation graph</div>
+          <div className="inspector-graph-launcher-meta">{graph.incoming.length} upstream, {graph.outgoing.length} downstream</div>
+        </div>
+        <Button variant="secondary" className="h-8 rounded-md px-2.5" onClick={() => setDialogOpen(true)}>
+          <Maximize2 className="size-3.5" />
+          Open canvas
+        </Button>
+      </div>
+      <DialogContent className="relation-graph-dialog" style={{ width: "clamp(720px, calc(100vw - 44px), 1380px)", height: "clamp(560px, calc(100vh - 44px), 880px)", maxWidth: "none" }}>
+        <DialogHeader className="relation-graph-header">
+          <div>
+            <DialogTitle className="font-serif text-2xl font-medium">{object.title || object.id}</DialogTitle>
+            <DialogDescription>{graph.incoming.length} upstream nodes, {graph.outgoing.length} downstream nodes. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
+          </div>
+        </DialogHeader>
+        <RelationGraphCanvas graph={graph} openObject={(id) => {
+          setDialogOpen(false);
+          open(id);
+        }} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof buildInspectorRelationGraph>; openObject: (id: string) => void }) {
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [zoom, setZoom] = useState(0.86);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [draggedPositions, setDraggedPositions] = useState<Record<string, Point>>({});
+  const panRef = useRef<{ startX: number; startY: number; origin: Point } | null>(null);
+  const nodeDragRef = useRef<{ id: string; startX: number; startY: number; origin: Point; moved: boolean } | null>(null);
+  const suppressClickRef = useRef<string | null>(null);
+  const centeredRef = useRef(false);
+  const baseNodes = useMemo(() => [graph.focus, ...graph.incoming, ...graph.outgoing], [graph]);
+  const nodes = baseNodes.map((node) => ({ ...node, ...(draggedPositions[node.id] ?? {}) }));
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  useEffect(() => {
+    centeredRef.current = false;
+    setDraggedPositions({});
+    setZoom(0.86);
+    const centerView = () => {
+      const rect = viewportRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+      setPan({
+        x: rect.width / 2 - graph.focus.x * 0.86,
+        y: rect.height / 2 - graph.focus.y * 0.86
+      });
+      centeredRef.current = true;
+      return true;
+    };
+    centerView();
+    const shortDelay = window.setTimeout(centerView, 60);
+    const longDelay = window.setTimeout(centerView, 240);
+    const viewport = viewportRef.current;
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && viewport) {
+      observer = new ResizeObserver(() => {
+        if (!centeredRef.current) centerView();
+      });
+      observer.observe(viewport);
+    }
+    return () => {
+      window.clearTimeout(shortDelay);
+      window.clearTimeout(longDelay);
+      observer?.disconnect();
+    };
+  }, [graph.focus.id, graph.focus.x, graph.focus.y]);
+
+  function zoomAt(nextZoom: number, clientX?: number, clientY?: number) {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    const clamped = clampZoom(nextZoom);
+    if (!rect || clientX === undefined || clientY === undefined) {
+      setZoom(clamped);
+      return;
+    }
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    const worldX = (localX - pan.x) / zoom;
+    const worldY = (localY - pan.y) / zoom;
+    setZoom(clamped);
+    setPan({ x: localX - worldX * clamped, y: localY - worldY * clamped });
+  }
+
+  function resetView() {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    const nextZoom = 0.86;
+    setDraggedPositions({});
+    setZoom(nextZoom);
+    if (rect) {
+      setPan({
+        x: rect.width / 2 - graph.focus.x * nextZoom,
+        y: rect.height / 2 - graph.focus.y * nextZoom
+      });
+    }
+  }
+
+  function handleWheel(event: React.WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.08 : 0.92;
+    zoomAt(zoom * factor, event.clientX, event.clientY);
+  }
+
+  function beginPan(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest(".relation-canvas-node")) return;
+    panRef.current = { startX: event.clientX, startY: event.clientY, origin: pan };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function beginNodeDrag(event: React.PointerEvent<HTMLButtonElement>, node: InspectorGraphNode) {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    nodeDragRef.current = { id: node.id, startX: event.clientX, startY: event.clientY, origin: { x: node.x, y: node.y }, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const nodeDrag = nodeDragRef.current;
+    if (nodeDrag) {
+      const dx = (event.clientX - nodeDrag.startX) / zoom;
+      const dy = (event.clientY - nodeDrag.startY) / zoom;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) nodeDrag.moved = true;
+      setDraggedPositions((positions) => ({ ...positions, [nodeDrag.id]: { x: nodeDrag.origin.x + dx, y: nodeDrag.origin.y + dy } }));
+      return;
+    }
+    const drag = panRef.current;
+    if (!drag) return;
+    setPan({ x: drag.origin.x + event.clientX - drag.startX, y: drag.origin.y + event.clientY - drag.startY });
+  }
+
+  function endPointer(event: React.PointerEvent<HTMLDivElement>) {
+    if (nodeDragRef.current?.moved) suppressClickRef.current = nodeDragRef.current.id;
+    nodeDragRef.current = null;
+    panRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may belong to a dragged node.
+    }
+  }
+
+  return (
+    <div className="relation-canvas-shell">
+      <div className="relation-canvas-toolbar">
+        <div className="relation-canvas-stat"><Move className="size-3.5" />{nodes.length} nodes</div>
+        <div className="flex items-center gap-1">
+          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 0.9)} title="Zoom out"><ZoomOut className="size-3.5" /></button>
+          <button className="relation-canvas-tool relation-canvas-zoom" onClick={() => zoomAt(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
+          <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 1.1)} title="Zoom in"><ZoomIn className="size-3.5" /></button>
+          <button className="relation-canvas-tool" onClick={resetView} title="Reset layout"><RotateCcw className="size-3.5" /></button>
+        </div>
+      </div>
+      <div
+        ref={viewportRef}
+        className="relation-canvas-viewport"
+        onWheel={handleWheel}
+        onPointerDown={beginPan}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endPointer}
+        onPointerCancel={endPointer}
+      >
+        <div className="relation-canvas-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+          <svg className="relation-canvas-edges" width={graph.width} height={graph.height}>
+            <defs>
+              <marker id="relation-arrow-field" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+                <path d="M1,1 L9,5 L1,9 Z" fill="hsl(var(--moss) / 0.62)" />
+              </marker>
+              <marker id="relation-arrow-body" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+                <path d="M1,1 L9,5 L1,9 Z" fill="hsl(var(--earth) / 0.55)" />
+              </marker>
+            </defs>
+            {graph.incoming.map((node) => {
+              const from = nodeMap.get(node.id);
+              const to = nodeMap.get(graph.focus.id);
+              return from && to ? <RelationGraphEdge key={`in-${node.id}`} from={from} to={to} node={node} /> : null;
+            })}
+            {graph.outgoing.map((node) => {
+              const from = nodeMap.get(graph.focus.id);
+              const to = nodeMap.get(node.id);
+              return from && to ? <RelationGraphEdge key={`out-${node.id}`} from={from} to={to} node={node} /> : null;
+            })}
+          </svg>
+          {nodes.map((node) => (
+            <button
+              key={node.id}
+              className={`relation-canvas-node relation-canvas-node-${node.direction}`}
+              style={{ left: node.x, top: node.y }}
+              title={node.id}
+              onPointerDown={(event) => beginNodeDrag(event, node)}
+              onClick={() => {
+                if (suppressClickRef.current === node.id) {
+                  suppressClickRef.current = null;
+                  return;
+                }
+                openObject(node.id);
+              }}
+            >
+              <span className="relation-canvas-node-title">{node.title}</span>
+              <span className="relation-canvas-node-type">{node.type}</span>
+              {node.direction !== "focus" && <span className="relation-canvas-node-relation">{node.relation}{node.count > 1 ? ` x${node.count}` : ""}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RelationGraphEdge({ from, to, node }: { from: InspectorGraphNode; to: InspectorGraphNode; node: InspectorGraphNode }) {
+  const start = relationNodeAnchor(from, to.x >= from.x ? "right" : "left");
+  const end = relationNodeAnchor(to, to.x >= from.x ? "left" : "right");
+  const distance = Math.max(90, Math.abs(end.x - start.x) * 0.42);
+  const forward = end.x >= start.x;
+  const d = `M ${start.x} ${start.y} C ${start.x + (forward ? distance : -distance)} ${start.y}, ${end.x - (forward ? distance : -distance)} ${end.y}, ${end.x} ${end.y}`;
+  const marker = node.kind === "field" ? "relation-arrow-field" : "relation-arrow-body";
+  return <path d={d} fill="none" stroke={node.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth="1.45" markerEnd={`url(#${marker})`} />;
+}
+
+function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
+  const width = node.direction === "focus" ? 190 : 170;
+  return { x: node.x + (side === "right" ? width : 0), y: node.y + 38 };
+}
+
 function shortPath(path: string) {
   const parts = path.split("/").filter(Boolean);
   if (parts.length <= 2) return path;
   return `.../${parts.slice(-2).join("/")}`;
+}
+
+function buildInspectorRelationGraph(object: Obj, links: Link[], backlinks: Link[], graphNodes: Obj[]) {
+  const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
+  const incoming = buildInspectorGraphLane(backlinks, "incoming", objectByID);
+  const outgoing = buildInspectorGraphLane(links, "outgoing", objectByID);
+  const rowGap = 92;
+  const laneHeight = Math.max(incoming.length, outgoing.length, 1) * rowGap + 320;
+  const width = 1800;
+  const height = Math.max(920, laneHeight);
+  const focus: InspectorGraphNode = {
+    id: object.id,
+    title: object.title || object.id,
+    type: object.type_id,
+    relation: "focus",
+    kind: "self",
+    count: 1,
+    direction: "focus",
+    x: width / 2 - 95,
+    y: height / 2 - 38
+  };
+  return {
+    focus,
+    incoming: positionInspectorLane(incoming, height, rowGap, 330),
+    outgoing: positionInspectorLane(outgoing, height, rowGap, 1300),
+    width,
+    height
+  };
+}
+
+function buildInspectorGraphLane(links: Link[], direction: "incoming" | "outgoing", objectByID: Map<string, Obj>) {
+  const byID = new Map<string, InspectorGraphNode>();
+  for (const link of links) {
+    const id = direction === "incoming" ? link.from_id : link.to_id;
+    const object = objectByID.get(id);
+    const existing = byID.get(id);
+    if (existing) {
+      existing.count += 1;
+      if (!existing.relation.includes(link.relation)) {
+        existing.relation = `${existing.relation}, ${link.relation}`;
+      }
+      if (existing.kind !== "field" && link.kind === "field") {
+        existing.kind = "field";
+      }
+      continue;
+    }
+    byID.set(id, {
+      id,
+      title: object?.title || humanizeObjectID(id),
+      type: object?.type_id || inferObjectType(id),
+      relation: link.relation,
+      kind: link.kind,
+      count: 1,
+      direction,
+      x: 0,
+      y: 0
+    });
+  }
+  return [...byID.values()].sort((a, b) => {
+    if (a.type !== b.type) return graphTypeOrder([a.type, b.type])[0] === a.type ? -1 : 1;
+    return a.title.localeCompare(b.title);
+  });
+}
+
+function positionInspectorLane(nodes: InspectorGraphNode[], height: number, rowGap: number, x: number) {
+  if (nodes.length === 0) return [];
+  const contentHeight = (nodes.length - 1) * rowGap;
+  const start = Math.max(96, height / 2 - contentHeight / 2 - 38);
+  return nodes.map((node, index) => ({ ...node, x, y: start + index * rowGap }));
+}
+
+function inferObjectType(id: string) {
+  if (id.startsWith("source.")) return "source.item";
+  if (id.startsWith("social.analytics.")) return "social.analytics.snapshot";
+  if (id.startsWith("social.account.")) return "social.account";
+  if (id.startsWith("social.post.")) return "social.post";
+  const [prefix] = id.split(".");
+  return prefix || "object";
+}
+
+function humanizeObjectID(id: string) {
+  const parts = id.split(".");
+  const rest = parts.length > 1 ? parts.slice(1).join(" ") : id;
+  return rest.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function buildSchemaGraphView(types: TypeDef[], selectedType: string | null) {

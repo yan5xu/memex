@@ -1441,6 +1441,208 @@ body {
     inset 0 1px 0 hsl(0 0% 100% / 0.44);
 }
 
+.inspector-graph-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid hsl(var(--border) / 0.26);
+  border-radius: 9px;
+  background: hsl(var(--surface) / 0.5);
+  padding: 0.65rem;
+}
+
+.inspector-graph-launcher-copy {
+  min-width: 0;
+}
+
+.inspector-graph-launcher-title {
+  color: hsl(var(--foreground) / 0.9);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.inspector-graph-launcher-meta {
+  margin-top: 0.12rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.68rem;
+}
+
+.inspector-graph-empty {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+}
+
+.relation-graph-dialog {
+  display: grid;
+  width: clamp(720px, calc(100vw - 44px), 1380px);
+  height: clamp(560px, calc(100vh - 44px), 880px);
+  max-width: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  border-color: hsl(var(--border) / 0.32);
+  border-radius: 14px;
+  background: hsl(var(--card) / 0.98);
+  padding: 1.1rem;
+  overflow: hidden;
+}
+
+.relation-graph-header {
+  padding-right: 2rem;
+}
+
+.relation-canvas-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: 11px;
+  background:
+    radial-gradient(circle at 50% 42%, hsl(var(--teal) / 0.08), transparent 26rem),
+    linear-gradient(180deg, hsl(var(--surface) / 0.5), hsl(var(--card) / 0.92));
+}
+
+.relation-canvas-toolbar {
+  position: absolute;
+  left: 0.85rem;
+  right: 0.85rem;
+  top: 0.85rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.relation-canvas-toolbar > * {
+  pointer-events: auto;
+}
+
+.relation-canvas-stat,
+.relation-canvas-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid hsl(var(--border) / 0.3);
+  border-radius: 8px;
+  background: hsl(var(--card) / 0.78);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.72rem;
+  font-weight: 600;
+  backdrop-filter: blur(12px);
+}
+
+.relation-canvas-stat {
+  padding: 0.45rem 0.62rem;
+}
+
+.relation-canvas-tool {
+  height: 2rem;
+  min-width: 2rem;
+  justify-content: center;
+  padding: 0 0.45rem;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.relation-canvas-tool:hover {
+  border-color: hsl(var(--teal) / 0.3);
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.relation-canvas-zoom {
+  min-width: 3.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.relation-canvas-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.relation-canvas-viewport:active {
+  cursor: grabbing;
+}
+
+.relation-canvas-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.relation-canvas-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.relation-canvas-node {
+  position: absolute;
+  display: flex;
+  width: 170px;
+  min-height: 76px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1px solid hsl(var(--border) / 0.38);
+  border-radius: 10px;
+  background: hsl(var(--card) / 0.94);
+  padding: 0.62rem 0.7rem;
+  text-align: left;
+  box-shadow: 0 12px 28px -22px hsl(var(--shadow-warm) / 0.28);
+  cursor: grab;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.relation-canvas-node:hover {
+  border-color: hsl(var(--teal) / 0.34);
+  background: hsl(var(--card));
+  transform: translateY(-1px);
+}
+
+.relation-canvas-node-focus {
+  width: 190px;
+  border-color: hsl(var(--earth) / 0.46);
+  background: hsl(var(--surface) / 0.94);
+  box-shadow: 0 16px 36px -24px hsl(var(--shadow-warm) / 0.36);
+}
+
+.relation-canvas-node-title {
+  max-width: 100%;
+  overflow: hidden;
+  color: hsl(var(--foreground) / 0.92);
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-canvas-node-type,
+.relation-canvas-node-relation {
+  max-width: 100%;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.66rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relation-canvas-node-relation {
+  margin-top: 0.18rem;
+  color: hsl(var(--earth) / 0.78);
+}
+
 .panel-block {
   border-top: 1px solid hsl(var(--border) / 0.38);
   padding: 0.85rem 0 0.7rem;
