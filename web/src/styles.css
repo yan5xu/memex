@@ -1389,37 +1389,12 @@ body {
 
 .graph-center-control {
   display: flex;
-  min-width: min(620px, 54vw);
+  min-width: min(360px, 38vw);
   align-items: center;
   justify-content: flex-end;
-  gap: 0.65rem;
 }
 
-.graph-center-search {
-  position: relative;
-  display: flex;
-  width: min(240px, 20vw);
-  min-width: 180px;
-  align-items: center;
-  color: hsl(var(--muted-foreground));
-}
-
-.graph-center-search svg {
-  pointer-events: none;
-  position: absolute;
-  left: 0.72rem;
-  z-index: 1;
-}
-
-.graph-center-search input {
-  height: 2.15rem;
-  border-radius: 7px;
-  background: hsl(var(--surface) / 0.72);
-  padding-left: 2rem;
-  font-size: 0.78rem;
-}
-
-.graph-center-select {
+.graph-center-picker {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -1431,7 +1406,27 @@ body {
   text-transform: uppercase;
 }
 
-.graph-center-select select,
+.graph-center-trigger {
+  width: min(360px, 32vw);
+  min-width: 220px;
+  justify-content: space-between;
+  border-radius: 7px;
+  background: hsl(var(--surface) / 0.84);
+  padding-inline: 0.62rem;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 450;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.graph-center-popover {
+  width: min(420px, calc(100vw - 2rem));
+  border-radius: 12px;
+  border-color: hsl(var(--border) / 0.48);
+  box-shadow: 0 18px 48px -34px hsl(var(--shadow-warm) / 0.5);
+}
+
 .graph-view-editor select {
   min-width: 0;
   border: 1px solid hsl(var(--border) / 0.42);
@@ -1446,11 +1441,6 @@ body {
   text-transform: none;
 }
 
-.graph-center-select select {
-  width: min(420px, 36vw);
-}
-
-.graph-center-select select:focus,
 .graph-view-editor select:focus {
   border-color: hsl(var(--teal) / 0.72);
   box-shadow: 0 0 0 3px hsl(var(--teal) / 0.12);

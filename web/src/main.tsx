@@ -1328,6 +1328,7 @@ function GraphWorkspacePage({
   const [editorRootType, setEditorRootType] = useState("");
   const [editorSteps, setEditorSteps] = useState("");
   const [centerSearch, setCenterSearch] = useState("");
+  const [centerPickerOpen, setCenterPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewObject, setPreviewObject] = useState<Obj | null>(null);
@@ -1353,9 +1354,8 @@ function GraphWorkspacePage({
     });
   }, [centerCandidates, centerSearch]);
   const centerSelectOptions = useMemo(() => {
-    if (!centerObject || filteredCenterCandidates.some((object) => object.id === centerObject.id)) return filteredCenterCandidates;
-    return [centerObject, ...filteredCenterCandidates];
-  }, [centerObject, filteredCenterCandidates]);
+    return filteredCenterCandidates;
+  }, [filteredCenterCandidates]);
   const activeTemplate = activeDefinition ? graphViewDefinitionToTemplate(activeDefinition, activeDefinition.root_type) : null;
   const queryGraph = useMemo(() => {
     if (!centerObject || !activeTemplate) return null;
@@ -1594,18 +1594,42 @@ function GraphWorkspacePage({
         </div>
         {!showingFullGraph && activeDefinition && (
           <div className="graph-center-control">
-            <label className="graph-center-search">
-              <Search className="size-3.5" />
-              <Input value={centerSearch} onChange={(event) => setCenterSearch(event.target.value)} placeholder={t("graph.search", { type: rootType })} />
-            </label>
-            <label className="graph-center-select">
+            <div className="graph-center-picker">
               <span>{t("graph.center")}</span>
-              <select value={centerObject?.id ?? ""} onChange={(event) => setSelection({ centerID: event.target.value })}>
-                {centerSelectOptions.map((object) => (
-                  <option key={object.id} value={object.id}>{objectDisplayTitle(object)}</option>
-                ))}
-              </select>
-            </label>
+              <Popover open={centerPickerOpen} onOpenChange={setCenterPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="secondary" className="graph-center-trigger" aria-label={t("graph.search", { type: rootType })}>
+                    <span className="truncate">{centerObject ? objectDisplayTitle(centerObject) : t("common.none")}</span>
+                    <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="graph-center-popover p-0">
+                  <Command shouldFilter={false}>
+                    <CommandInput value={centerSearch} onValueChange={setCenterSearch} placeholder={t("graph.search", { type: rootType })} />
+                    <CommandList>
+                      <CommandEmpty>{t("objects.emptyTitle")}</CommandEmpty>
+                      <CommandGroup heading={t("graph.center")}>
+                        {centerSelectOptions.map((object) => (
+                          <CommandItem
+                            key={object.id}
+                            value={`${object.id} ${objectDisplayTitle(object)} ${object.type_id}`}
+                            onSelect={() => {
+                              setSelection({ centerID: object.id });
+                              setCenterSearch("");
+                              setCenterPickerOpen(false);
+                            }}
+                          >
+                            <Check className={`size-3.5 ${centerObject?.id === object.id ? "opacity-100" : "opacity-0"}`} />
+                            <span className="min-w-0 flex-1 truncate">{objectDisplayTitle(object)}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">{object.id}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         )}
       </div>
