@@ -891,7 +891,7 @@ function App() {
 
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
-            <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "object-reader-with-inspector" : ""}`}>
+            <article className="object-reader mb-scroll h-full overflow-auto px-8 py-8">
               <div className="body-object-column w-full">
                 <ObjectBodyWorkspace
                   object={activeObject}
@@ -901,6 +901,16 @@ function App() {
                   openObject={(id) => void openObject(id)}
                   saveBody={saveObjectBody}
                   onBeginEdit={() => setInspectorOpen(false)}
+                  inspectorToggle={
+                    <button
+                      className={`inspector-toggle ${inspectorOpen ? "text-[hsl(var(--earth))]" : "text-muted-foreground"}`}
+                      onClick={() => setInspectorOpen((open) => !open)}
+                      title={inspectorOpen ? "Collapse inspector" : "Expand inspector"}
+                      aria-label={inspectorOpen ? "Collapse inspector" : "Expand inspector"}
+                    >
+                      {inspectorOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+                    </button>
+                  }
                 />
               </div>
             </article>
@@ -911,25 +921,13 @@ function App() {
               </article>
             </div>
 
-            <button
-              className={`inspector-toggle ${inspectorOpen ? "right-[414px] text-[hsl(var(--earth))]" : "right-10 text-muted-foreground"}`}
-              onClick={() => setInspectorOpen((open) => !open)}
-              title={inspectorOpen ? "Hide inspector" : "Show inspector"}
-            >
-              {inspectorOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
-              <span>{inspectorOpen ? "Hide" : "Inspector"}</span>
-            </button>
-
-            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "translate-x-0 opacity-100" : "translate-x-[420px] opacity-0"}`}>
+            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "object-inspector-open" : "object-inspector-closed"}`}>
               <div className="inspector-header">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Inspector</div>
                   <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
                   <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
                 </div>
-                <button className="rounded-md p-1.5 text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground" onClick={() => setInspectorOpen(false)} title="Hide inspector">
-                  <ChevronRight className="size-4" />
-                </button>
               </div>
               <Panel title="Actions" icon={<Download className="size-4" />}>
                 <Button className="w-full justify-start rounded-md" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
@@ -1616,6 +1614,7 @@ function ObjectBodyWorkspace({
   openObject,
   saveBody,
   onBeginEdit,
+  inspectorToggle,
   initialEditing = false
 }: {
   object: Obj;
@@ -1625,6 +1624,7 @@ function ObjectBodyWorkspace({
   openObject: (id: string) => void;
   saveBody: (id: string, markdown: string) => Promise<ObjectLoadResult | null>;
   onBeginEdit?: () => void;
+  inspectorToggle?: React.ReactNode;
   initialEditing?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1742,6 +1742,7 @@ function ObjectBodyWorkspace({
             {(saving || uploading) && <Loader2 className="size-3.5 animate-spin" />}
             {status}
           </span>
+          {inspectorToggle}
           {editing ? (
             <>
               <Button variant="ghost" className="h-8 rounded-md px-2.5" onClick={cancelEdit} disabled={saving}><X className="size-3.5" />Cancel</Button>
@@ -2642,7 +2643,7 @@ function truncateMiddle(value: string, maxLength: number) {
 }
 
 function objectTableCellClass(columnID: string) {
-  const base = "whitespace-nowrap align-top";
+  const base = "whitespace-nowrap align-top overflow-hidden";
   if (columnID === "id") return `${base} object-table-id-col`;
   if (columnID === "title") return `${base} object-table-title-col`;
   if (columnID === "url") return `${base} object-table-url-col`;
@@ -2679,9 +2680,9 @@ function renderTableCell(value: unknown, field: FieldDef, open: (id: string) => 
   if (field.kind === "ref" || field.kind === "ref_list") {
     const refs = Array.isArray(value) ? value : [value];
     return (
-      <span className="flex max-h-16 max-w-72 flex-wrap gap-1 overflow-hidden">
+      <span className="flex max-h-16 max-w-full flex-wrap gap-1 overflow-hidden">
         {refs.map((ref) => (
-          <button key={String(ref)} className="glass-light rounded-md px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-card hover:text-foreground" onClick={() => open(String(ref))}>
+          <button key={String(ref)} className="glass-light max-w-full truncate rounded-md px-2 py-1 font-mono text-xs text-[hsl(var(--earth))] transition hover:bg-card hover:text-foreground" onClick={() => open(String(ref))}>
             {String(ref)}
           </button>
         ))}
@@ -2690,13 +2691,13 @@ function renderTableCell(value: unknown, field: FieldDef, open: (id: string) => 
   }
   if (field.kind === "url") {
     const href = String(value);
-    return <a href={href} target="_blank" rel="noreferrer" className="inline-block max-w-64 truncate text-[hsl(var(--earth))] hover:text-foreground">{href}</a>;
+    return <a href={href} target="_blank" rel="noreferrer" className="inline-block max-w-full truncate text-[hsl(var(--earth))] hover:text-foreground">{href}</a>;
   }
   if (Array.isArray(value)) {
-    return <span className="flex max-h-16 max-w-72 flex-wrap gap-1 overflow-hidden">{value.map((item) => <Badge key={String(item)}>{String(item)}</Badge>)}</span>;
+    return <span className="flex max-h-16 max-w-full flex-wrap gap-1 overflow-hidden">{value.map((item) => <Badge key={String(item)}>{String(item)}</Badge>)}</span>;
   }
   if (field.kind === "enum" || field.kind === "boolean") return <Badge>{String(value)}</Badge>;
-  return <span className="inline-block max-w-72 truncate">{String(value)}</span>;
+  return <span className="inline-block max-w-full truncate">{String(value)}</span>;
 }
 
 function plainCell(v: unknown) {

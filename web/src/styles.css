@@ -725,12 +725,6 @@ body {
   background: hsl(var(--card));
 }
 
-@media (min-width: 1440px) {
-  .object-reader-with-inspector {
-    padding-right: 420px;
-  }
-}
-
 .body-workspace {
   min-height: 100%;
 }
@@ -1365,11 +1359,11 @@ body {
 
 .object-inspector {
   position: absolute;
-  bottom: 22px;
-  right: 24px;
-  top: 22px;
+  right: 34px;
+  top: 112px;
   z-index: 20;
   display: flex;
+  max-height: calc(100% - 136px);
   width: 380px;
   flex-direction: column;
   gap: 0;
@@ -1380,10 +1374,23 @@ body {
     linear-gradient(180deg, hsl(var(--card) / 0.96), hsl(var(--surface) / 0.9));
   padding: 0 14px 12px;
   box-shadow:
-    -3px 8px 20px -18px hsl(var(--shadow-warm) / 0.18),
+    0 16px 36px -28px hsl(var(--shadow-warm) / 0.28),
     0 1px 1px hsl(var(--shadow-warm) / 0.04);
   backdrop-filter: blur(14px);
-  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s;
+  transform-origin: top right;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.16s;
+}
+
+.object-inspector-open {
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.object-inspector-closed {
+  pointer-events: none;
+  transform: translateY(-0.35rem) scale(0.985);
+  opacity: 0;
 }
 
 .object-inspector .tray {
@@ -1408,25 +1415,28 @@ body {
 }
 
 .inspector-toggle {
-  position: absolute;
-  top: 32px;
-  z-index: 30;
   display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
   border: 1px solid hsl(var(--border) / 0.42);
-  border-radius: 8px;
-  background: hsl(var(--card) / 0.86);
-  padding: 0.42rem 0.68rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  box-shadow: 0 6px 16px -12px hsl(var(--shadow-warm) / 0.24);
+  border-radius: 999px;
+  background: hsl(var(--card) / 0.82);
+  box-shadow:
+    0 8px 18px -15px hsl(var(--shadow-warm) / 0.22),
+    inset 0 1px 0 hsl(0 0% 100% / 0.34);
   backdrop-filter: blur(12px);
-  transition: right 0.24s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .inspector-toggle:hover {
+  border-color: hsl(var(--teal) / 0.26);
   background: hsl(var(--card));
+  box-shadow:
+    0 10px 22px -16px hsl(var(--shadow-warm) / 0.26),
+    inset 0 1px 0 hsl(0 0% 100% / 0.44);
 }
 
 .panel-block {
