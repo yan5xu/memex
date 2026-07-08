@@ -857,7 +857,7 @@ function App() {
         </div>}
         <div className="mb-scroll min-h-0 flex-1 overflow-auto">
         {view === "objects" && (
-          <section className="mx-auto flex h-full w-full max-w-[1100px] flex-col px-7 py-6">
+          <section className="flex h-full w-full flex-col px-7 py-6">
             <div className="mb-5 flex items-baseline gap-3">
               <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || "Objects"}</h1>
               <span className="font-mono text-xs text-muted-foreground">{rows.length} objects</span>
@@ -892,7 +892,7 @@ function App() {
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
             <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "object-reader-with-inspector" : ""}`}>
-              <div className="body-object-column mx-auto max-w-[760px]">
+              <div className="body-object-column w-full">
                 <ObjectBodyWorkspace
                   object={activeObject}
                   body={activeBody}
@@ -949,7 +949,7 @@ function App() {
         )}
 
         {view === "types" && (
-          <section className="mx-auto max-w-[1100px] px-7 py-6">
+          <section className="w-full px-7 py-6">
             <Header eyebrow="Schema Studio" title="Types and fields" description="Dynamic schema for object projections, field links, and local validation." />
             <div className="content-panel mb-7 overflow-hidden">
               <div className="flex items-start justify-between gap-4 px-5 py-4">
@@ -963,7 +963,7 @@ function App() {
                 <SchemaGraphCanvas graphView={schemaGraphView} selectedType={selectedSchemaType} select={setSelectedSchemaType} />
               </div>
             </div>
-            <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
+            <div className="grid gap-x-10 gap-y-5 md:grid-cols-2 2xl:grid-cols-3">
               {types.map((t) => (
                 <Panel key={t.id} title={t.id} icon={<Braces className="size-4" />}>
                   <div className="space-y-1">
@@ -988,7 +988,7 @@ function App() {
         )}
 
         {view === "graph" && (
-          <section className="mx-auto h-full max-w-7xl px-6 py-5">
+          <section className="h-full w-full px-6 py-5">
             <div className="mb-4 flex items-start justify-between gap-4">
               <Header
                 eyebrow="Link Map"
@@ -1077,7 +1077,7 @@ function App() {
         )}
 
         {view === "health" && (
-          <section className="mx-auto max-w-5xl px-7 py-6">
+          <section className="w-full px-7 py-6">
             <Header eyebrow="Health" title="Vault integrity" description="Local validation and body/link diagnostics." />
             <div className="content-panel p-4">
               {issues.length === 0 ? <EmptyState title="No issues" description="The current vault is clean." /> : issues.map((issue, i) => <pre key={i} className="tray mb-3 overflow-x-auto rounded-2xl p-3 font-mono text-xs text-muted-foreground last:mb-0">{JSON.stringify(issue, null, 2)}</pre>)}
