@@ -742,11 +742,13 @@ body {
 }
 
 .body-workspace-actions {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 0.5rem;
   padding-top: 0.2rem;
+  z-index: 25;
 }
 
 .body-save-state {
@@ -1359,11 +1361,11 @@ body {
 
 .object-inspector {
   position: absolute;
-  right: 34px;
-  top: 112px;
+  right: 0;
+  top: calc(100% + 0.75rem);
   z-index: 20;
   display: flex;
-  max-height: calc(100% - 136px);
+  max-height: min(620px, calc(100vh - 190px));
   width: 380px;
   flex-direction: column;
   gap: 0;

@@ -918,6 +918,30 @@ function App() {
                       {inspectorOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
                     </button>
                   }
+                  inspectorPanel={
+                    <aside className={`object-inspector mb-scroll ${inspectorOpen ? "object-inspector-open" : "object-inspector-closed"}`}>
+                      <div className="inspector-header">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Inspector</div>
+                          <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
+                          <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
+                        </div>
+                      </div>
+                      <Panel title="Actions" icon={<Download className="size-4" />}>
+                        <Button className="w-full justify-start rounded-md" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
+                          <Download className="size-4" />
+                          {savingObjectImage ? "Saving image" : "Save as PNG"}
+                        </Button>
+                      </Panel>
+                      <Panel title="Body" icon={<FileText className="size-4" />}>
+                        <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
+                      </Panel>
+                      <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
+                      <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+                      <Panel title="Body Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
+                      <Panel title="Backlinks" icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
+                    </aside>
+                  }
                 />
               </div>
             </article>
@@ -927,29 +951,6 @@ function App() {
                 <ObjectPageContent object={activeObject} body={activeBody} vault={vault} objectTitleByID={objectTitleByID} openObject={() => undefined} imageLoading="eager" />
               </article>
             </div>
-
-            <aside className={`object-inspector mb-scroll ${inspectorOpen ? "object-inspector-open" : "object-inspector-closed"}`}>
-              <div className="inspector-header">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">Inspector</div>
-                  <div className="mt-1 truncate text-sm font-semibold">{activeObject.title || activeObject.id}</div>
-                  <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">{activeObject.id}</div>
-                </div>
-              </div>
-              <Panel title="Actions" icon={<Download className="size-4" />}>
-                <Button className="w-full justify-start rounded-md" variant="secondary" disabled={savingObjectImage} onClick={() => void saveObjectImage()}>
-                  <Download className="size-4" />
-                  {savingObjectImage ? "Saving image" : "Save as PNG"}
-                </Button>
-              </Panel>
-              <Panel title="Body" icon={<FileText className="size-4" />}>
-                <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
-              </Panel>
-              <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
-              <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-              <Panel title="Body Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
-              <Panel title="Backlinks" icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
-            </aside>
           </section>
         )}
 
@@ -1653,6 +1654,7 @@ function ObjectBodyWorkspace({
   saveBody,
   onBeginEdit,
   inspectorToggle,
+  inspectorPanel,
   initialEditing = false
 }: {
   object: Obj;
@@ -1664,6 +1666,7 @@ function ObjectBodyWorkspace({
   saveBody: (id: string, markdown: string) => Promise<ObjectLoadResult | null>;
   onBeginEdit?: () => void;
   inspectorToggle?: React.ReactNode;
+  inspectorPanel?: React.ReactNode;
   initialEditing?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1790,6 +1793,7 @@ function ObjectBodyWorkspace({
           ) : (
             <Button className="h-8 rounded-md px-3" onClick={beginEdit}><Edit3 className="size-3.5" />Edit body</Button>
           )}
+          {inspectorPanel}
         </div>
       </div>
 
