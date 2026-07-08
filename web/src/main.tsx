@@ -1143,17 +1143,13 @@ function GraphLabPage({ object, graph, links, backlinks, openObject }: { object:
     return buildInspectorQueryGraph(object, graph.nodes, graph.edges, activeTemplate, []);
   }, [object, activeTemplate, links, backlinks, graph.nodes, graph.edges]);
   const nodes = labGraph ? [labGraph.focus, ...labGraph.incoming, ...labGraph.outgoing] : [];
-  const columns = nodes.reduce<Record<string, Array<{ title: string; relation: string; top: number }>>>((acc, node) => {
-    const key = `${node.type}@${Math.round(node.x)}`;
-    acc[key] = [...(acc[key] ?? []), { title: node.title, relation: node.relation, top: Math.round(node.y) }];
-    return acc;
-  }, {});
+  const groups = labGraph ? relationGraphGroups(labGraph, nodes) : [];
 
   return (
     <section className="graph-lab-page">
       <div className="graph-lab-header">
         <div>
-          <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Graph Query Lab</div>
+          <div className="mb-1 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Graph Viewer</div>
           <h1 className="font-serif text-3xl font-medium tracking-tight">{object?.title || object?.id || "No object loaded"}</h1>
           <div className="mt-1 font-mono text-xs text-muted-foreground">{object?.id || "Use ?view=graph-lab&object=<id>"}</div>
         </div>
@@ -1170,25 +1166,38 @@ function GraphLabPage({ object, graph, links, backlinks, openObject }: { object:
           {labGraph ? <RelationGraphCanvas graph={labGraph} openObject={openObject} /> : <EmptyState title="No graph" description="Open a graph-lab URL with an object id." />}
         </div>
         <aside className="graph-lab-panel">
-          <Panel title="Run" icon={<Play className="size-4" />}>
+          <Panel title="Current view" icon={<Play className="size-4" />}>
             <div className="space-y-2 text-sm text-muted-foreground">
-              <div><span className="text-foreground/80">View:</span> {activeTemplate.label}</div>
+              <div><span className="text-foreground/80">Path:</span> {activeTemplate.label}</div>
+              <div>{activeTemplate.description}</div>
               <div><span className="text-foreground/80">Nodes:</span> {nodes.length}</div>
               <div><span className="text-foreground/80">Edges:</span> {labGraph?.edges.length ?? 0}</div>
             </div>
           </Panel>
-          <Panel title="Columns" icon={<Braces className="size-4" />}>
-            <div className="space-y-3">
-              {Object.entries(columns).map(([column, items]) => (
-                <div key={column}>
-                  <div className="mb-1 font-mono text-[11px] text-muted-foreground">{column}</div>
+          <Panel title="How to use" icon={<Move className="size-4" />}>
+            <div className="graph-lab-help">
+              <div><Move className="size-3.5" /> Drag empty space to pan.</div>
+              <div><ZoomIn className="size-3.5" /> Wheel or buttons to zoom.</div>
+              <div><Network className="size-3.5" /> Hover a node to isolate its links.</div>
+              <div><Eye className="size-3.5" /> Click a node to open that object.</div>
+            </div>
+          </Panel>
+          <Panel title="Groups" icon={<Braces className="size-4" />}>
+            <div className="graph-lab-groups">
+              {groups.map((group) => (
+                <div key={group.id} className="graph-lab-group">
+                  <div className="graph-lab-group-head">
+                    <span>{group.label}</span>
+                    <span>{group.items.length}</span>
+                  </div>
                   <div className="space-y-1">
-                    {items.sort((a, b) => a.top - b.top).map((item) => (
-                      <div key={`${column}-${item.title}-${item.top}`} className="graph-lab-order-row">
+                    {group.items.slice(0, 10).map((item) => (
+                      <button key={item.id} className="graph-lab-order-row" onClick={() => openObject(item.id)}>
                         <span className="truncate">{item.title}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground">{item.top}</span>
-                      </div>
+                        <span>{item.type}</span>
+                      </button>
                     ))}
+                    {group.items.length > 10 && <div className="graph-lab-more">+{group.items.length - 10} more</div>}
                   </div>
                 </div>
               ))}
@@ -3627,40 +3636,68 @@ function toInspectorGraphEdge(edge: Link): InspectorGraphEdge {
 }
 
 function relationNearbyTemplate(): RelationQueryTemplate {
-  return { id: "nearby", label: "Nearby", description: "Direct links around this object", steps: [] };
+  return { id: "nearby", label: "Direct links", description: "Direct field and body links around the current object", steps: [] };
 }
 
 function relationQueryTemplatesFor(typeID: string): RelationQueryTemplate[] {
   const nearby = relationNearbyTemplate();
   if (typeID === "investor") {
     return [
-      {
-        id: "investor-portfolio",
-        label: "Portfolio",
-        description: "Investments by this investor and their companies",
-        steps: [
-          { relation: "investor", direction: "in", targetType: "investment" },
-          { relation: "company", direction: "out", targetType: "company" }
-        ]
-      },
+      relationQueryTemplate(typeID, [
+        { relation: "investor", direction: "in", targetType: "investment" },
+        { relation: "company", direction: "out", targetType: "company" }
+      ]),
       nearby
     ];
   }
   if (typeID === "company") {
     return [
-      {
-        id: "company-investors",
-        label: "Investors",
-        description: "Investments into this company and their investors",
-        steps: [
-          { relation: "company", direction: "in", targetType: "investment" },
-          { relation: "investor", direction: "out", targetType: "investor" }
-        ]
-      },
+      relationQueryTemplate(typeID, [
+        { relation: "company", direction: "in", targetType: "investment" },
+        { relation: "investor", direction: "out", targetType: "investor" }
+      ]),
       nearby
     ];
   }
   return [nearby];
+}
+
+function relationQueryTemplate(rootType: string, steps: RelationQueryStep[]): RelationQueryTemplate {
+  const types = [rootType, ...steps.map((step) => step.targetType || step.relation)];
+  const label = relationQueryPathLabel(rootType, steps);
+  const id = types.join("-");
+  return {
+    id,
+    label,
+    description: `Follow ${label} from the current ${rootType}`,
+    steps
+  };
+}
+
+function relationQueryPathLabel(rootType: string, steps: RelationQueryStep[]) {
+  let label = rootType;
+  steps.forEach((step) => {
+    label += step.direction === "in" ? " <- " : " -> ";
+    label += step.targetType || step.relation;
+  });
+  return label;
+}
+
+function relationGraphGroups(graph: InspectorRelationGraphData, nodes: InspectorGraphNode[]) {
+  if (graph.columns.length > 0) {
+    return graph.columns.map((column) => ({
+      id: column.id,
+      label: column.label,
+      items: nodes
+        .filter((node) => Math.abs(node.x - column.x) < 40)
+        .sort((a, b) => a.y - b.y)
+    })).filter((group) => group.items.length > 0);
+  }
+  return [
+    { id: "focus", label: "center", items: [graph.focus] },
+    { id: "incoming", label: "upstream", items: graph.incoming },
+    { id: "outgoing", label: "downstream", items: graph.outgoing }
+  ].filter((group) => group.items.length > 0);
 }
 
 function inferObjectType(id: string) {

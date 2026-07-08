@@ -1387,13 +1387,65 @@ body {
   overflow: auto;
 }
 
+.graph-lab-help {
+  display: grid;
+  gap: 0.55rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+}
+
+.graph-lab-help div {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.graph-lab-groups {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.graph-lab-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+  color: hsl(var(--foreground) / 0.82);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .graph-lab-order-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  width: 100%;
   gap: 0.5rem;
   border-top: 1px solid hsl(var(--border) / 0.22);
+  color: hsl(var(--foreground) / 0.82);
   padding: 0.38rem 0;
+  text-align: left;
   font-size: 0.72rem;
+}
+
+.graph-lab-order-row:hover {
+  color: hsl(var(--foreground));
+}
+
+.graph-lab-order-row span:last-child {
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+}
+
+.graph-lab-more {
+  padding-top: 0.35rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
 }
 
 .vi-control-example-active {
