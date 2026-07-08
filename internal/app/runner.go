@@ -74,6 +74,8 @@ func (r *Runner) Run(_ context.Context, argv []string) Result {
 		return r.runGraph(argv[1:])
 	case "body":
 		return r.runBody(argv[1:])
+	case "asset":
+		return r.runAsset(argv[1:])
 	case "refresh":
 		return r.withStore(func(s *store.Store) Result {
 			if err := s.RefreshAllBodies(); err != nil {
@@ -458,6 +460,28 @@ func (r *Runner) runBody(args []string) Result {
 	})
 }
 
+func (r *Runner) runAsset(args []string) Result {
+	if len(args) < 1 {
+		return Fail("usage", "usage: asset import <file> [--name <filename>]")
+	}
+	switch args[0] {
+	case "import":
+		if len(args) < 2 {
+			return Fail("usage", "usage: asset import <file> [--name <filename>]")
+		}
+		flags := parseFlags(args[2:])
+		return r.withStore(func(s *store.Store) Result {
+			asset, err := s.ImportAssetFile(args[1], flags.Get("name"))
+			if err != nil {
+				return fromErr(err)
+			}
+			return OK(asset, Effect{Kind: "asset.import"})
+		})
+	default:
+		return Fail("unknown_command", "unknown asset command: "+args[0])
+	}
+}
+
 func (r *Runner) extractBodyInput(args []string) ([]string, *string, error) {
 	rest := make([]string, 0, len(args))
 	var body *string
@@ -794,6 +818,7 @@ func usage() string {
   backlinks <id>
   graph export
   body path|refresh|write|append <id>
+  asset import <file> [--name <filename>]
   refresh
   issues
   doctor`

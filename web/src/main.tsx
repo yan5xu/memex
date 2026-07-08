@@ -22,9 +22,9 @@ import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, use
 import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, FileText, FolderOpen, GitBranch, HeartPulse, History, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Search } from "lucide-react";
+import { Activity, ArrowUpDown, Boxes, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Save, Search, SplitSquareHorizontal, X } from "lucide-react";
 import "./styles.css";
-import { getCurrentVault, getRecentVaults, run, setCurrentVault } from "./api";
+import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command";
@@ -45,6 +45,7 @@ type Link = { from_id: string; to_id: string; kind: string; relation: string; te
 type GraphData = { nodes: Obj[]; edges: Link[] };
 type SchemaEdge = { source: string; target: string; relation: string; kind: string; required?: boolean };
 type Point = { x: number; y: number };
+type ObjectLinkCandidate = { id: string; title: string; type_id: string };
 type ViewID = "objects" | "detail" | "types" | "graph" | "health";
 type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
 type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphMode?: string; graphHiddenTypes?: string };
@@ -508,10 +509,27 @@ function App() {
     }
   }
 
+  async function saveObjectBody(objectID: string, markdown: string): Promise<ObjectLoadResult | null> {
+    const result = await run<{ object: string; body_abs_path: string; bytes: number }>(["body", "write", objectID, "--stdin"], vault, { stdin: markdown });
+    if (!result.ok) {
+      throw new Error(result.error?.message || "Could not save body");
+    }
+    await queryClient.invalidateQueries();
+    const data = await openObject(objectID, { syncURL: false });
+    if (activeType) {
+      await loadRows(activeType, filter);
+    }
+    if (view === "graph") {
+      await openGraph({ syncURL: false });
+    }
+    return data;
+  }
+
   const activeFields = useMemo(() => types.find((t) => t.id === activeType)?.fields ?? [], [types, activeType]);
   const schemaGraphView = useMemo(() => buildSchemaGraphView(types, selectedSchemaType), [types, selectedSchemaType]);
   const graphView = useMemo(() => buildGraphView(graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed), [graph, graphMode, selectedGraphNode, hiddenGraphTypes, graphLayoutSeed]);
   const graphTypeControls = useMemo(() => buildGraphTypeControls(graph, graphMode, hiddenGraphTypes), [graph, graphMode, hiddenGraphTypes]);
+  const objectLinkCandidates = useMemo(() => buildObjectLinkCandidates(activeObject, activeType, rows, graph.nodes), [activeObject, activeType, rows, graph.nodes]);
   const selectedGraphObject = useMemo(() => graph.nodes.find((n) => n.id === selectedGraphNode) ?? null, [graph.nodes, selectedGraphNode]);
   const graphLayoutKey = useMemo(() => `${graphMode}:${serializeGraphHiddenTypes(hiddenGraphTypes)}:${graphLayoutSeed}`, [graphMode, hiddenGraphTypes, graphLayoutSeed]);
   const currentVaultState = useMemo<VaultUIState>(() => ({
@@ -625,8 +643,8 @@ function App() {
       ...overrides
     });
 
-    const runAndSync = async <T,>(argv: string[], vaultOverride = vault) => {
-      const result = await run<T>(argv, vaultOverride);
+    const runAndSync = async <T,>(argv: string[], vaultOverride = vault, options: { stdin?: string } = {}) => {
+      const result = await run<T>(argv, vaultOverride, options);
       const changedObject = result.effects?.find((effect) => effect.object && (effect.kind === "body.refresh" || effect.kind === "body.write" || effect.kind === "body.append"))?.object;
       if (result.ok && changedObject) {
         await queryClient.invalidateQueries();
@@ -823,9 +841,17 @@ function App() {
 
         {view === "detail" && activeObject && (
           <section className="detail-stage relative h-full overflow-hidden px-6 py-5">
-            <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "pr-[420px]" : ""}`}>
+            <article className={`object-reader mb-scroll h-full overflow-auto px-8 py-8 ${inspectorOpen ? "object-reader-with-inspector" : ""}`}>
               <div className="mx-auto max-w-[760px]">
-                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} openObject={(id) => void openObject(id)} />
+                <ObjectBodyWorkspace
+                  object={activeObject}
+                  body={activeBody}
+                  vault={vault}
+                  candidates={objectLinkCandidates}
+                  openObject={(id) => void openObject(id)}
+                  saveBody={saveObjectBody}
+                  onBeginEdit={() => setInspectorOpen(false)}
+                />
               </div>
             </article>
 
@@ -1020,8 +1046,259 @@ function renderCell(v: unknown) {
   return String(v);
 }
 
+function buildObjectLinkCandidates(activeObject: Obj | null, activeType: string, rows: Record<string, unknown>[], graphNodes: Obj[]): ObjectLinkCandidate[] {
+  const seen = new Set<string>();
+  const out: ObjectLinkCandidate[] = [];
+  const add = (candidate: ObjectLinkCandidate) => {
+    if (!candidate.id || seen.has(candidate.id)) return;
+    seen.add(candidate.id);
+    out.push(candidate);
+  };
+  if (activeObject) {
+    add({ id: activeObject.id, title: activeObject.title, type_id: activeObject.type_id });
+  }
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+    if (!id) continue;
+    add({ id, title: String(row.title || id), type_id: String(row.type_id || activeType || "") });
+  }
+  for (const node of graphNodes) {
+    add({ id: node.id, title: node.title || node.id, type_id: node.type_id });
+  }
+  return out.sort((a, b) => `${a.type_id}:${a.title || a.id}`.localeCompare(`${b.type_id}:${b.title || b.id}`));
+}
+
 function objectBodyForDisplay(object: Obj, body: string) {
   return body || `# ${object.title || object.id}\n\nBody file: \`${object.body_path}\``;
+}
+
+function ObjectBodyWorkspace({
+  object,
+  body,
+  vault,
+  candidates,
+  openObject,
+  saveBody,
+  onBeginEdit
+}: {
+  object: Obj;
+  body: string;
+  vault: string;
+  candidates: ObjectLinkCandidate[];
+  openObject: (id: string) => void;
+  saveBody: (id: string, markdown: string) => Promise<ObjectLoadResult | null>;
+  onBeginEdit?: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(body || `# ${object.title || object.id}\n\n`);
+  const [viewMode, setViewMode] = useState<"write" | "split" | "preview">("split");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const dirty = draft !== body;
+  useEffect(() => {
+    if (editing && dirty) return;
+    setDraft(body || `# ${object.title || object.id}\n\n`);
+    setEditing(false);
+    setJustSaved(false);
+  }, [object.id, body]);
+
+  function beginEdit() {
+    setDraft(body || `# ${object.title || object.id}\n\n`);
+    onBeginEdit?.();
+    setEditing(true);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function cancelEdit() {
+    setDraft(body || `# ${object.title || object.id}\n\n`);
+    setEditing(false);
+    setLinkPickerOpen(false);
+  }
+
+  async function commitBody() {
+    setSaving(true);
+    try {
+      await saveBody(object.id, draft);
+      setEditing(false);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 1800);
+      toast.success("Body saved");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Could not save body: ${message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function insertText(value: string, replaceOpeningWiki = false) {
+    const input = textareaRef.current;
+    if (!input) {
+      setDraft((current) => `${current}${value}`);
+      return;
+    }
+    const selectionStart = input.selectionStart;
+    const selectionEnd = input.selectionEnd;
+    const replaceStart = replaceOpeningWiki && draft.slice(0, selectionStart).endsWith("[[") ? selectionStart - 2 : selectionStart;
+    const next = `${draft.slice(0, replaceStart)}${value}${draft.slice(selectionEnd)}`;
+    const cursor = replaceStart + value.length;
+    setDraft(next);
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  function insertLink(candidate: ObjectLinkCandidate) {
+    insertText(`[[${candidate.id}]]`, true);
+    setLinkPickerOpen(false);
+  }
+
+  async function importFiles(files: FileList | File[]) {
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of images) {
+        const result = await uploadAsset(file, vault);
+        if (!result.ok || !result.data) {
+          throw new Error(result.error?.message || `Could not import ${file.name}`);
+        }
+        insertText(`\n\n${result.data.markdown}\n\n`);
+      }
+      toast.success(images.length === 1 ? "Image inserted" : `${images.length} images inserted`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Could not insert image: ${message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleBodyChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
+    const next = event.target.value;
+    setDraft(next);
+    const cursor = event.target.selectionStart;
+    if (next.slice(0, cursor).endsWith("[[")) {
+      setLinkPickerOpen(true);
+    }
+  }
+
+  const status = saving ? "Saving..." : uploading ? "Importing image..." : dirty ? "Unsaved changes" : justSaved ? "Saved" : "Saved";
+  return (
+    <div className="body-workspace">
+      <div className="body-workspace-header">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <Badge>{object.type_id}</Badge>
+            <span className="font-mono text-xs text-muted-foreground">{object.id}</span>
+          </div>
+          <h1 className="font-serif text-[42px] font-medium leading-[1.05] tracking-tight">{object.title || object.id}</h1>
+          <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
+        </div>
+        <div className="body-workspace-actions">
+          <span className={`body-save-state ${dirty ? "body-save-state-dirty" : ""}`}>
+            {(saving || uploading) && <Loader2 className="size-3.5 animate-spin" />}
+            {status}
+          </span>
+          {editing ? (
+            <>
+              <Button variant="ghost" className="h-8 rounded-md px-2.5" onClick={cancelEdit} disabled={saving}><X className="size-3.5" />Cancel</Button>
+              <Button className="h-8 rounded-md px-3" onClick={() => void commitBody()} disabled={saving || uploading || !dirty}><Save className="size-3.5" />Save</Button>
+            </>
+          ) : (
+            <Button className="h-8 rounded-md px-3" onClick={beginEdit}><Edit3 className="size-3.5" />Edit body</Button>
+          )}
+        </div>
+      </div>
+
+      {editing ? (
+        <div className="body-editor-shell">
+          <div className="body-editor-toolbar">
+            <div className="flex items-center gap-1">
+              <ToolbarButton active={viewMode === "write"} onClick={() => setViewMode("write")} title="Write"><Edit3 className="size-3.5" />Write</ToolbarButton>
+              <ToolbarButton active={viewMode === "split"} onClick={() => setViewMode("split")} title="Split"><SplitSquareHorizontal className="size-3.5" />Split</ToolbarButton>
+              <ToolbarButton active={viewMode === "preview"} onClick={() => setViewMode("preview")} title="Preview"><Eye className="size-3.5" />Preview</ToolbarButton>
+            </div>
+            <div className="flex items-center gap-1">
+              <Popover open={linkPickerOpen} onOpenChange={setLinkPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" className="h-8 rounded-md px-2.5"><Link2 className="size-3.5" />Link</Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-96 rounded-2xl p-0">
+                  <Command shouldFilter>
+                    <CommandInput placeholder="Search objects..." />
+                    <CommandList>
+                      <CommandEmpty>No object found.</CommandEmpty>
+                      <CommandGroup heading="Objects">
+                        {candidates.map((candidate) => (
+                          <CommandItem key={candidate.id} value={`${candidate.id} ${candidate.title} ${candidate.type_id}`} onSelect={() => insertLink(candidate)}>
+                            <span className="min-w-0 flex-1 truncate">{candidate.title || candidate.id}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground">{candidate.type_id}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground">
+                <ImagePlus className="size-3.5" />
+                Image
+                <input className="hidden" type="file" accept="image/*" multiple onChange={(event) => { if (event.target.files) void importFiles(event.target.files); event.currentTarget.value = ""; }} />
+              </label>
+            </div>
+          </div>
+          <div
+            className={`body-editor-grid body-editor-grid-${viewMode}`}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              void importFiles(event.dataTransfer.files);
+            }}
+          >
+            {viewMode !== "preview" && (
+              <div className="body-editor-pane">
+                <textarea
+                  ref={textareaRef}
+                  className="body-editor-textarea"
+                  value={draft}
+                  spellCheck={false}
+                  onChange={handleBodyChange}
+                  onPaste={(event) => {
+                    if (event.clipboardData.files.length > 0) {
+                      void importFiles(event.clipboardData.files);
+                    }
+                  }}
+                />
+                <div className="body-drop-hint"><FileImage className="size-3.5" />Drop or paste images here. Type [[ to link an object.</div>
+              </div>
+            )}
+            {viewMode !== "write" && (
+              <div className="body-preview-pane markdown">
+                <MarkdownBody body={draft || objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} />
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="markdown body-reader-surface">
+          <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} openObject={openObject} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToolbarButton({ active, onClick, title, children }: { active: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
+  return (
+    <button type="button" className={`body-toolbar-button ${active ? "body-toolbar-button-active" : ""}`} onClick={onClick} title={title}>
+      {children}
+    </button>
+  );
 }
 
 function ObjectPageContent({

@@ -36,11 +36,29 @@ export function rememberVault(vault: string) {
   localStorage.setItem("mbase.recentVaults", JSON.stringify(recent));
 }
 
-export async function run<T>(argv: string[], vault = getCurrentVault()): Promise<RunResult<T>> {
+export async function run<T>(argv: string[], vault = getCurrentVault(), options: { stdin?: string } = {}): Promise<RunResult<T>> {
   const res = await fetch("/api/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ argv, vault: vault || undefined })
+    body: JSON.stringify({ argv, vault: vault || undefined, stdin: options.stdin })
+  });
+  return res.json();
+}
+
+export type AssetResult = {
+  path: string;
+  abs_path: string;
+  filename: string;
+  markdown: string;
+};
+
+export async function uploadAsset(file: File, vault = getCurrentVault()): Promise<RunResult<AssetResult>> {
+  const body = new FormData();
+  body.set("file", file);
+  if (vault) body.set("vault", vault);
+  const res = await fetch("/api/assets", {
+    method: "POST",
+    body
   });
   return res.json();
 }

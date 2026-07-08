@@ -166,6 +166,10 @@ func printHuman(argv []string, result app.Result) error {
 		if printBodyResult(argv, result.Data) {
 			return nil
 		}
+	case "asset":
+		if printAssetResult(argv, result.Data) {
+			return nil
+		}
 	}
 	return printJSON(result.Data)
 }
@@ -195,7 +199,7 @@ func shouldConsumeJSONFields(next string) bool {
 
 func isTopLevelCommand(s string) bool {
 	switch s {
-	case "vault", "init", "serve", "status", "type", "field", "object", "create", "get", "set", "link", "delete", "remove", "query", "links", "backlinks", "graph", "body", "refresh", "issues", "doctor":
+	case "vault", "init", "serve", "status", "type", "field", "object", "create", "get", "set", "link", "delete", "remove", "query", "links", "backlinks", "graph", "body", "asset", "refresh", "issues", "doctor":
 		return true
 	default:
 		return false
@@ -393,6 +397,26 @@ func printBodyResult(argv []string, v any) bool {
 	}
 	fmt.Printf("  body: %s\n", data["body_abs_path"])
 	fmt.Printf("  bytes: %v\n", data["bytes"])
+	return true
+}
+
+func printAssetResult(argv []string, v any) bool {
+	if len(argv) < 2 || argv[1] != "import" {
+		return false
+	}
+	var asset *store.Asset
+	switch data := v.(type) {
+	case *store.Asset:
+		asset = data
+	case store.Asset:
+		asset = &data
+	default:
+		return false
+	}
+	fmt.Printf("Imported asset\n")
+	fmt.Printf("  path: %s\n", asset.Path)
+	fmt.Printf("  file: %s\n", asset.AbsPath)
+	fmt.Printf("  markdown: %s\n", asset.Markdown)
 	return true
 }
 

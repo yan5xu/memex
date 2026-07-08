@@ -68,6 +68,7 @@ mbase body path <id>
 mbase body refresh <id>
 printf '\nMore notes\n' | mbase body append <id> --stdin
 printf '# Replacement\n' | mbase body write <id> --stdin
+mbase asset import ./screenshot.png --name company-demo.png
 mbase refresh
 mbase issues
 mbase doctor
@@ -77,6 +78,12 @@ Daily CLI commands print human-readable summaries by default. Add `--json` for a
 
 ```json
 {"vault":"/path/to/vault","argv":["query","concept"]}
+```
+
+Web body editing uses the same runner for Markdown saves and a dedicated multipart endpoint for binary assets:
+
+```bash
+curl -F 'vault=/path/to/vault' -F 'file=@./screenshot.png' http://127.0.0.1:8766/api/assets
 ```
 
 ## Development

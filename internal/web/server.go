@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/yan5xu/mbase/internal/app"
+	"github.com/yan5xu/mbase/internal/store"
 )
 
 //go:embed dist/*
@@ -26,6 +27,7 @@ type Server struct {
 type RunRequest struct {
 	Argv  []string `json:"argv"`
 	Vault string   `json:"vault,omitempty"`
+	Stdin *string  `json:"stdin,omitempty"`
 }
 
 func (s Server) ListenAndServe() error {
@@ -49,6 +51,9 @@ func (s Server) ListenAndServe() error {
 		if req.Vault != "" {
 			reqRunner = app.NewRunner(req.Vault)
 		}
+		if req.Stdin != nil {
+			reqRunner.Stdin = strings.NewReader(*req.Stdin)
+		}
 		unlock := locks.lock(reqRunner.Root)
 		defer unlock()
 		result := reqRunner.Run(context.Background(), req.Argv)
@@ -56,10 +61,40 @@ func (s Server) ListenAndServe() error {
 	}
 	mux.HandleFunc("/_mbase/run", runHandler)
 	mux.HandleFunc("/api/run", runHandler)
+	mux.HandleFunc("/api/assets", s.assetUploadHandler())
 	mux.HandleFunc("/api/file", s.vaultFileHandler())
 	mux.Handle("/", staticHandler())
 	fmt.Printf("mbase web listening on http://%s\n", s.Addr)
 	return http.ListenAndServe(s.Addr, mux)
+}
+
+func (s Server) assetUploadHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			writeJSON(w, app.Fail("bad_request", err.Error()))
+			return
+		}
+		root := s.Root
+		if vault := strings.TrimSpace(r.FormValue("vault")); vault != "" {
+			root = vault
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			writeJSON(w, app.Fail("bad_request", "file is required"))
+			return
+		}
+		defer file.Close()
+		asset, err := store.ImportAsset(root, file, header.Filename)
+		if err != nil {
+			writeJSON(w, app.Fail("write_failed", err.Error()))
+			return
+		}
+		writeJSON(w, app.OK(asset))
+	}
 }
 
 func (s Server) vaultFileHandler() http.HandlerFunc {
