@@ -2820,18 +2820,48 @@ type InspectorGraphNode = {
   y: number;
 };
 
+type InspectorFilterOption = {
+  id: string;
+  label: string;
+  count: number;
+};
+
 function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; open: (id: string) => void }) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const graph = useMemo(() => buildInspectorRelationGraph(object, links, backlinks, graphNodes), [object, links, backlinks, graphNodes]);
-  if (graph.incoming.length === 0 && graph.outgoing.length === 0) {
+  const [showFieldLinks, setShowFieldLinks] = useState(true);
+  const [showBodyLinks, setShowBodyLinks] = useState(false);
+  const [hiddenTypes, setHiddenTypes] = useState<string[]>([]);
+  const [hiddenRelations, setHiddenRelations] = useState<string[]>([]);
+  const allGraph = useMemo(() => buildInspectorRelationGraph(object, links, backlinks, graphNodes), [object, links, backlinks, graphNodes]);
+  const filterMeta = useMemo(() => summarizeInspectorRelationFilters(links, backlinks, graphNodes), [links, backlinks, graphNodes]);
+  const graph = useMemo(() => {
+    const visibleKinds = new Set<string>();
+    if (showFieldLinks && filterMeta.kindCounts.field > 0) visibleKinds.add("field");
+    if ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0) visibleKinds.add("body");
+    return buildInspectorRelationGraph(
+      object,
+      links.filter((link) => inspectorLinkVisible(link, "outgoing", graphNodes, visibleKinds, hiddenTypes, hiddenRelations)),
+      backlinks.filter((link) => inspectorLinkVisible(link, "incoming", graphNodes, visibleKinds, hiddenTypes, hiddenRelations)),
+      graphNodes
+    );
+  }, [object, links, backlinks, graphNodes, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field]);
+  if (allGraph.incoming.length === 0 && allGraph.outgoing.length === 0) {
     return <div className="inspector-graph-empty">No links yet.</div>;
+  }
+  const activeKindCount = (showFieldLinks && filterMeta.kindCounts.field > 0 ? 1 : 0) + ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0 ? 1 : 0);
+  const hasFilter = activeKindCount < Number(filterMeta.kindCounts.field > 0) + Number(filterMeta.kindCounts.body > 0) || hiddenTypes.length > 0 || hiddenRelations.length > 0;
+  function resetFilters() {
+    setShowFieldLinks(true);
+    setShowBodyLinks(false);
+    setHiddenTypes([]);
+    setHiddenRelations([]);
   }
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <div className="inspector-graph-launcher">
         <div className="inspector-graph-launcher-copy">
           <div className="inspector-graph-launcher-title">Local relation graph</div>
-          <div className="inspector-graph-launcher-meta">{graph.incoming.length} upstream, {graph.outgoing.length} downstream</div>
+          <div className="inspector-graph-launcher-meta">{allGraph.incoming.length} upstream, {allGraph.outgoing.length} downstream</div>
         </div>
         <Button variant="secondary" className="h-8 rounded-md px-2.5" onClick={() => setDialogOpen(true)}>
           <Maximize2 className="size-3.5" />
@@ -2842,15 +2872,112 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: 
         <DialogHeader className="relation-graph-header">
           <div>
             <DialogTitle className="font-serif text-2xl font-medium">{object.title || object.id}</DialogTitle>
-            <DialogDescription>{graph.incoming.length} upstream nodes, {graph.outgoing.length} downstream nodes. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
+            <DialogDescription>{graph.incoming.length} upstream nodes, {graph.outgoing.length} downstream nodes visible. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
           </div>
         </DialogHeader>
+        <RelationGraphFilters
+          kindCounts={filterMeta.kindCounts}
+          types={filterMeta.types}
+          relations={filterMeta.relations}
+          showFieldLinks={showFieldLinks}
+          showBodyLinks={showBodyLinks || filterMeta.kindCounts.field === 0}
+          hiddenTypes={hiddenTypes}
+          hiddenRelations={hiddenRelations}
+          hasFilter={hasFilter}
+          setShowFieldLinks={setShowFieldLinks}
+          setShowBodyLinks={setShowBodyLinks}
+          setHiddenTypes={setHiddenTypes}
+          setHiddenRelations={setHiddenRelations}
+          resetFilters={resetFilters}
+        />
         <RelationGraphCanvas graph={graph} openObject={(id) => {
           setDialogOpen(false);
           open(id);
         }} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RelationGraphFilters({
+  kindCounts,
+  types,
+  relations,
+  showFieldLinks,
+  showBodyLinks,
+  hiddenTypes,
+  hiddenRelations,
+  hasFilter,
+  setShowFieldLinks,
+  setShowBodyLinks,
+  setHiddenTypes,
+  setHiddenRelations,
+  resetFilters
+}: {
+  kindCounts: { body: number; field: number };
+  types: InspectorFilterOption[];
+  relations: InspectorFilterOption[];
+  showFieldLinks: boolean;
+  showBodyLinks: boolean;
+  hiddenTypes: string[];
+  hiddenRelations: string[];
+  hasFilter: boolean;
+  setShowFieldLinks: (next: boolean) => void;
+  setShowBodyLinks: (next: boolean) => void;
+  setHiddenTypes: React.Dispatch<React.SetStateAction<string[]>>;
+  setHiddenRelations: React.Dispatch<React.SetStateAction<string[]>>;
+  resetFilters: () => void;
+}) {
+  return (
+    <div className="relation-filter-panel">
+      <div className="relation-filter-row">
+        <span className="relation-filter-label">Kind</span>
+        <RelationFilterChip label="Field" count={kindCounts.field} active={showFieldLinks && kindCounts.field > 0} disabled={kindCounts.field === 0} onClick={() => setShowFieldLinks(!showFieldLinks)} />
+        <RelationFilterChip label="Body" count={kindCounts.body} active={showBodyLinks && kindCounts.body > 0} disabled={kindCounts.body === 0 || kindCounts.field === 0} onClick={() => setShowBodyLinks(!showBodyLinks)} />
+        <button className="relation-filter-reset" disabled={!hasFilter} onClick={resetFilters}>Reset</button>
+      </div>
+      {types.length > 0 && (
+        <div className="relation-filter-row">
+          <span className="relation-filter-label">Types</span>
+          <div className="relation-filter-chips">
+            {types.map((type) => (
+              <RelationFilterChip
+                key={type.id}
+                label={type.label}
+                count={type.count}
+                active={!hiddenTypes.includes(type.id)}
+                onClick={() => setHiddenTypes((items) => toggleArrayItem(items, type.id))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {relations.length > 0 && (
+        <div className="relation-filter-row">
+          <span className="relation-filter-label">Fields</span>
+          <div className="relation-filter-chips">
+            {relations.map((relation) => (
+              <RelationFilterChip
+                key={relation.id}
+                label={relation.label}
+                count={relation.count}
+                active={!hiddenRelations.includes(relation.id)}
+                onClick={() => setHiddenRelations((items) => toggleArrayItem(items, relation.id))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RelationFilterChip({ label, count, active, disabled, onClick }: { label: string; count: number; active: boolean; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button className={`relation-filter-chip ${active ? "is-active" : ""}`} disabled={disabled} onClick={onClick}>
+      <span>{label}</span>
+      <span className="relation-filter-count">{count}</span>
+    </button>
   );
 }
 
@@ -3051,6 +3178,51 @@ function RelationGraphEdge({ from, to, node }: { from: InspectorGraphNode; to: I
 function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
   const width = node.direction === "focus" ? 190 : 170;
   return { x: node.x + (side === "right" ? width : 0), y: node.y + 38 };
+}
+
+function summarizeInspectorRelationFilters(links: Link[], backlinks: Link[], graphNodes: Obj[]) {
+  const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
+  const kindCounts = { body: 0, field: 0 };
+  const typeCounts = new Map<string, number>();
+  const relationCounts = new Map<string, number>();
+  for (const entry of [...links.map((link) => ({ link, direction: "outgoing" as const })), ...backlinks.map((link) => ({ link, direction: "incoming" as const }))]) {
+    if (entry.link.kind === "body") kindCounts.body += 1;
+    if (entry.link.kind === "field") kindCounts.field += 1;
+    const linkedID = entry.direction === "incoming" ? entry.link.from_id : entry.link.to_id;
+    const type = objectByID.get(linkedID)?.type_id || inferObjectType(linkedID);
+    typeCounts.set(type, (typeCounts.get(type) ?? 0) + 1);
+    relationCounts.set(entry.link.relation, (relationCounts.get(entry.link.relation) ?? 0) + 1);
+  }
+  return {
+    kindCounts,
+    types: mapCountsToFilterOptions(typeCounts).sort((a, b) => {
+      if (a.count !== b.count) return b.count - a.count;
+      return graphTypeOrder([a.id, b.id])[0] === a.id ? -1 : 1;
+    }),
+    relations: mapCountsToFilterOptions(relationCounts).sort((a, b) => {
+      if (a.id === "mentions") return 1;
+      if (b.id === "mentions") return -1;
+      if (a.count !== b.count) return b.count - a.count;
+      return a.label.localeCompare(b.label);
+    })
+  };
+}
+
+function inspectorLinkVisible(link: Link, direction: "incoming" | "outgoing", graphNodes: Obj[], visibleKinds: Set<string>, hiddenTypes: string[], hiddenRelations: string[]) {
+  if (!visibleKinds.has(link.kind)) return false;
+  if (hiddenRelations.includes(link.relation)) return false;
+  const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
+  const linkedID = direction === "incoming" ? link.from_id : link.to_id;
+  const type = objectByID.get(linkedID)?.type_id || inferObjectType(linkedID);
+  return !hiddenTypes.includes(type);
+}
+
+function mapCountsToFilterOptions(counts: Map<string, number>) {
+  return [...counts.entries()].map(([id, count]) => ({ id, label: id, count }));
+}
+
+function toggleArrayItem(items: string[], value: string) {
+  return items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
 }
 
 function shortPath(path: string) {

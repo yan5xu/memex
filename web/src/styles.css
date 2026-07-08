@@ -1478,8 +1478,8 @@ body {
   width: clamp(720px, calc(100vw - 44px), 1380px);
   height: clamp(560px, calc(100vh - 44px), 880px);
   max-width: none;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.9rem;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.75rem;
   border-color: hsl(var(--border) / 0.32);
   border-radius: 14px;
   background: hsl(var(--card) / 0.98);
@@ -1489,6 +1489,89 @@ body {
 
 .relation-graph-header {
   padding-right: 2rem;
+}
+
+.relation-filter-panel {
+  display: grid;
+  max-height: 8.8rem;
+  gap: 0.42rem;
+  overflow: auto;
+  border: 1px solid hsl(var(--border) / 0.28);
+  border-radius: 10px;
+  background: hsl(var(--surface) / 0.38);
+  padding: 0.55rem 0.65rem;
+}
+
+.relation-filter-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.42rem;
+}
+
+.relation-filter-label {
+  width: 3.2rem;
+  flex: 0 0 auto;
+  padding-top: 0.36rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.relation-filter-chips {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+}
+
+.relation-filter-chip,
+.relation-filter-reset {
+  display: inline-flex;
+  height: 1.72rem;
+  align-items: center;
+  gap: 0.34rem;
+  border: 1px solid hsl(var(--border) / 0.32);
+  border-radius: 999px;
+  background: hsl(var(--card) / 0.58);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.68rem;
+  font-weight: 620;
+  line-height: 1;
+  padding: 0 0.55rem;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.relation-filter-chip:hover,
+.relation-filter-reset:hover:not(:disabled) {
+  border-color: hsl(var(--teal) / 0.35);
+  color: hsl(var(--foreground) / 0.9);
+}
+
+.relation-filter-chip.is-active {
+  border-color: hsl(var(--teal) / 0.36);
+  background: hsl(var(--teal) / 0.14);
+  color: hsl(var(--foreground) / 0.9);
+}
+
+.relation-filter-chip:disabled,
+.relation-filter-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.relation-filter-count {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.relation-filter-reset {
+  margin-left: auto;
+  border-style: dashed;
 }
 
 .relation-canvas-shell {
