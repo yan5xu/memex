@@ -1203,56 +1203,102 @@ function VIFoundations() {
 
 function VIControls() {
   return (
-    <div className="vi-grid">
-      <VIBlock title="Buttons">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button className="rounded-md"><Save className="size-4" />Save</Button>
-          <Button variant="secondary" className="rounded-md"><Download className="size-4" />Export</Button>
-          <Button variant="ghost" className="rounded-md"><Link2 className="size-4" />Link</Button>
-          <Button className="rounded-md" disabled><Loader2 className="size-4 animate-spin" />Saving</Button>
+    <div className="vi-controls-page">
+      <div className="vi-controls-context">
+        <div>
+          <div className="vi-control-kicker">active body</div>
+          <div className="vi-control-object">company.lightsprint</div>
         </div>
-      </VIBlock>
-      <VIBlock title="Inputs">
-        <div className="grid max-w-xl gap-3">
-          <Input placeholder="where, e.g. status=active" className="h-9 rounded-md bg-background/68 font-mono text-xs" />
-          <Select defaultValue="split">
-            <SelectTrigger className="h-9 w-40 rounded-md"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="write">Write</SelectItem>
-              <SelectItem value="split">Split</SelectItem>
-              <SelectItem value="preview">Preview</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="vi-control-thread">
+          <span>body</span>
+          <ChevronRight className="size-3" />
+          <span>[[source.yc-launch.lightsprint]]</span>
+          <ChevronRight className="size-3" />
+          <span className="vi-control-thread-active">linked</span>
         </div>
-      </VIBlock>
-      <VIBlock title="Command Popover">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="secondary" className="rounded-md"><Search className="size-4" />Open command</Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 rounded-2xl p-0">
-            <Command>
-              <CommandInput placeholder="Search objects..." />
-              <CommandList>
-                <CommandGroup heading="Objects">
-                  <CommandItem>Lightsprint <span className="ml-auto font-mono text-[10px] text-muted-foreground">company</span></CommandItem>
-                  <CommandItem>YC Launch <span className="ml-auto font-mono text-[10px] text-muted-foreground">source.item</span></CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </VIBlock>
-      <VIBlock title="Tabs">
-        <Tabs defaultValue="table" className="w-full max-w-md">
-          <TabsList className="rounded-lg bg-muted/35">
-            <TabsTrigger value="table" className="rounded-md">Table</TabsTrigger>
-            <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
-          </TabsList>
-          <TabsContent value="table" className="mt-3 text-sm text-muted-foreground">Table view state.</TabsContent>
-          <TabsContent value="api" className="mt-3 text-sm text-muted-foreground">API view state.</TabsContent>
-        </Tabs>
-      </VIBlock>
+        <div className="vi-control-status">
+          <span className="vi-teal-dot" />
+          saved locally
+        </div>
+      </div>
+
+      <div className="vi-controls-bench">
+        <section className="vi-control-section vi-control-section-actions">
+          <div className="vi-block-title">Actions</div>
+          <div className="vi-action-row">
+            <Button><Save className="size-4" />Save</Button>
+            <Button variant="secondary"><Download className="size-4" />Export</Button>
+            <Button variant="ghost"><Link2 className="size-4" />Link</Button>
+            <Button variant="status" disabled><Loader2 className="size-4 animate-spin" />Saving</Button>
+          </div>
+          <div className="vi-control-note">Primary is warm and explicit. Teal stays for state, focus, and secondary signals.</div>
+        </section>
+
+        <section className="vi-control-section">
+          <div className="vi-block-title">Filter & mode</div>
+          <div className="vi-filter-row">
+            <Input placeholder="where, e.g. status=active" className="min-w-[17rem] flex-1 font-mono text-xs" />
+            <Select defaultValue="split">
+              <SelectTrigger className="w-[8.6rem]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="write">Write</SelectItem>
+                <SelectItem value="split">Split</SelectItem>
+                <SelectItem value="preview">Preview</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="vi-mode-pills">
+            <span>Write</span>
+            <span className="vi-mode-pill-active">Split</span>
+            <span>Preview</span>
+          </div>
+        </section>
+
+        <section className="vi-control-section">
+          <div className="vi-block-title">Command & views</div>
+          <div className="vi-command-row">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="secondary"><Search className="size-4" />Open command</Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 rounded-xl border-border/55 p-0 shadow-[0_16px_42px_-32px_hsl(var(--shadow-warm)/0.4)]">
+                <Command>
+                  <CommandInput placeholder="Search objects..." />
+                  <CommandList>
+                    <CommandGroup heading="Objects">
+                      <CommandItem>Lightsprint <span className="ml-auto font-mono text-[10px] text-muted-foreground">company</span></CommandItem>
+                      <CommandItem>YC Launch <span className="ml-auto font-mono text-[10px] text-muted-foreground">source.item</span></CommandItem>
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            <Tabs defaultValue="table" className="min-w-44">
+              <TabsList>
+                <TabsTrigger value="table">Table</TabsTrigger>
+                <TabsTrigger value="api">API</TabsTrigger>
+              </TabsList>
+              <TabsContent value="table" className="mt-2 text-xs text-muted-foreground">Table view state.</TabsContent>
+              <TabsContent value="api" className="mt-2 text-xs text-muted-foreground">API view state.</TabsContent>
+            </Tabs>
+          </div>
+        </section>
+      </div>
+
+      <div className="vi-controls-examples">
+        <div className="vi-control-example">
+          <span className="vi-example-label">selection</span>
+          <span>company.lightsprint</span>
+        </div>
+        <div className="vi-control-example">
+          <span className="vi-example-label">source</span>
+          <span>source.yc-launch.lightsprint</span>
+        </div>
+        <div className="vi-control-example vi-control-example-active">
+          <span className="vi-example-label">focus</span>
+          <span>body link resolved</span>
+        </div>
+      </div>
     </div>
   );
 }

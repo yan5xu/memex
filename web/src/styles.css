@@ -11,10 +11,10 @@
   --muted-foreground: 36 9% 47%;
   --border: 40 18% 84%;
   --input: 40 18% 84%;
-  --ring: 31 38% 43%;
+  --ring: 173 25% 43%;
   --popover: 48 32% 98%;
   --popover-foreground: 36 18% 16%;
-  --primary: 36 35% 38%;
+  --primary: 14 58% 52%;
   --primary-foreground: 45 38% 96%;
   --secondary: 42 21% 90%;
   --secondary-foreground: 36 18% 16%;
@@ -28,6 +28,8 @@
   --earth: 31 38% 43%;
   --moss: 116 13% 42%;
   --clay: 18 35% 46%;
+  --teal: 173 25% 43%;
+  --teal-soft: 173 26% 89%;
   --shadow-warm: 38 24% 34%;
 }
 
@@ -1003,6 +1005,162 @@ body {
 
 .vi-block-body {
   min-width: 0;
+}
+
+.vi-controls-page {
+  display: flex;
+  min-height: 560px;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.vi-controls-context {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.72fr) minmax(0, 1.45fr) auto;
+  align-items: center;
+  gap: 1.1rem;
+  border-top: 1px solid hsl(var(--border) / 0.34);
+  border-bottom: 1px solid hsl(var(--border) / 0.34);
+  padding: 0.95rem 0;
+}
+
+.vi-control-kicker,
+.vi-example-label {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.62rem;
+  font-weight: 680;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.vi-control-object {
+  margin-top: 0.25rem;
+  color: hsl(var(--foreground));
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 560;
+}
+
+.vi-control-thread {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.vi-control-thread span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vi-control-thread-active {
+  color: hsl(var(--teal));
+  font-weight: 650;
+}
+
+.vi-control-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: hsl(var(--teal));
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vi-teal-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: hsl(var(--teal));
+  box-shadow: 0 0 0 4px hsl(var(--teal) / 0.11);
+}
+
+.vi-controls-bench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.06fr) minmax(0, 1.02fr);
+  gap: 1.15rem;
+}
+
+.vi-control-section {
+  min-width: 0;
+  border-top: 1px solid hsl(var(--border) / 0.34);
+  padding-top: 0.78rem;
+}
+
+.vi-action-row,
+.vi-filter-row,
+.vi-command-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.62rem;
+}
+
+.vi-control-note {
+  margin-top: 0.82rem;
+  max-width: 22rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+
+.vi-mode-pills {
+  display: inline-flex;
+  margin-top: 0.78rem;
+  border: 1px solid hsl(var(--border) / 0.4);
+  border-radius: 0.52rem;
+  background: hsl(var(--muted) / 0.23);
+  padding: 0.18rem;
+}
+
+.vi-mode-pills span {
+  border-radius: 0.38rem;
+  padding: 0.34rem 0.62rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.74rem;
+  font-weight: 560;
+}
+
+.vi-mode-pill-active {
+  background: hsl(var(--card));
+  color: hsl(var(--foreground)) !important;
+  box-shadow: 0 1px 2px hsl(var(--shadow-warm) / 0.06);
+}
+
+.vi-controls-examples {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.35rem;
+  border-top: 1px solid hsl(var(--border) / 0.34);
+  padding-top: 1rem;
+}
+
+.vi-control-example {
+  min-width: 0;
+  border-left: 1px solid hsl(var(--border) / 0.42);
+  padding-left: 0.75rem;
+  color: hsl(var(--foreground) / 0.8);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.vi-control-example span:last-child {
+  display: block;
+  margin-top: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vi-control-example-active {
+  border-left-color: hsl(var(--teal) / 0.62);
 }
 
 .vi-reader {
