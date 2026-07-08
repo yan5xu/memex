@@ -2918,6 +2918,23 @@ type InspectorGraphEdge = {
   count: number;
 };
 
+type InspectorGraphColumn = {
+  id: string;
+  label: string;
+  x: number;
+};
+
+type InspectorRelationGraphData = {
+  focus: InspectorGraphNode;
+  incoming: InspectorGraphNode[];
+  outgoing: InspectorGraphNode[];
+  edges: InspectorGraphEdge[];
+  columns: InspectorGraphColumn[];
+  fitMode: "focus" | "bounds";
+  width: number;
+  height: number;
+};
+
 type InspectorFilterOption = {
   id: string;
   label: string;
@@ -3124,10 +3141,11 @@ function RelationFilterChip({ label, count, active, disabled, onClick }: { label
   );
 }
 
-function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof buildInspectorRelationGraph>; openObject: (id: string) => void }) {
+function RelationGraphCanvas({ graph, openObject }: { graph: InspectorRelationGraphData; openObject: (id: string) => void }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(0.86);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [hoveredID, setHoveredID] = useState<string | null>(null);
   const [draggedPositions, setDraggedPositions] = useState<Record<string, Point>>({});
   const panRef = useRef<{ startX: number; startY: number; origin: Point } | null>(null);
   const nodeDragRef = useRef<{ id: string; startX: number; startY: number; origin: Point; moved: boolean } | null>(null);
@@ -3136,23 +3154,33 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
   const baseNodes = useMemo(() => [graph.focus, ...graph.incoming, ...graph.outgoing], [graph]);
   const nodes = baseNodes.map((node) => ({ ...node, ...(draggedPositions[node.id] ?? {}) }));
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const connectedToHovered = useMemo(() => {
+    if (!hoveredID) return new Set<string>();
+    const connected = new Set([hoveredID]);
+    for (const edge of graph.edges) {
+      if (edge.from_id === hoveredID) connected.add(edge.to_id);
+      if (edge.to_id === hoveredID) connected.add(edge.from_id);
+    }
+    return connected;
+  }, [graph.edges, hoveredID]);
   useEffect(() => {
     centeredRef.current = false;
     setDraggedPositions({});
     setZoom(0.86);
-    const centerView = () => {
+    const centerView = (fit = false) => {
       const rect = viewportRef.current?.getBoundingClientRect();
       if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      setPan({
-        x: rect.width / 2 - graph.focus.x * 0.86,
-        y: rect.height / 2 - graph.focus.y * 0.86
-      });
+      const nextView = fit || graph.fitMode === "bounds"
+        ? relationGraphFitView(graph, nodes, rect)
+        : { zoom: 0.86, pan: { x: rect.width / 2 - graph.focus.x * 0.86, y: rect.height / 2 - graph.focus.y * 0.86 } };
+      setZoom(nextView.zoom);
+      setPan(nextView.pan);
       centeredRef.current = true;
       return true;
     };
     centerView();
-    const shortDelay = window.setTimeout(centerView, 60);
-    const longDelay = window.setTimeout(centerView, 240);
+    const shortDelay = window.setTimeout(() => centerView(), 60);
+    const longDelay = window.setTimeout(() => centerView(), 240);
     const viewport = viewportRef.current;
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined" && viewport) {
@@ -3166,7 +3194,7 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
       window.clearTimeout(longDelay);
       observer?.disconnect();
     };
-  }, [graph.focus.id, graph.focus.x, graph.focus.y]);
+  }, [graph.focus.id, graph.focus.x, graph.focus.y, graph.fitMode]);
 
   function zoomAt(nextZoom: number, clientX?: number, clientY?: number) {
     const rect = viewportRef.current?.getBoundingClientRect();
@@ -3185,14 +3213,13 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
 
   function resetView() {
     const rect = viewportRef.current?.getBoundingClientRect();
-    const nextZoom = 0.86;
     setDraggedPositions({});
-    setZoom(nextZoom);
     if (rect) {
-      setPan({
-        x: rect.width / 2 - graph.focus.x * nextZoom,
-        y: rect.height / 2 - graph.focus.y * nextZoom
-      });
+      const nextView = graph.fitMode === "bounds"
+        ? relationGraphFitView(graph, baseNodes, rect)
+        : { zoom: 0.86, pan: { x: rect.width / 2 - graph.focus.x * 0.86, y: rect.height / 2 - graph.focus.y * 0.86 } };
+      setZoom(nextView.zoom);
+      setPan(nextView.pan);
     }
   }
 
@@ -3249,7 +3276,7 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
           <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 0.9)} title="Zoom out"><ZoomOut className="size-3.5" /></button>
           <button className="relation-canvas-tool relation-canvas-zoom" onClick={() => zoomAt(1)} title="Reset zoom">{Math.round(zoom * 100)}%</button>
           <button className="relation-canvas-tool" onClick={() => zoomAt(zoom * 1.1)} title="Zoom in"><ZoomIn className="size-3.5" /></button>
-          <button className="relation-canvas-tool" onClick={resetView} title="Reset layout"><RotateCcw className="size-3.5" /></button>
+          <button className="relation-canvas-tool" onClick={resetView} title={graph.fitMode === "bounds" ? "Fit graph" : "Reset view"}><RotateCcw className="size-3.5" /></button>
         </div>
       </div>
       <div
@@ -3262,6 +3289,11 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
         onPointerCancel={endPointer}
       >
         <div className="relation-canvas-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
+          {graph.columns.map((column) => (
+            <div key={column.id} className="relation-canvas-column-label" style={{ left: column.x, top: 52 }}>
+              {column.label}
+            </div>
+          ))}
           <svg className="relation-canvas-edges" width={graph.width} height={graph.height}>
             <defs>
               <marker id="relation-arrow-field" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
@@ -3274,16 +3306,19 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
             {graph.edges.map((edge) => {
               const from = nodeMap.get(edge.from_id);
               const to = nodeMap.get(edge.to_id);
-              return from && to ? <RelationGraphEdge key={`${edge.from_id}-${edge.relation}-${edge.to_id}`} from={from} to={to} edge={edge} /> : null;
+              const active = !hoveredID || edge.from_id === hoveredID || edge.to_id === hoveredID;
+              return from && to ? <RelationGraphEdge key={`${edge.from_id}-${edge.relation}-${edge.to_id}`} from={from} to={to} edge={edge} active={active} /> : null;
             })}
           </svg>
           {nodes.map((node) => (
             <button
               key={node.id}
-              className={`relation-canvas-node relation-canvas-node-${node.direction}`}
+              className={`relation-canvas-node relation-canvas-node-${node.direction} ${hoveredID && !connectedToHovered.has(node.id) ? "relation-canvas-node-dimmed" : ""} ${hoveredID === node.id ? "relation-canvas-node-hovered" : ""}`}
               style={{ left: node.x, top: node.y }}
               title={node.id}
               onPointerDown={(event) => beginNodeDrag(event, node)}
+              onMouseEnter={() => setHoveredID(node.id)}
+              onMouseLeave={() => setHoveredID(null)}
               onClick={() => {
                 if (suppressClickRef.current === node.id) {
                   suppressClickRef.current = null;
@@ -3303,19 +3338,53 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
   );
 }
 
-function RelationGraphEdge({ from, to, edge }: { from: InspectorGraphNode; to: InspectorGraphNode; edge: InspectorGraphEdge }) {
+function RelationGraphEdge({ from, to, edge, active }: { from: InspectorGraphNode; to: InspectorGraphNode; edge: InspectorGraphEdge; active: boolean }) {
   const start = relationNodeAnchor(from, to.x >= from.x ? "right" : "left");
   const end = relationNodeAnchor(to, to.x >= from.x ? "left" : "right");
   const distance = Math.max(90, Math.abs(end.x - start.x) * 0.42);
   const forward = end.x >= start.x;
   const d = `M ${start.x} ${start.y} C ${start.x + (forward ? distance : -distance)} ${start.y}, ${end.x - (forward ? distance : -distance)} ${end.y}, ${end.x} ${end.y}`;
   const marker = edge.kind === "field" ? "relation-arrow-field" : "relation-arrow-body";
-  return <path d={d} fill="none" stroke={edge.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth="1.45" markerEnd={`url(#${marker})`} />;
+  return <path className={active ? "relation-canvas-edge-active" : "relation-canvas-edge-dimmed"} d={d} fill="none" stroke={edge.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth={active ? "1.7" : "1.2"} markerEnd={`url(#${marker})`} />;
 }
 
 function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
   const width = node.direction === "focus" ? 190 : 170;
   return { x: node.x + (side === "right" ? width : 0), y: node.y + 38 };
+}
+
+function relationGraphFitView(graph: InspectorRelationGraphData, nodes: InspectorGraphNode[], rect: DOMRect) {
+  const bounds = relationGraphBounds(graph, nodes);
+  const paddingX = 72;
+  const paddingY = 80;
+  const scaleX = (rect.width - paddingX) / Math.max(bounds.width, 1);
+  const scaleY = (rect.height - paddingY) / Math.max(bounds.height, 1);
+  const zoom = clampZoom(Math.min(1.02, Math.max(0.28, Math.min(scaleX, scaleY))));
+  return {
+    zoom,
+    pan: {
+      x: rect.width / 2 - (bounds.x + bounds.width / 2) * zoom,
+      y: rect.height / 2 - (bounds.y + bounds.height / 2) * zoom
+    }
+  };
+}
+
+function relationGraphBounds(graph: InspectorRelationGraphData, nodes: InspectorGraphNode[]) {
+  const nodeBoxes = nodes.map((node) => ({
+    x: node.x,
+    y: node.y,
+    width: node.direction === "focus" ? 190 : 170,
+    height: 76
+  }));
+  for (const column of graph.columns) {
+    nodeBoxes.push({ x: column.x, y: 52, width: 170, height: 28 });
+  }
+  if (nodeBoxes.length === 0) return { x: 0, y: 0, width: graph.width, height: graph.height };
+  const minX = Math.min(...nodeBoxes.map((box) => box.x));
+  const minY = Math.min(...nodeBoxes.map((box) => box.y));
+  const maxX = Math.max(...nodeBoxes.map((box) => box.x + box.width));
+  const maxY = Math.max(...nodeBoxes.map((box) => box.y + box.height));
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 function summarizeInspectorRelationFilters(focusID: string, links: Link[], backlinks: Link[], graphNodes: Obj[], graphEdges: Link[]) {
@@ -3371,7 +3440,7 @@ function shortPath(path: string) {
   return `.../${parts.slice(-2).join("/")}`;
 }
 
-function buildInspectorRelationGraph(object: Obj, links: Link[], backlinks: Link[], graphNodes: Obj[]) {
+function buildInspectorRelationGraph(object: Obj, links: Link[], backlinks: Link[], graphNodes: Obj[]): InspectorRelationGraphData {
   const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
   const incoming = buildInspectorGraphLane(backlinks, "incoming", objectByID);
   const outgoing = buildInspectorGraphLane(links, "outgoing", objectByID);
@@ -3400,12 +3469,14 @@ function buildInspectorRelationGraph(object: Obj, links: Link[], backlinks: Link
       ...backlinks.map((edge) => toInspectorGraphEdge(edge)),
       ...links.map((edge) => toInspectorGraphEdge(edge))
     ],
+    columns: [] as InspectorGraphColumn[],
+    fitMode: "focus" as const,
     width,
     height
   };
 }
 
-function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Link[], template: RelationQueryTemplate, hiddenTypes: string[]) {
+function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Link[], template: RelationQueryTemplate, hiddenTypes: string[]): InspectorRelationGraphData {
   const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
   const columns = executeRelationQuery(object.id, graphEdges, objectByID, template, hiddenTypes);
   const rowGap = 92;
@@ -3426,11 +3497,21 @@ function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Li
     const x = focus.x + 360 * (stepIndex + 1);
     return positionInspectorLane(nodes, height, rowGap, x);
   });
+  const graphColumns: InspectorGraphColumn[] = [
+    { id: "root", label: object.type_id, x: focus.x },
+    ...template.steps.map((step, index) => ({
+      id: `${index}-${step.relation}`,
+      label: step.targetType || step.relation,
+      x: focus.x + 360 * (index + 1)
+    }))
+  ];
   return {
     focus,
     incoming: [],
     outgoing,
     edges: columns.edges,
+    columns: graphColumns,
+    fitMode: "bounds" as const,
     width,
     height
   };

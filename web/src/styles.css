@@ -1722,6 +1722,33 @@ body {
   pointer-events: none;
 }
 
+.relation-canvas-edge-active,
+.relation-canvas-edge-dimmed {
+  transition: opacity 0.14s, stroke-width 0.14s;
+}
+
+.relation-canvas-edge-dimmed {
+  opacity: 0.12;
+}
+
+.relation-canvas-column-label {
+  position: absolute;
+  display: inline-flex;
+  height: 1.55rem;
+  align-items: center;
+  border: 1px solid hsl(var(--border) / 0.26);
+  border-radius: 999px;
+  background: hsl(var(--card) / 0.72);
+  color: hsl(var(--muted-foreground));
+  font-size: 0.64rem;
+  font-weight: 680;
+  letter-spacing: 0.12em;
+  padding: 0 0.55rem;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
 .relation-canvas-node {
   position: absolute;
   display: flex;
@@ -1744,6 +1771,15 @@ body {
   border-color: hsl(var(--teal) / 0.34);
   background: hsl(var(--card));
   transform: translateY(-1px);
+}
+
+.relation-canvas-node-dimmed {
+  opacity: 0.26;
+}
+
+.relation-canvas-node-hovered {
+  border-color: hsl(var(--teal) / 0.45);
+  box-shadow: 0 14px 32px -20px hsl(var(--teal) / 0.42);
 }
 
 .relation-canvas-node-focus {
