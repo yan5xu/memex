@@ -80,23 +80,69 @@ func matchWhere(row map[string]any, wheres []string) bool {
 		if !ok {
 			return false
 		}
-		got := fmt.Sprintf("%v", row[field])
+		got := row[field]
 		switch op {
 		case "=":
-			if got != want {
+			if !valueEquals(got, want) {
 				return false
 			}
 		case "!=":
-			if got == want {
+			if valueEquals(got, want) {
 				return false
 			}
 		case "contains":
-			if !strings.Contains(got, want) {
+			if !valueContains(got, want) {
 				return false
 			}
 		}
 	}
 	return true
+}
+
+func valueEquals(got any, want string) bool {
+	switch v := got.(type) {
+	case nil:
+		return false
+	case []string:
+		for _, item := range v {
+			if item == want {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, item := range v {
+			if fmt.Sprintf("%v", item) == want {
+				return true
+			}
+		}
+		return false
+	default:
+		return fmt.Sprintf("%v", got) == want
+	}
+}
+
+func valueContains(got any, want string) bool {
+	switch v := got.(type) {
+	case nil:
+		return false
+	case []string:
+		for _, item := range v {
+			if strings.Contains(item, want) {
+				return true
+			}
+		}
+		return false
+	case []any:
+		for _, item := range v {
+			if strings.Contains(fmt.Sprintf("%v", item), want) {
+				return true
+			}
+		}
+		return false
+	default:
+		return strings.Contains(fmt.Sprintf("%v", got), want)
+	}
 }
 
 func parseWhere(expr string) (string, string, string, bool) {
