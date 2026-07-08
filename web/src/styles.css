@@ -1529,6 +1529,7 @@ body {
 }
 
 .relation-filter-chip,
+.relation-view-chip,
 .relation-filter-reset {
   display: inline-flex;
   height: 1.72rem;
@@ -1546,12 +1547,14 @@ body {
 }
 
 .relation-filter-chip:hover,
+.relation-view-chip:hover,
 .relation-filter-reset:hover:not(:disabled) {
   border-color: hsl(var(--teal) / 0.35);
   color: hsl(var(--foreground) / 0.9);
 }
 
-.relation-filter-chip.is-active {
+.relation-filter-chip.is-active,
+.relation-view-chip.is-active {
   border-color: hsl(var(--teal) / 0.36);
   background: hsl(var(--teal) / 0.14);
   color: hsl(var(--foreground) / 0.9);

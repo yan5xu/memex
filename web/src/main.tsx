@@ -939,7 +939,7 @@ function App() {
                         <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
                       </Panel>
                       <Panel title="Relation Graph" icon={<Network className="size-4" />}>
-                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} open={(id) => void openObject(id)} />
+                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} open={(id) => void openObject(id)} />
                       </Panel>
                       <Panel title="Fields" icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
                       <Panel title="Field Links" icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
@@ -2820,21 +2820,54 @@ type InspectorGraphNode = {
   y: number;
 };
 
+type InspectorGraphEdge = {
+  from_id: string;
+  to_id: string;
+  kind: string;
+  relation: string;
+  count: number;
+};
+
 type InspectorFilterOption = {
   id: string;
   label: string;
   count: number;
 };
 
-function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; open: (id: string) => void }) {
+type RelationQueryStep = {
+  relation: string;
+  direction: "in" | "out";
+  targetType?: string;
+};
+
+type RelationQueryTemplate = {
+  id: string;
+  label: string;
+  description: string;
+  steps: RelationQueryStep[];
+};
+
+function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; open: (id: string) => void }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const templates = useMemo(() => relationQueryTemplatesFor(object.type_id), [object.type_id]);
+  const [activeTemplateID, setActiveTemplateID] = useState(() => templates[0]?.id ?? "nearby");
   const [showFieldLinks, setShowFieldLinks] = useState(true);
   const [showBodyLinks, setShowBodyLinks] = useState(false);
   const [hiddenTypes, setHiddenTypes] = useState<string[]>([]);
   const [hiddenRelations, setHiddenRelations] = useState<string[]>([]);
+  const relationEdges = graphEdges.length > 0 ? graphEdges : [...links, ...backlinks];
+  const activeTemplate = templates.find((template) => template.id === activeTemplateID) ?? templates[0] ?? relationNearbyTemplate();
+  useEffect(() => {
+    if (!templates.some((template) => template.id === activeTemplateID)) {
+      setActiveTemplateID(templates[0]?.id ?? "nearby");
+    }
+  }, [activeTemplateID, templates]);
   const allGraph = useMemo(() => buildInspectorRelationGraph(object, links, backlinks, graphNodes), [object, links, backlinks, graphNodes]);
-  const filterMeta = useMemo(() => summarizeInspectorRelationFilters(links, backlinks, graphNodes), [links, backlinks, graphNodes]);
+  const filterMeta = useMemo(() => summarizeInspectorRelationFilters(object.id, links, backlinks, graphNodes, relationEdges), [object.id, links, backlinks, graphNodes, relationEdges]);
   const graph = useMemo(() => {
+    if (activeTemplate.id !== "nearby") {
+      return buildInspectorQueryGraph(object, graphNodes, relationEdges, activeTemplate, hiddenTypes);
+    }
     const visibleKinds = new Set<string>();
     if (showFieldLinks && filterMeta.kindCounts.field > 0) visibleKinds.add("field");
     if ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0) visibleKinds.add("body");
@@ -2844,13 +2877,14 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: 
       backlinks.filter((link) => inspectorLinkVisible(link, "incoming", graphNodes, visibleKinds, hiddenTypes, hiddenRelations)),
       graphNodes
     );
-  }, [object, links, backlinks, graphNodes, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field]);
+  }, [activeTemplate, object, graphNodes, relationEdges, links, backlinks, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field]);
   if (allGraph.incoming.length === 0 && allGraph.outgoing.length === 0) {
     return <div className="inspector-graph-empty">No links yet.</div>;
   }
   const activeKindCount = (showFieldLinks && filterMeta.kindCounts.field > 0 ? 1 : 0) + ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0 ? 1 : 0);
-  const hasFilter = activeKindCount < Number(filterMeta.kindCounts.field > 0) + Number(filterMeta.kindCounts.body > 0) || hiddenTypes.length > 0 || hiddenRelations.length > 0;
+  const hasFilter = activeTemplate.id !== templates[0]?.id || activeKindCount < Number(filterMeta.kindCounts.field > 0) + Number(filterMeta.kindCounts.body > 0) || hiddenTypes.length > 0 || hiddenRelations.length > 0;
   function resetFilters() {
+    setActiveTemplateID(templates[0]?.id ?? "nearby");
     setShowFieldLinks(true);
     setShowBodyLinks(false);
     setHiddenTypes([]);
@@ -2872,10 +2906,12 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: 
         <DialogHeader className="relation-graph-header">
           <div>
             <DialogTitle className="font-serif text-2xl font-medium">{object.title || object.id}</DialogTitle>
-            <DialogDescription>{graph.incoming.length} upstream nodes, {graph.outgoing.length} downstream nodes visible. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
+            <DialogDescription>{activeTemplate.description}. {graph.incoming.length + graph.outgoing.length} nodes visible. Drag empty space to pan, wheel to zoom, drag nodes to arrange.</DialogDescription>
           </div>
         </DialogHeader>
         <RelationGraphFilters
+          templates={templates}
+          activeTemplateID={activeTemplate.id}
           kindCounts={filterMeta.kindCounts}
           types={filterMeta.types}
           relations={filterMeta.relations}
@@ -2884,6 +2920,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: 
           hiddenTypes={hiddenTypes}
           hiddenRelations={hiddenRelations}
           hasFilter={hasFilter}
+          setActiveTemplateID={setActiveTemplateID}
           setShowFieldLinks={setShowFieldLinks}
           setShowBodyLinks={setShowBodyLinks}
           setHiddenTypes={setHiddenTypes}
@@ -2900,6 +2937,8 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, open }: 
 }
 
 function RelationGraphFilters({
+  templates,
+  activeTemplateID,
   kindCounts,
   types,
   relations,
@@ -2908,12 +2947,15 @@ function RelationGraphFilters({
   hiddenTypes,
   hiddenRelations,
   hasFilter,
+  setActiveTemplateID,
   setShowFieldLinks,
   setShowBodyLinks,
   setHiddenTypes,
   setHiddenRelations,
   resetFilters
 }: {
+  templates: RelationQueryTemplate[];
+  activeTemplateID: string;
   kindCounts: { body: number; field: number };
   types: InspectorFilterOption[];
   relations: InspectorFilterOption[];
@@ -2922,6 +2964,7 @@ function RelationGraphFilters({
   hiddenTypes: string[];
   hiddenRelations: string[];
   hasFilter: boolean;
+  setActiveTemplateID: (next: string) => void;
   setShowFieldLinks: (next: boolean) => void;
   setShowBodyLinks: (next: boolean) => void;
   setHiddenTypes: React.Dispatch<React.SetStateAction<string[]>>;
@@ -2930,6 +2973,16 @@ function RelationGraphFilters({
 }) {
   return (
     <div className="relation-filter-panel">
+      <div className="relation-filter-row">
+        <span className="relation-filter-label">View</span>
+        <div className="relation-filter-chips">
+          {templates.map((template) => (
+          <button key={template.id} className={`relation-view-chip ${activeTemplateID === template.id ? "is-active" : ""}`} onClick={() => setActiveTemplateID(template.id)}>
+            {template.label}
+          </button>
+        ))}
+        </div>
+      </div>
       <div className="relation-filter-row">
         <span className="relation-filter-label">Kind</span>
         <RelationFilterChip label="Field" count={kindCounts.field} active={showFieldLinks && kindCounts.field > 0} disabled={kindCounts.field === 0} onClick={() => setShowFieldLinks(!showFieldLinks)} />
@@ -2954,7 +3007,7 @@ function RelationGraphFilters({
       )}
       {relations.length > 0 && (
         <div className="relation-filter-row">
-          <span className="relation-filter-label">Fields</span>
+          <span className="relation-filter-label">Paths</span>
           <div className="relation-filter-chips">
             {relations.map((relation) => (
               <RelationFilterChip
@@ -3128,15 +3181,10 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
                 <path d="M1,1 L9,5 L1,9 Z" fill="hsl(var(--earth) / 0.55)" />
               </marker>
             </defs>
-            {graph.incoming.map((node) => {
-              const from = nodeMap.get(node.id);
-              const to = nodeMap.get(graph.focus.id);
-              return from && to ? <RelationGraphEdge key={`in-${node.id}`} from={from} to={to} node={node} /> : null;
-            })}
-            {graph.outgoing.map((node) => {
-              const from = nodeMap.get(graph.focus.id);
-              const to = nodeMap.get(node.id);
-              return from && to ? <RelationGraphEdge key={`out-${node.id}`} from={from} to={to} node={node} /> : null;
+            {graph.edges.map((edge) => {
+              const from = nodeMap.get(edge.from_id);
+              const to = nodeMap.get(edge.to_id);
+              return from && to ? <RelationGraphEdge key={`${edge.from_id}-${edge.relation}-${edge.to_id}`} from={from} to={to} edge={edge} /> : null;
             })}
           </svg>
           {nodes.map((node) => (
@@ -3165,14 +3213,14 @@ function RelationGraphCanvas({ graph, openObject }: { graph: ReturnType<typeof b
   );
 }
 
-function RelationGraphEdge({ from, to, node }: { from: InspectorGraphNode; to: InspectorGraphNode; node: InspectorGraphNode }) {
+function RelationGraphEdge({ from, to, edge }: { from: InspectorGraphNode; to: InspectorGraphNode; edge: InspectorGraphEdge }) {
   const start = relationNodeAnchor(from, to.x >= from.x ? "right" : "left");
   const end = relationNodeAnchor(to, to.x >= from.x ? "left" : "right");
   const distance = Math.max(90, Math.abs(end.x - start.x) * 0.42);
   const forward = end.x >= start.x;
   const d = `M ${start.x} ${start.y} C ${start.x + (forward ? distance : -distance)} ${start.y}, ${end.x - (forward ? distance : -distance)} ${end.y}, ${end.x} ${end.y}`;
-  const marker = node.kind === "field" ? "relation-arrow-field" : "relation-arrow-body";
-  return <path d={d} fill="none" stroke={node.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth="1.45" markerEnd={`url(#${marker})`} />;
+  const marker = edge.kind === "field" ? "relation-arrow-field" : "relation-arrow-body";
+  return <path d={d} fill="none" stroke={edge.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth="1.45" markerEnd={`url(#${marker})`} />;
 }
 
 function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
@@ -3180,18 +3228,20 @@ function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
   return { x: node.x + (side === "right" ? width : 0), y: node.y + 38 };
 }
 
-function summarizeInspectorRelationFilters(links: Link[], backlinks: Link[], graphNodes: Obj[]) {
+function summarizeInspectorRelationFilters(focusID: string, links: Link[], backlinks: Link[], graphNodes: Obj[], graphEdges: Link[]) {
   const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
   const kindCounts = { body: 0, field: 0 };
   const typeCounts = new Map<string, number>();
   const relationCounts = new Map<string, number>();
-  for (const entry of [...links.map((link) => ({ link, direction: "outgoing" as const })), ...backlinks.map((link) => ({ link, direction: "incoming" as const }))]) {
-    if (entry.link.kind === "body") kindCounts.body += 1;
-    if (entry.link.kind === "field") kindCounts.field += 1;
-    const linkedID = entry.direction === "incoming" ? entry.link.from_id : entry.link.to_id;
+  const edges = graphEdges.length > 0 ? graphEdges : [...links, ...backlinks];
+  const nearbyEdges = edges.filter((edge) => edge.from_id === focusID || edge.to_id === focusID);
+  for (const link of nearbyEdges) {
+    if (link.kind === "body") kindCounts.body += 1;
+    if (link.kind === "field") kindCounts.field += 1;
+    const linkedID = link.from_id === focusID ? link.to_id : link.from_id;
     const type = objectByID.get(linkedID)?.type_id || inferObjectType(linkedID);
     typeCounts.set(type, (typeCounts.get(type) ?? 0) + 1);
-    relationCounts.set(entry.link.relation, (relationCounts.get(entry.link.relation) ?? 0) + 1);
+    relationCounts.set(link.relation, (relationCounts.get(link.relation) ?? 0) + 1);
   }
   return {
     kindCounts,
@@ -3250,13 +3300,97 @@ function buildInspectorRelationGraph(object: Obj, links: Link[], backlinks: Link
     x: width / 2 - 95,
     y: height / 2 - 38
   };
+  const positionedIncoming = positionInspectorLane(incoming, height, rowGap, 330);
+  const positionedOutgoing = positionInspectorLane(outgoing, height, rowGap, 1300);
   return {
     focus,
-    incoming: positionInspectorLane(incoming, height, rowGap, 330),
-    outgoing: positionInspectorLane(outgoing, height, rowGap, 1300),
+    incoming: positionedIncoming,
+    outgoing: positionedOutgoing,
+    edges: [
+      ...backlinks.map((edge) => toInspectorGraphEdge(edge)),
+      ...links.map((edge) => toInspectorGraphEdge(edge))
+    ],
     width,
     height
   };
+}
+
+function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Link[], template: RelationQueryTemplate, hiddenTypes: string[]) {
+  const objectByID = new Map(graphNodes.map((node) => [node.id, node]));
+  const columns = executeRelationQuery(object.id, graphEdges, objectByID, template, hiddenTypes);
+  const rowGap = 92;
+  const width = Math.max(1800, 680 + columns.nodesByStep.length * 360);
+  const height = Math.max(920, Math.max(...columns.nodesByStep.map((nodes) => nodes.length), 1) * rowGap + 320);
+  const focus: InspectorGraphNode = {
+    id: object.id,
+    title: object.title || object.id,
+    type: object.type_id,
+    relation: "focus",
+    kind: "self",
+    count: 1,
+    direction: "focus",
+    x: 220,
+    y: height / 2 - 38
+  };
+  const outgoing = columns.nodesByStep.flatMap((nodes, stepIndex) => {
+    const x = focus.x + 360 * (stepIndex + 1);
+    return positionInspectorLane(nodes, height, rowGap, x);
+  });
+  return {
+    focus,
+    incoming: [],
+    outgoing,
+    edges: columns.edges,
+    width,
+    height
+  };
+}
+
+function executeRelationQuery(rootID: string, graphEdges: Link[], objectByID: Map<string, Obj>, template: RelationQueryTemplate, hiddenTypes: string[]) {
+  let frontier = new Set([rootID]);
+  const nodesByStep: InspectorGraphNode[][] = [];
+  const resultEdges = new Map<string, InspectorGraphEdge>();
+  for (const step of template.steps) {
+    const nextIDs = new Set<string>();
+    const nodeMap = new Map<string, InspectorGraphNode>();
+    for (const edge of graphEdges) {
+      if (edge.kind !== "field" || edge.relation !== step.relation) continue;
+      const sourceMatches = step.direction === "out" ? frontier.has(edge.from_id) : frontier.has(edge.to_id);
+      if (!sourceMatches) continue;
+      const targetID = step.direction === "out" ? edge.to_id : edge.from_id;
+      const target = objectByID.get(targetID);
+      const targetType = target?.type_id || inferObjectType(targetID);
+      if (step.targetType && targetType !== step.targetType) continue;
+      if (hiddenTypes.includes(targetType)) continue;
+      nextIDs.add(targetID);
+      const existing = nodeMap.get(targetID);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        nodeMap.set(targetID, {
+          id: targetID,
+          title: target?.title || humanizeObjectID(targetID),
+          type: targetType,
+          relation: step.relation,
+          kind: edge.kind,
+          count: 1,
+          direction: "outgoing",
+          x: 0,
+          y: 0
+        });
+      }
+      const edgeKey = `${edge.from_id}\u0000${edge.to_id}\u0000${edge.relation}`;
+      const existingEdge = resultEdges.get(edgeKey);
+      if (existingEdge) {
+        existingEdge.count += 1;
+      } else {
+        resultEdges.set(edgeKey, toInspectorGraphEdge(edge));
+      }
+    }
+    nodesByStep.push([...nodeMap.values()].sort(compareInspectorNodes));
+    frontier = nextIDs;
+  }
+  return { nodesByStep, edges: [...resultEdges.values()] };
 }
 
 function buildInspectorGraphLane(links: Link[], direction: "incoming" | "outgoing", objectByID: Map<string, Obj>) {
@@ -3267,12 +3401,8 @@ function buildInspectorGraphLane(links: Link[], direction: "incoming" | "outgoin
     const existing = byID.get(id);
     if (existing) {
       existing.count += 1;
-      if (!existing.relation.includes(link.relation)) {
-        existing.relation = `${existing.relation}, ${link.relation}`;
-      }
-      if (existing.kind !== "field" && link.kind === "field") {
-        existing.kind = "field";
-      }
+      if (!existing.relation.includes(link.relation)) existing.relation = `${existing.relation}, ${link.relation}`;
+      if (existing.kind !== "field" && link.kind === "field") existing.kind = "field";
       continue;
     }
     byID.set(id, {
@@ -3287,10 +3417,12 @@ function buildInspectorGraphLane(links: Link[], direction: "incoming" | "outgoin
       y: 0
     });
   }
-  return [...byID.values()].sort((a, b) => {
+  return [...byID.values()].sort(compareInspectorNodes);
+}
+
+function compareInspectorNodes(a: InspectorGraphNode, b: InspectorGraphNode) {
     if (a.type !== b.type) return graphTypeOrder([a.type, b.type])[0] === a.type ? -1 : 1;
     return a.title.localeCompare(b.title);
-  });
 }
 
 function positionInspectorLane(nodes: InspectorGraphNode[], height: number, rowGap: number, x: number) {
@@ -3298,6 +3430,47 @@ function positionInspectorLane(nodes: InspectorGraphNode[], height: number, rowG
   const contentHeight = (nodes.length - 1) * rowGap;
   const start = Math.max(96, height / 2 - contentHeight / 2 - 38);
   return nodes.map((node, index) => ({ ...node, x, y: start + index * rowGap }));
+}
+
+function toInspectorGraphEdge(edge: Link): InspectorGraphEdge {
+  return { from_id: edge.from_id, to_id: edge.to_id, kind: edge.kind, relation: edge.relation, count: 1 };
+}
+
+function relationNearbyTemplate(): RelationQueryTemplate {
+  return { id: "nearby", label: "Nearby", description: "Direct links around this object", steps: [] };
+}
+
+function relationQueryTemplatesFor(typeID: string): RelationQueryTemplate[] {
+  const nearby = relationNearbyTemplate();
+  if (typeID === "investor") {
+    return [
+      {
+        id: "investor-portfolio",
+        label: "Portfolio",
+        description: "Investments by this investor and their companies",
+        steps: [
+          { relation: "investor", direction: "in", targetType: "investment" },
+          { relation: "company", direction: "out", targetType: "company" }
+        ]
+      },
+      nearby
+    ];
+  }
+  if (typeID === "company") {
+    return [
+      {
+        id: "company-investors",
+        label: "Investors",
+        description: "Investments into this company and their investors",
+        steps: [
+          { relation: "company", direction: "in", targetType: "investment" },
+          { relation: "investor", direction: "out", targetType: "investor" }
+        ]
+      },
+      nearby
+    ];
+  }
+  return [nearby];
 }
 
 function inferObjectType(id: string) {
