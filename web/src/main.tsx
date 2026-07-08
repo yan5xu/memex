@@ -778,11 +778,12 @@ function App() {
     };
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter]);
 
-  const shotMode = view === "vi" && viShot;
+  const viMode = view === "vi";
+  const shotMode = viMode && viShot;
 
   return (
-    <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${shotMode ? "vi-shot-shell" : ""}`}>
-      {!shotMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
+    <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${viMode ? "vi-standalone-shell" : ""}`}>
+      {!viMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
         <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">m</div>
           {!sidebarCollapsed && (
@@ -844,8 +845,8 @@ function App() {
         </div>
       </aside>}
 
-      <main className={`${shotMode ? "vi-shot-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
-        {!shotMode && <div className="console-topbar">
+      <main className={`${viMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
+        {!viMode && <div className="console-topbar">
           <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>

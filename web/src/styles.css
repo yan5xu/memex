@@ -892,11 +892,13 @@ body {
   height: auto;
 }
 
-.vi-shot-shell {
+.vi-standalone-shell {
   background: hsl(var(--background));
 }
 
-.vi-shot-main {
+.vi-standalone-main {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   border-radius: 0;
   background: hsl(var(--background));
