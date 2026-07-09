@@ -2484,22 +2484,51 @@ function viMarkdownBody() {
 
 Lightsprint is a concise sample profile linked to [[source.yc-launch.lightsprint]] and [[concept.agentic-sdlc]].
 
+![Product surface](https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1600&auto=format&fit=crop)
+
+## Facts
+
+\`\`\`facts
+Status: Active
+Category: Agentic SDLC
+Motion: Product-led
+Evidence: YC launch, website, demo
+\`\`\`
+
 ## Evidence
 
 - [Website](https://lightsprint.com)
 - [x] YC launch captured
 
-> [!NOTE]
-> Keep source evidence separate from human judgement.
+> Keep source evidence separate from human judgement. The quote style should feel editorial, not like an alert box.
 
 | Signal | Reading |
 | --- | --- |
 | Launch | Strong developer demo |
 | Motion | Product-led |
 
+<details>
+<summary>Research notes</summary>
+
+This folded section keeps raw notes available without interrupting the reading rhythm.
+
+</details>
+
+## Timeline
+
+\`\`\`timeline
+2026-01 | YC launch captured
+2026-02 | Product demo reviewed
+2026-03 | GTM takeaway linked to [[note.lightsprint-gtm-takeaway]]
+\`\`\`
+
+Footnotes keep evidence references nearby without crowding the main paragraph.[^source]
+
 \`\`\`ts
 const relation = "supports";
 \`\`\`
+
+[^source]: This is a compact footnote rendered at the end of the document.
 `;
 }
 
@@ -2851,60 +2880,89 @@ function MarkdownBody({
   imageLoading?: "lazy" | "eager";
 }) {
   const rendered = useMemo(() => normalizeMarkdownBody(body, objectTitleByID), [body, objectTitleByID]);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
-      components={{
-        a: ({ node: _node, href, children, ...props }) => {
-          const objectID = objectIDFromInternalHref(href);
-          if (objectID) {
+    <>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+        components={{
+          a: ({ node: _node, href, children, ...props }) => {
+            const objectID = objectIDFromInternalHref(href);
+            if (objectID) {
+              return (
+                <button className="markdown-wikilink" type="button" onClick={() => openObject(objectID)} title={objectID}>
+                  {children}
+                </button>
+              );
+            }
             return (
-              <button className="markdown-wikilink" type="button" onClick={() => openObject(objectID)}>
+              <a {...props} href={href} target={isExternalHref(href) ? "_blank" : undefined} rel={isExternalHref(href) ? "noreferrer" : undefined}>
                 {children}
-              </button>
+              </a>
+            );
+          },
+          blockquote: ({ node: _node, children, ...props }) => <blockquote {...props}>{children}</blockquote>,
+          code: ({ node: _node, className, children, ...props }) => <MarkdownCode className={className} {...props}>{children}</MarkdownCode>,
+          p: ({ node: _node, children, ...props }) => {
+            const onlyChild = Array.isArray(children) && children.length === 1 ? children[0] : children;
+            if (isMarkdownFigure(onlyChild)) return onlyChild;
+            return <p {...props}>{children}</p>;
+          },
+          pre: ({ node: _node, children, ...props }) => {
+            const child = Array.isArray(children) ? children[0] : children;
+            if (React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
+              const language = /language-([A-Za-z0-9_-]+)/.exec(child.props.className ?? "")?.[1]?.toLowerCase();
+              const source = String(child.props.children ?? "").replace(/\n$/, "");
+              if (language === "mermaid") return <MermaidDiagram source={source} />;
+              if (language === "facts") return <MarkdownFacts source={source} />;
+              if (language === "timeline") return <MarkdownTimeline source={source} />;
+            }
+            return <pre {...props}>{children}</pre>;
+          },
+          table: ({ node: _node, children, ...props }) => (
+            <div className="markdown-table-wrap">
+              <table {...props}>{children}</table>
+            </div>
+          ),
+          img: ({ node: _node, src, alt, ...props }) => {
+            const resolved = markdownAssetURL(src, object, vault);
+            const caption = cleanImageCaption(alt);
+            const layout = markdownImageLayout(alt);
+            const image = (
+              <img
+                {...props}
+                className={layout ? `markdown-image-${layout}` : undefined}
+                src={resolved}
+                alt={alt ?? ""}
+                loading={imageLoading}
+                title={caption}
+                onClick={() => resolved && setLightboxImage({ src: resolved, alt: caption })}
+              />
+            );
+            if (!caption) return image;
+            return (
+              <figure className={`markdown-figure ${layout ? `markdown-figure-${layout}` : ""}`}>
+                {image}
+                <figcaption>{caption}</figcaption>
+              </figure>
             );
           }
-          return (
-            <a {...props} href={href} target={isExternalHref(href) ? "_blank" : undefined} rel={isExternalHref(href) ? "noreferrer" : undefined}>
-              {children}
-            </a>
-          );
-        },
-        blockquote: ({ node: _node, children, ...props }) => <MarkdownBlockquote {...props}>{children}</MarkdownBlockquote>,
-        code: ({ node: _node, className, children, ...props }) => <MarkdownCode className={className} {...props}>{children}</MarkdownCode>,
-        pre: ({ node: _node, children, ...props }) => {
-          const child = Array.isArray(children) ? children[0] : children;
-          if (React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
-            const language = /language-([A-Za-z0-9_-]+)/.exec(child.props.className ?? "")?.[1]?.toLowerCase();
-            if (language === "mermaid") {
-              return <MermaidDiagram source={String(child.props.children ?? "").replace(/\n$/, "")} />;
-            }
-          }
-          return <pre {...props}>{children}</pre>;
-        },
-        table: ({ node: _node, children, ...props }) => (
-          <div className="markdown-table-wrap">
-            <table {...props}>{children}</table>
-          </div>
-        ),
-        img: ({ node: _node, src, alt, ...props }) => {
-          const resolved = markdownAssetURL(src, object, vault);
-          return (
-            <img
-              {...props}
-              src={resolved}
-              alt={alt ?? ""}
-              loading={imageLoading}
-              title={alt ?? ""}
-              onClick={() => resolved && window.open(resolved, "_blank", "noopener,noreferrer")}
-            />
-          );
-        }
-      }}
-    >
-      {rendered}
-    </ReactMarkdown>
+        }}
+      >
+        {rendered}
+      </ReactMarkdown>
+      <Dialog open={Boolean(lightboxImage)} onOpenChange={(open) => !open && setLightboxImage(null)}>
+        <DialogContent className="markdown-lightbox">
+          {lightboxImage && (
+            <>
+              <img src={lightboxImage.src} alt={lightboxImage.alt} />
+              {lightboxImage.alt && <div className="markdown-lightbox-caption">{lightboxImage.alt}</div>}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -2919,6 +2977,10 @@ function MarkdownCode({ className, children, ...props }: React.ComponentProps<"c
   }
   const highlighted = highlightCode(source, language);
   return <code {...props} className={`hljs language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted }} />;
+}
+
+function isMarkdownFigure(node: React.ReactNode) {
+  return React.isValidElement<{ className?: string }>(node) && node.type === "figure" && String(node.props.className ?? "").includes("markdown-figure");
 }
 
 function MermaidDiagram({ source }: { source: string }) {
@@ -2965,40 +3027,34 @@ function MermaidDiagram({ source }: { source: string }) {
   return <div className="markdown-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
-function MarkdownBlockquote({ children, ...props }: React.ComponentProps<"blockquote">) {
-  const alertType = githubAlertType(children);
-  if (alertType) {
-    return (
-      <div className={`markdown-alert markdown-alert-${alertType.toLowerCase()}`}>
-        <div className="markdown-alert-title">{alertType[0] + alertType.slice(1).toLowerCase()}</div>
-        <blockquote {...props} className="markdown-alert-body">{stripAlertMarker(children)}</blockquote>
-      </div>
-    );
-  }
-  return <blockquote {...props}>{children}</blockquote>;
+function MarkdownFacts({ source }: { source: string }) {
+  const rows = source.split("\n").map(parseFactLine).filter((row): row is { key: string; value: string } => Boolean(row));
+  if (rows.length === 0) return <pre><code>{source}</code></pre>;
+  return (
+    <dl className="markdown-facts">
+      {rows.map((row) => (
+        <div key={`${row.key}:${row.value}`} className="markdown-fact-row">
+          <dt>{row.key}</dt>
+          <dd>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
-function stripAlertMarker(children: React.ReactNode) {
-  let stripped = false;
-  function strip(node: React.ReactNode): React.ReactNode {
-    if (node === null || node === undefined || typeof node === "boolean") return node;
-    if (typeof node === "string" || typeof node === "number") {
-      if (stripped) return node;
-      const next = String(node).replace(/^\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, "");
-      if (next !== String(node)) stripped = true;
-      return next;
-    }
-    if (Array.isArray(node)) {
-      return node.map(strip).filter((child) => child !== "");
-    }
-    if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
-      const nextChildren = strip(node.props.children);
-      if (nextChildren === "" || (Array.isArray(nextChildren) && nextChildren.length === 0)) return null;
-      return React.cloneElement(node, { children: nextChildren });
-    }
-    return node;
-  }
-  return strip(children);
+function MarkdownTimeline({ source }: { source: string }) {
+  const items = source.split("\n").map(parseTimelineLine).filter((item): item is { time: string; text: string } => Boolean(item));
+  if (items.length === 0) return <pre><code>{source}</code></pre>;
+  return (
+    <ol className="markdown-timeline">
+      {items.map((item) => (
+        <li key={`${item.time}:${item.text}`}>
+          <time>{item.time}</time>
+          <span>{item.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function normalizeMarkdownBody(markdown: string, objectTitleByID: Record<string, string> = {}) {
@@ -3057,17 +3113,42 @@ function escapeHTML(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function githubAlertType(children: React.ReactNode) {
-  const match = reactText(children).trimStart().match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
-  return match?.[1]?.toUpperCase() ?? "";
+function cleanImageCaption(value: string | undefined) {
+  const caption = String(value ?? "").trim();
+  if (!caption || caption === "image") return "";
+  return caption.replace(/\s*\{(?:wide|full|inline)\}\s*$/i, "").trim();
 }
 
-function reactText(node: React.ReactNode): string {
-  if (node === null || node === undefined || typeof node === "boolean") return "";
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(reactText).join("");
-  if (React.isValidElement<{ children?: React.ReactNode }>(node)) return reactText(node.props.children);
-  return "";
+function markdownImageLayout(value: string | undefined) {
+  const match = String(value ?? "").match(/\{(wide|full|inline)\}\s*$/i);
+  return match?.[1]?.toLowerCase() ?? "";
+}
+
+function parseFactLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  const [key, value] = splitStructuredLine(trimmed);
+  if (!key || !value) return null;
+  return { key, value };
+}
+
+function parseTimelineLine(line: string) {
+  const trimmed = line.trim().replace(/^[-*]\s+/, "");
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  const [time, text] = splitStructuredLine(trimmed);
+  if (!time || !text) return null;
+  return { time, text };
+}
+
+function splitStructuredLine(line: string): [string, string] {
+  const separators = [" | ", "\t", " - ", ": "];
+  for (const separator of separators) {
+    const index = line.indexOf(separator);
+    if (index > 0) {
+      return [line.slice(0, index).trim(), line.slice(index + separator.length).trim()];
+    }
+  }
+  return ["", ""];
 }
 
 function objectIDFromInternalHref(href: string | undefined) {
