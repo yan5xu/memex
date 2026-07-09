@@ -2372,9 +2372,33 @@ function VIBodyEditor() {
 }
 
 function VIMarkdown() {
+  const checks = [
+    ["Wiki links", "[[id]] renders with title and keeps object identity"],
+    ["Reading rhythm", "paragraphs, headings, quotes, lists, and footnotes"],
+    ["Evidence blocks", "facts, tables, task lists, code, timeline"],
+    ["Media", "captioned image, wide image, inline image, lightbox"]
+  ];
   return (
-    <div className="vi-reader markdown">
-      <MarkdownBody body={viMarkdownBody()} object={viObject()} vault="" objectTitleByID={viObjectTitleByID()} openObject={() => undefined} />
+    <div className="vi-markdown-page">
+      <aside className="vi-markdown-brief">
+        <div className="vi-control-kicker">Markdown system</div>
+        <h2>Research memo rendering</h2>
+        <p>One fixture exercises the body renderer with the elements people and agents will use most often.</p>
+        <div className="vi-markdown-checks">
+          {checks.map(([title, detail]) => (
+            <div key={title} className="vi-markdown-check">
+              <Check className="size-3.5" />
+              <div>
+                <strong>{title}</strong>
+                <span>{detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+      <article className="vi-reader markdown">
+        <MarkdownBody body={viMarkdownBody()} object={viObject()} vault="" objectTitleByID={viObjectTitleByID()} openObject={() => undefined} imageLoading="eager" />
+      </article>
     </div>
   );
 }
@@ -2475,42 +2499,84 @@ function viObjectTitleByID() {
   return {
     "company.lightsprint": "Lightsprint",
     "source.yc-launch.lightsprint": "YC Launch",
-    "concept.agentic-sdlc": "Agentic SDLC"
+    "concept.agentic-sdlc": "Agentic SDLC",
+    "concept.demo-led-growth": "Demo-led Growth",
+    "note.lightsprint-gtm-takeaway": "Lightsprint GTM Takeaway",
+    "person.elena-marin": "Elena Marin"
   };
 }
 
 function viMarkdownBody() {
-  return `# Lightsprint
+  return `# Lightsprint research memo
 
-Lightsprint is a concise sample profile linked to [[source.yc-launch.lightsprint]] and [[concept.agentic-sdlc]].
+Lightsprint is a concise sample profile linked to [[source.yc-launch.lightsprint]] and [[concept.agentic-sdlc]]. This page is intentionally written like a working research memo: structured enough for agents, but still calm and readable for people.
 
-![Product surface](https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1600&auto=format&fit=crop)
+The core reading path should feel editorial. Inline links such as [[concept.demo-led-growth]] and [[person.elena-marin]] should render as titles, not raw ids, while still preserving the object target.
 
-## Facts
+![Product surface {wide}](https://images.unsplash.com/photo-1497366754035-f200968a6e72?q=80&w=1600&auto=format&fit=crop)
+
+## Snapshot
 
 \`\`\`facts
 Status: Active
 Category: Agentic SDLC
 Motion: Product-led
-Evidence: YC launch, website, demo
+Evidence: YC launch, product demo, website
+Open questions: pricing, retention, founder-led distribution
 \`\`\`
 
-## Evidence
+## Reading notes
 
-- [Website](https://lightsprint.com)
-- [x] YC launch captured
+The first pass should answer what the company is, why it matters, and which source items support the current judgement.[^source] Secondary details can remain nearby without turning the page into a database dump.
 
-> Keep source evidence separate from human judgement. The quote style should feel editorial, not like an alert box.
+> Keep source evidence separate from human judgement. The quote style should feel editorial: enough contrast to slow the reader down, not a warning banner.
+
+- Product surface
+  - agentic software delivery workflow
+  - demo-first positioning
+  - potential link to [[concept.agentic-sdlc]]
+- Evidence quality
+  - [x] YC launch captured
+  - [x] Website reviewed
+  - [ ] Pricing and retention still missing
+
+## Evidence matrix
 
 | Signal | Reading |
 | --- | --- |
 | Launch | Strong developer demo |
-| Motion | Product-led |
+| Motion | Product-led, likely founder-led sales early |
+| Source | [[source.yc-launch.lightsprint]] supports the first summary |
+| Reusable concept | [[concept.demo-led-growth]] may apply if demo loops are visible |
+
+![Inline interface cue {inline}](https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=720&auto=format&fit=crop) Inline images should stay small when explicitly marked, useful for logos, thumbnails, or compact product cues inside a paragraph.
+
+## Nested reasoning
+
+1. Start from the object.
+   1. Identify durable fields: name, category, status, homepage.
+   2. Link durable relationships through schema fields.
+      1. founders
+      2. source items
+      3. related concepts
+2. Move interpretation into notes.
+   - The company body stays as the synthesized profile.
+   - [[note.lightsprint-gtm-takeaway]] keeps the human judgement addressable.
+3. Refresh body links after edits.
+
+   \`\`\`bash
+   mbase -C "$VAULT" body refresh company.lightsprint
+   mbase -C "$VAULT" get company.lightsprint --body-preview 800
+   \`\`\`
 
 <details>
 <summary>Research notes</summary>
 
 This folded section keeps raw notes available without interrupting the reading rhythm.
+
+- Raw capture can include uncertain phrasing.
+- Follow-up questions remain visible but not dominant.
+- Keyboard hints like <kbd>Cmd</kbd> + <kbd>K</kbd> should sit naturally in prose.
 
 </details>
 
@@ -2522,11 +2588,17 @@ This folded section keeps raw notes available without interrupting the reading r
 2026-03 | GTM takeaway linked to [[note.lightsprint-gtm-takeaway]]
 \`\`\`
 
-Footnotes keep evidence references nearby without crowding the main paragraph.[^source]
+## Implementation note
 
 \`\`\`ts
-const relation = "supports";
+type BodyLink = {
+  from: "company.lightsprint";
+  to: "source.yc-launch.lightsprint";
+  relation: "mentions" | "supports";
+};
 \`\`\`
+
+Footnotes keep evidence references nearby without crowding the main paragraph.[^source]
 
 [^source]: This is a compact footnote rendered at the end of the document.
 `;
@@ -2915,8 +2987,8 @@ function MarkdownBody({
               const language = /language-([A-Za-z0-9_-]+)/.exec(child.props.className ?? "")?.[1]?.toLowerCase();
               const source = String(child.props.children ?? "").replace(/\n$/, "");
               if (language === "mermaid") return <MermaidDiagram source={source} />;
-              if (language === "facts") return <MarkdownFacts source={source} />;
-              if (language === "timeline") return <MarkdownTimeline source={source} />;
+              if (language === "facts") return <MarkdownFacts source={normalizeStructuredBlockLinks(source, objectTitleByID)} />;
+              if (language === "timeline") return <MarkdownTimeline source={normalizeStructuredBlockLinks(source, objectTitleByID)} />;
             }
             return <pre {...props}>{children}</pre>;
           },
@@ -2932,7 +3004,7 @@ function MarkdownBody({
             const image = (
               <img
                 {...props}
-                className={layout ? `markdown-image-${layout}` : undefined}
+                className={!caption && layout ? `markdown-image-${layout}` : undefined}
                 src={resolved}
                 alt={alt ?? ""}
                 loading={imageLoading}
@@ -3091,6 +3163,14 @@ function normalizeWikiLinks(line: string, objectTitleByID: Record<string, string
     if (!target) return "";
     const title = label || objectTitleByID[target] || target;
     return `[${escapeMarkdownAlt(title)}](#mbase-object:${encodeURIComponent(target)})`;
+  });
+}
+
+function normalizeStructuredBlockLinks(source: string, objectTitleByID: Record<string, string> = {}) {
+  return source.replace(/\[\[([^\]\n]+)\]\]/g, (_match, raw: string) => {
+    const [target, label] = raw.split("|").map((part) => part.trim());
+    if (!target) return "";
+    return label || objectTitleByID[target] || target;
   });
 }
 
