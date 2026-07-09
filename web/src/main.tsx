@@ -452,7 +452,7 @@ function App() {
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
   const [savingObjectImage, setSavingObjectImage] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
