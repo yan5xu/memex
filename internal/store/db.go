@@ -18,6 +18,10 @@ type Store struct {
 }
 
 func Open(root string) (*Store, error) {
+	root, err := normalizeRoot(root)
+	if err != nil {
+		return nil, err
+	}
 	dbPath := filepath.Join(root, DBPath)
 	if _, err := os.Stat(dbPath); err != nil {
 		return nil, fmt.Errorf("mbase db not found at %s; run mbase init", dbPath)
@@ -35,6 +39,10 @@ func Open(root string) (*Store, error) {
 }
 
 func Init(root string) (*Store, error) {
+	root, err := normalizeRoot(root)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Join(root, ".mbase"), 0755); err != nil {
 		return nil, err
 	}
@@ -64,6 +72,10 @@ func configureDB(db *sql.DB) {
 }
 
 func openSQLite(path string) (*sql.DB, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
 	u := url.URL{Scheme: "file", Path: path}
 	q := u.Query()
 	q.Add("_pragma", "busy_timeout(5000)")
@@ -75,6 +87,13 @@ func openSQLite(path string) (*sql.DB, error) {
 	}
 	configureDB(db)
 	return db, nil
+}
+
+func normalizeRoot(root string) (string, error) {
+	if root == "" {
+		root = "."
+	}
+	return filepath.Abs(root)
 }
 
 func (s *Store) Close() error {
