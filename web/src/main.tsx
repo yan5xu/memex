@@ -474,6 +474,9 @@ function App() {
           ...current,
           ...next
         };
+        if (!merged.vault && vault) {
+          merged.vault = vault;
+        }
         delete merged.section;
         delete merged.frame;
         delete merged.shot;
@@ -583,6 +586,11 @@ function App() {
   useEffect(() => {
     void loadBase();
   }, []);
+
+  useEffect(() => {
+    if (view === "vi" || routeSearch.vault || !vault) return;
+    updateSearch({ vault }, { replace: true });
+  }, [routeSearch.vault, vault, view]);
 
   useEffect(() => {
     if (!activeType) return;
@@ -813,6 +821,12 @@ function App() {
     toast.success(`Opened ${shortPath(nextPath)}`);
     return loaded;
   }
+
+  useEffect(() => {
+    const nextVault = routeSearch.vault?.trim() || "";
+    if (!nextVault || nextVault === vault) return;
+    void openVaultPath(nextVault);
+  }, [routeSearch.vault]);
 
   useEffect(() => {
     const currentState = (overrides: Partial<AppState> = {}) => automationState({
