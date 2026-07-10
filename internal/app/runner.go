@@ -320,25 +320,39 @@ func (r *Runner) runType(args []string) Result {
 }
 
 func (r *Runner) runField(args []string) Result {
-	if len(args) < 1 || args[0] != "add" {
-		return Fail("usage", "usage: field add <type> <field> --kind <kind>")
-	}
-	if len(args) < 3 {
-		return Fail("usage", "usage: field add <type> <field> --kind <kind>")
-	}
-	typeID, name := args[1], args[2]
-	flags := parseFlags(args[3:])
-	kind := domain.FieldKind(flags.Get("kind"))
-	if kind == "" {
-		kind = domain.FieldText
-	}
-	enumValues := splitList(flags.Get("values"))
 	return r.withStore(func(s *store.Store) Result {
-		fd, err := s.AddField(typeID, name, kind, flags.Bool("required"), flags.Bool("unique"), enumValues, flags.Get("target"))
-		if err != nil {
-			return fromErr(err)
+		if len(args) < 1 {
+			return Fail("usage", "usage: field list <type>|field add <type> <field> --kind <kind>")
 		}
-		return OK(fd, Effect{Kind: "field.add", Field: name})
+		switch args[0] {
+		case "list":
+			if len(args) < 2 {
+				return Fail("usage", "usage: field list <type>")
+			}
+			fields, err := s.ListFields(args[1])
+			if err != nil {
+				return fromErr(err)
+			}
+			return OK(map[string]any{"type": args[1], "fields": fields, "count": len(fields)})
+		case "add":
+			if len(args) < 3 {
+				return Fail("usage", "usage: field add <type> <field> --kind <kind>")
+			}
+			typeID, name := args[1], args[2]
+			flags := parseFlags(args[3:])
+			kind := domain.FieldKind(flags.Get("kind"))
+			if kind == "" {
+				kind = domain.FieldText
+			}
+			enumValues := splitList(flags.Get("values"))
+			fd, err := s.AddField(typeID, name, kind, flags.Bool("required"), flags.Bool("unique"), enumValues, flags.Get("target"))
+			if err != nil {
+				return fromErr(err)
+			}
+			return OK(fd, Effect{Kind: "field.add", Field: name})
+		default:
+			return Fail("unknown_command", "unknown field command: "+args[0])
+		}
 	})
 }
 
@@ -1114,6 +1128,7 @@ func usage() string {
   link <id> <field> <target-id>
   delete <id> --yes
   type list|show|create
+  field list <type>
   field add <type> <field> --kind <kind>
   object create|get|list|set|link|unlink
   query <type>

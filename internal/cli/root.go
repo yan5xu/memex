@@ -162,6 +162,10 @@ func printHuman(argv []string, result app.Result) error {
 		if printDeletedObject(result.Data) {
 			return nil
 		}
+	case "field":
+		if len(argv) > 1 && argv[1] == "list" && printFieldList(result.Data) {
+			return nil
+		}
 	case "query":
 		if q, ok := result.Data.(*store.QueryResult); ok {
 			printQuery(q)
@@ -611,6 +615,60 @@ func printQuery(q *store.QueryResult) {
 		}
 		fmt.Println()
 	}
+}
+
+func printFieldList(data any) bool {
+	payload, ok := data.(map[string]any)
+	if !ok {
+		return false
+	}
+	fields, ok := payload["fields"].([]domain.FieldDef)
+	if !ok {
+		return false
+	}
+	fmt.Printf("%s fields: %d\n", payload["type"], len(fields))
+	if len(fields) == 0 {
+		return true
+	}
+	columns := []string{"name", "kind", "target", "required", "unique", "values"}
+	widths := make([]int, len(columns))
+	for i, column := range columns {
+		widths[i] = len(column)
+	}
+	rows := make([][]string, 0, len(fields))
+	for _, field := range fields {
+		values := strings.Join(field.EnumValues, ",")
+		row := []string{
+			field.Name,
+			string(field.Kind),
+			field.TargetType,
+			strconv.FormatBool(field.Required),
+			strconv.FormatBool(field.Unique),
+			values,
+		}
+		for i, value := range row {
+			if len(value) > widths[i] {
+				widths[i] = min(len(value), 36)
+			}
+		}
+		rows = append(rows, row)
+	}
+	for i, column := range columns {
+		fmt.Printf("%-*s", widths[i]+2, column)
+	}
+	fmt.Println()
+	for i := range columns {
+		fmt.Print(strings.Repeat("-", widths[i]))
+		fmt.Print("  ")
+	}
+	fmt.Println()
+	for _, row := range rows {
+		for i, value := range row {
+			fmt.Printf("%-*s", widths[i]+2, truncate(value, widths[i]))
+		}
+		fmt.Println()
+	}
+	return true
 }
 
 func humanValue(v any) string {

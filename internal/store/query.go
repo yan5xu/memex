@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/yan5xu/mbase/internal/domain"
@@ -150,14 +151,37 @@ func valueContains(got any, want string) bool {
 
 func parseWhere(expr string) (string, string, string, bool) {
 	if parts := strings.SplitN(expr, " contains ", 2); len(parts) == 2 {
-		return strings.TrimSpace(parts[0]), "contains", strings.TrimSpace(parts[1]), true
+		return strings.TrimSpace(parts[0]), "contains", cleanWhereValue(parts[1]), true
 	}
 	for _, op := range []string{"!=", "="} {
 		if parts := strings.SplitN(expr, op, 2); len(parts) == 2 {
-			return strings.TrimSpace(parts[0]), op, strings.TrimSpace(parts[1]), true
+			return strings.TrimSpace(parts[0]), op, cleanWhereValue(parts[1]), true
 		}
 	}
 	return "", "", "", false
+}
+
+func cleanWhereValue(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) < 2 {
+		return value
+	}
+	first := value[0]
+	last := value[len(value)-1]
+	if first != last {
+		return value
+	}
+	switch first {
+	case '"':
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			return unquoted
+		}
+		return value[1 : len(value)-1]
+	case '\'':
+		return strings.ReplaceAll(value[1:len(value)-1], `\'`, `'`)
+	default:
+		return value
+	}
 }
 
 func sortRows(rows []map[string]any, sortExpr string) {

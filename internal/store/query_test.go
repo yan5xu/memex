@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/yan5xu/mbase/internal/domain"
@@ -80,6 +81,75 @@ func TestQueryWhereMatchesRefAndRefListIDs(t *testing.T) {
 	}
 	if notEqualResult.Count != 1 || notEqualResult.Rows[0]["id"] != "note.other" {
 		t.Fatalf("expected ref_list != where to exclude note.aisa, got %#v", notEqualResult.Rows)
+	}
+}
+
+func TestQueryWhereStripsQuotedValues(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "website", domain.FieldURL, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "platform", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("company", "company.skywork", "Skywork", map[string]string{
+		"website":  "https://skywork.ai/?a=1&b=2",
+		"platform": "Product Hunt",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.Query("company", QueryOptions{Where: []string{`website = "https://skywork.ai/?a=1&b=2"`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Count != 1 || result.Rows[0]["id"] != "company.skywork" {
+		t.Fatalf("expected quoted URL where to match company.skywork, got %#v", result.Rows)
+	}
+
+	result, err = s.Query("company", QueryOptions{Where: []string{`platform contains 'Product'`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Count != 1 || result.Rows[0]["id"] != "company.skywork" {
+		t.Fatalf("expected single-quoted contains where to match company.skywork, got %#v", result.Rows)
+	}
+}
+
+func TestEnumValidationErrorListsAllowedValues(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "status", domain.FieldEnum, false, false, []string{"active", "archived", "ignored"}, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.CreateObject("company", "company.acme", "Acme", map[string]string{"status": "draft"})
+	if err == nil {
+		t.Fatal("expected invalid enum value error")
+	}
+	if !strings.Contains(err.Error(), `invalid enum value "draft"`) || !strings.Contains(err.Error(), "allowed: active, archived, ignored") {
+		t.Fatalf("expected allowed enum values in error, got %q", err.Error())
 	}
 }
 

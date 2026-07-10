@@ -89,6 +89,7 @@ VAULT=/path/to/my-vault
 ```bash
 /tmp/mbase -C "$VAULT" type list
 /tmp/mbase -C "$VAULT" type show company
+/tmp/mbase -C "$VAULT" field list company
 ```
 
 添加字段：
@@ -378,7 +379,10 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 /tmp/mbase -C "$VAULT" query company --where status=active
 /tmp/mbase -C "$VAULT" query company --where "title contains sprint"
 /tmp/mbase -C "$VAULT" query company --where status!=ignored
+/tmp/mbase -C "$VAULT" query source.item --where 'url = "https://example.com/a?x=1&y=2"'
 ```
+
+`--where` 的值可以用单引号或双引号包起来，适合 URL、空格和 shell 特殊字符。
 
 多个 `--where` 是 AND：
 
@@ -778,7 +782,7 @@ MD
 6. 提交前跑 `issues`、`get company.x --no-body`、`query source.item --where "about_company=company.x"`。
 7. 搜不到或抓不到也可以建 discarded source，但不能拿它做结论。
 8. URL 和多词字段全部加引号。
-9. 不确定 schema 时先 `type show <type>`。
+9. 不确定 schema 时先 `field list <type>` 或 `type show <type>`。
 10. 一个小而完整的对象网络，比一篇孤立长文更有价值。
 
 ## 17. 常见坑
@@ -788,8 +792,8 @@ MD
 - **body 改完没刷新**：新增 `[[object.id]]` 后要 `body refresh <id>` 或 `refresh`。
 - **ref/ref_list 用错字段**：`link <id> <field> <target-id>` 的 `<field>` 必须是 `ref` 或 `ref_list`。
 - **ref/ref_list 写标题**：关系字段要写对象 id，例如 `about_company=company.skywork`，不要写 `about_company=Skywork`。
-- **enum 写错值**：enum 必须精确匹配 `--values` 里的值。
-- **不知道 enum 取值**：先跑 `type show <type>` 看字段定义。
+- **enum 写错值**：enum 必须精确匹配 `--values` 里的值；错误信息会显示 allowed values。
+- **不知道 enum 取值**：先跑 `field list <type>` 或 `type show <type>` 看字段定义。
 - **list/ref_list 分隔**：多个值用逗号，例如 `tags=a,b,c`。
 - **source.item 和 touchpoint 混用**：长期入口是 touchpoint，单次证据是 source.item；同一 URL 可以两者都存在，但语义不同。
 - **误删对象**：`delete` 要 `--yes`；body 文件会保留，但 SQLite 对象会删除。

@@ -51,6 +51,7 @@ mbase type list
 mbase type show <type>
 mbase type create <type>
 
+mbase field list <type>
 mbase field add <type> <field> --kind text|number|boolean|date|url|enum|list|ref|ref_list
 mbase field add concept related --kind ref_list --target concept
 mbase field add source.article judged --kind enum --values pending,keep,kill,deep

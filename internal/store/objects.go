@@ -572,7 +572,10 @@ func parseFieldValue(fd domain.FieldDef, raw string) (any, error) {
 				return raw, nil
 			}
 		}
-		return nil, fmt.Errorf("invalid enum value %q for %s", raw, fd.Name)
+		if len(fd.EnumValues) == 0 {
+			return nil, fmt.Errorf("invalid enum value %q for %s (no allowed values configured)", raw, fd.Name)
+		}
+		return nil, fmt.Errorf("invalid enum value %q for %s (allowed: %s)", raw, fd.Name, strings.Join(fd.EnumValues, ", "))
 	default:
 		return raw, nil
 	}
