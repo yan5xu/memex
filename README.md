@@ -27,6 +27,8 @@ The same data is exposed as:
 
 ## Commands
 
+For a complete user manual, see [docs/usage-guide.md](docs/usage-guide.md).
+
 ```bash
 mbase init
 mbase serve
