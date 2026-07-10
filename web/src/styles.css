@@ -363,15 +363,18 @@ body {
 
 .markdown-figure-wide,
 .markdown-image-wide {
-  width: min(112%, calc(100% + 4rem));
-  max-width: calc(100vw - 3rem);
-  margin-left: 50%;
-  transform: translateX(-50%);
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  transform: none;
 }
 
 .markdown-figure-full,
 .markdown-image-full {
-  width: min(100vw - 3rem, 100%);
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  transform: none;
 }
 
 .markdown-figure-inline,
