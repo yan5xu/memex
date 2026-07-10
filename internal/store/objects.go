@@ -92,41 +92,71 @@ func (s *Store) CreateObjectWithBody(typeID, id, title string, fields map[string
 	if title == "" {
 		return nil, fmt.Errorf("object title is required")
 	}
-	bodyPath := filepath.Join("bodies", id+".md")
-	absBody := filepath.Join(s.Root, bodyPath)
-	if err := os.MkdirAll(filepath.Dir(absBody), 0755); err != nil {
-		return nil, err
-	}
-	if body != nil {
-		if err := os.WriteFile(absBody, []byte(*body), 0644); err != nil {
-			return nil, err
-		}
-	} else if _, err := os.Stat(absBody); os.IsNotExist(err) {
-		if err := os.WriteFile(absBody, []byte("# "+title+"\n"), 0644); err != nil {
-			return nil, err
-		}
-	}
-	hash, _ := fileHash(absBody)
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO objects(id, type_id, title, body_path, body_hash) VALUES(?, ?, ?, ?, ?)`, id, typeID, title, bodyPath, hash); err != nil {
-		return nil, err
-	}
 	if s.hasField(typeID, "title") {
 		fields["title"] = title
 	} else {
 		delete(fields, "title")
 	}
-	if err := s.setFieldsTx(tx, id, typeID, fields); err != nil {
+	parsedFields, err := s.parseFieldValues(typeID, fields)
+	if err != nil {
+		return nil, err
+	}
+	bodyPath := filepath.Join("bodies", id+".md")
+	absBody := filepath.Join(s.Root, bodyPath)
+	if err := os.MkdirAll(filepath.Dir(absBody), 0755); err != nil {
+		return nil, err
+	}
+	hadBody := false
+	var previousBody []byte
+	if existing, err := os.ReadFile(absBody); err == nil {
+		hadBody = true
+		previousBody = existing
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	wroteBody := false
+	cleanupBody := func() {
+		if !wroteBody {
+			return
+		}
+		if hadBody {
+			_ = os.WriteFile(absBody, previousBody, 0644)
+			return
+		}
+		_ = os.Remove(absBody)
+	}
+	if body != nil {
+		if err := os.WriteFile(absBody, []byte(*body), 0644); err != nil {
+			return nil, err
+		}
+		wroteBody = true
+	} else if !hadBody {
+		if err := os.WriteFile(absBody, []byte("# "+title+"\n"), 0644); err != nil {
+			return nil, err
+		}
+		wroteBody = true
+	}
+	hash, _ := fileHash(absBody)
+	tx, err := s.DB.Begin()
+	if err != nil {
+		cleanupBody()
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO objects(id, type_id, title, body_path, body_hash) VALUES(?, ?, ?, ?, ?)`, id, typeID, title, bodyPath, hash); err != nil {
+		cleanupBody()
+		return nil, err
+	}
+	if err := s.setParsedFieldsTx(tx, id, parsedFields); err != nil {
+		cleanupBody()
 		return nil, err
 	}
 	if _, err := tx.Exec(`INSERT INTO ops(op, object_id, payload_json) VALUES('object.create', ?, ?)`, id, mustJSON(map[string]any{"type": typeID, "fields": fields, "body_written": body != nil})); err != nil {
+		cleanupBody()
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
+		cleanupBody()
 		return nil, err
 	}
 	if err := s.RevalidateObject(id); err != nil {
@@ -409,19 +439,40 @@ func (s *Store) DeleteObject(objectID string) (*domain.Object, error) {
 }
 
 func (s *Store) setFieldsTx(tx *sql.Tx, objectID, typeID string, fields map[string]string) error {
+	parsed, err := s.parseFieldValues(typeID, fields)
+	if err != nil {
+		return err
+	}
+	return s.setParsedFieldsTx(tx, objectID, parsed)
+}
+
+type parsedFieldValue struct {
+	def   *domain.FieldDef
+	value any
+}
+
+func (s *Store) parseFieldValues(typeID string, fields map[string]string) ([]parsedFieldValue, error) {
+	parsed := make([]parsedFieldValue, 0, len(fields))
 	for name, raw := range fields {
 		fd, err := s.GetField(typeID, name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		value, err := parseFieldValue(*fd, raw)
 		if err != nil {
+			return nil, err
+		}
+		parsed = append(parsed, parsedFieldValue{def: fd, value: value})
+	}
+	return parsed, nil
+}
+
+func (s *Store) setParsedFieldsTx(tx *sql.Tx, objectID string, fields []parsedFieldValue) error {
+	for _, field := range fields {
+		if err := s.validateUniqueTx(tx, objectID, field.def, field.value); err != nil {
 			return err
 		}
-		if err := s.validateUniqueTx(tx, objectID, fd, value); err != nil {
-			return err
-		}
-		if err := s.setValueTx(tx, objectID, fd, value); err != nil {
+		if err := s.setValueTx(tx, objectID, field.def, field.value); err != nil {
 			return err
 		}
 	}

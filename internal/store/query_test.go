@@ -1,6 +1,8 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -150,6 +152,41 @@ func TestEnumValidationErrorListsAllowedValues(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `invalid enum value "draft"`) || !strings.Contains(err.Error(), "allowed: active, archived, ignored") {
 		t.Fatalf("expected allowed enum values in error, got %q", err.Error())
+	}
+	bodyPath := filepath.Join(s.Root, "bodies", "company.acme.md")
+	if _, statErr := os.Stat(bodyPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected failed create to leave no body file at %s, statErr=%v", bodyPath, statErr)
+	}
+}
+
+func TestCreateObjectCleansBodyWhenTransactionFails(t *testing.T) {
+	s, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateType("company"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "title", domain.FieldText, false, false, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddField("company", "slug", domain.FieldText, false, true, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateObject("company", "company.acme", "Acme", map[string]string{"slug": "acme"}); err != nil {
+		t.Fatal(err)
+	}
+
+	body := "# Duplicate\n"
+	_, err = s.CreateObjectWithBody("company", "company.duplicate", "Duplicate", map[string]string{"slug": "acme"}, &body)
+	if err == nil {
+		t.Fatal("expected unique constraint error")
+	}
+	bodyPath := filepath.Join(s.Root, "bodies", "company.duplicate.md")
+	if _, statErr := os.Stat(bodyPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected failed transaction to remove body file at %s, statErr=%v", bodyPath, statErr)
 	}
 }
 
