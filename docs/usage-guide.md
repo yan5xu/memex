@@ -600,20 +600,206 @@ Web UI 打开：
 http://127.0.0.1:8766/?view=detail&vault=/path/to/vault&object=company.demo
 ```
 
-## 16. 常见坑
+## 16. Research agent 实战 SOP
+
+这一节来自 `ai-company-research-vault` 的实际使用经验，重点是研究 agent 的日常写入。
+
+### 16.1 新建或更新 company
+
+先查重：
+
+```bash
+/tmp/mbase -C "$VAULT" query company \
+  --select id,title,website,tags \
+  --where "title=Skywork"
+```
+
+没有对象就 `upsert`，并尽量用 `--body-stdin` 一次写入字段和主体报告：
+
+```bash
+cat <<'MD' | /tmp/mbase -C "$VAULT" upsert company company.skywork \
+  name="Skywork" \
+  title="Skywork" \
+  slug="skywork" \
+  status="active" \
+  website="https://skywork.ai/" \
+  one_liner="AI office / workspace agent" \
+  category="ai-workspace,ai-office-agent,deep-research" \
+  tags="ai-workspace,deep-research,singapore" \
+  --body-stdin
+# Skywork
+
+## TL;DR
+
+Skywork turns deep research into office deliverables.
+
+## 证据库
+
+- [[source.newswire.skywork-super-agents-launch-2025-05-22]]
+MD
+```
+
+经验：
+
+- `company` body 放主体卷宗，不只是字段摘要。
+- 字段只放需要 query 的结构化信息，例如 `name`、`website`、`status`、`category`、`tags`、`founders`。
+- 新对象不确定是否存在时优先 `upsert`，避免重复写入失败中断流程。
+
+### 16.2 添加 source.item
+
+`source.item` 是单条证据，不是长期入口。文章、PR、Product Hunt 页面抓取、LinkedIn company snapshot、Similarweb snapshot、GitHub org snapshot、一次抓取失败记录，都可以是 `source.item`。
+
+```bash
+cat <<'MD' | /tmp/mbase -C "$VAULT" source add source.producthunt.skywork-super-agents-2026-07-10 \
+  --title "Skywork Super Agents on Product Hunt" \
+  --url "https://www.producthunt.com/products/skywork-super-agents" \
+  item_type="launch" \
+  platform="ProductHunt" \
+  collected_at="2026-07-10" \
+  quality="full" \
+  evidence_level="S2" \
+  processing_status="parsed" \
+  about_company="company.skywork" \
+  --body-stdin
+# Skywork Super Agents Product Hunt
+
+页面显示 launched in 2025，Day Rank #17，91 points，715 followers。
+MD
+```
+
+空壳页、抓取失败和不采信材料也可以建成 source，但要明确质量和状态：
+
+```bash
+/tmp/mbase -C "$VAULT" source add source.website.skywork-failed-2026-07-10 \
+  --title "Skywork website failed capture" \
+  --url "https://skywork.ai/" \
+  quality="empty_shell" \
+  evidence_level="S4" \
+  processing_status="discarded" \
+  about_company="company.skywork"
+```
+
+这样可以保留“为什么没采信这条材料”的审计记录，同时避免被误用成有效证据。
+
+每条 `source.item` 至少建议有：
+
+```text
+id, title, url, item_type, platform, collected_at,
+quality, evidence_level, processing_status,
+about_company/about_person/about_investor
+```
+
+证据分级建议：
+
+| level | 含义 |
+| --- | --- |
+| `S1` | 公司官网、官方 PR、官方 GitHub、官方公告、监管/交易所文件 |
+| `S2` | LinkedIn、Product Hunt、Similarweb、可靠媒体、adapter 抓到的平台页 |
+| `S3` | 社区讨论、第三方数据库、未经一手验证的转载 |
+| `S4` | 搜索摘要、抓取失败、空壳页、待核验线索 |
+
+### 16.3 添加 note
+
+`note` 是人的判断，不是事实库。CP takeaway、research 判断、产品方法反思、风险、不确定性、下一步追问，都应该进 `note`，并用字段挂回主体和证据。
+
+```bash
+cat <<'MD' | /tmp/mbase -C "$VAULT" upsert note note.skywork-product-takeaway-2026-07-10 \
+  title="Skywork takeaway：把 deep research 做成办公交付物 agent" \
+  kind="takeaway" \
+  author="cici-research" \
+  created_at="2026-07-10" \
+  about_company="company.skywork" \
+  source_items="source.newswire.skywork-super-agents-launch-2025-05-22,source.github.skyworkai-org-2026-07-10" \
+  tags="ai-workspace,deep-research,office-agent" \
+  --body-stdin
+# Skywork takeaway：把 deep research 做成办公交付物 agent
+
+[[company.skywork]] 的产品启发是把 research agent 的输出变成办公交付物，而不是只给聊天答案。
+MD
+```
+
+经验：
+
+- `note` 字段最好有 `about_company` 和 `source_items`。
+- 不要把人的判断藏进 `company` 字段里。
+- body 里可以继续用双链补充语义关系。
+
+### 16.4 concept 和 method
+
+`concept` 适合跨公司复用的产品/市场概念，例如“按交付物拆 agent”。`method` 适合调研方法，例如“从投资人 portfolio 扩图”。
+
+判断标准：
+
+- 能跨多个 company/note/source 复用，才建 `concept`。
+- 只是分类词，用 `tags`。
+- 调研动作或分析方法，建 `method`。
+
+### 16.5 touchpoint 和 source.item 的边界
+
+- `touchpoint`：持续入口，例如官网、X 账号、GitHub org、Product Hunt 产品页、Similarweb 页面。
+- `source.item`：单条证据，例如某篇 PR、某次 Product Hunt 页面抓取、某次 LinkedIn company snapshot、某次 Similarweb snapshot、某条 tweet。
+
+同一个 URL 有时两者都需要。例如 Product Hunt 产品页既是长期 touchpoint，也可以在某次调研中作为 `source.item` snapshot。
+
+### 16.6 每轮写入验收
+
+每轮结束至少跑：
+
+```bash
+/tmp/mbase -C "$VAULT" issues
+/tmp/mbase -C "$VAULT" get company.skywork --no-body
+/tmp/mbase -C "$VAULT" query source.item \
+  --select id,title,platform,evidence_level,quality \
+  --where "about_company=company.skywork"
+/tmp/mbase -C "$VAULT" backlinks company.skywork --type source.item --kind field
+```
+
+这能确认：
+
+- 没有 broken link。
+- source 是否挂回 company。
+- note 是否能从 company 反查。
+- body mentions 是否刷新成功。
+
+只要 body 里写了 `[[object.id]]`，最后必须：
+
+```bash
+/tmp/mbase -C "$VAULT" body refresh company.skywork
+/tmp/mbase -C "$VAULT" body refresh note.skywork-product-takeaway-2026-07-10
+```
+
+### 16.7 给新 agent 的最短建议
+
+1. 不要直接写 SQLite，只用 `/tmp/mbase -C <vault>`。
+2. 先 `query` 查重，再 `upsert`。
+3. `company` / `person` / `investor` 是主体；`touchpoint` 是长期入口；`source.item` 是单条证据；`note` 是人的判断；`concept` / `method` 是跨主体复用的模式。
+4. 每条事实尽量挂 `source.item`；每个判断尽量挂 `note`。
+5. body 里写 `[[object.id]]` 后记得 `body refresh`。
+6. 提交前跑 `issues`、`get company.x --no-body`、`query source.item --where "about_company=company.x"`。
+7. 搜不到或抓不到也可以建 discarded source，但不能拿它做结论。
+8. URL 和多词字段全部加引号。
+9. 不确定 schema 时先 `type show <type>`。
+10. 一个小而完整的对象网络，比一篇孤立长文更有价值。
+
+## 17. 常见坑
 
 - **忘记 `-C`**：命令会跑到当前目录或默认目录。长期 vault 一律显式 `-C "$VAULT"`。
 - **URL 里的 `?` 和 `&`**：shell 里写 URL 字段要加引号，否则 zsh 可能展开或截断。
 - **body 改完没刷新**：新增 `[[object.id]]` 后要 `body refresh <id>` 或 `refresh`。
 - **ref/ref_list 用错字段**：`link <id> <field> <target-id>` 的 `<field>` 必须是 `ref` 或 `ref_list`。
+- **ref/ref_list 写标题**：关系字段要写对象 id，例如 `about_company=company.skywork`，不要写 `about_company=Skywork`。
 - **enum 写错值**：enum 必须精确匹配 `--values` 里的值。
+- **不知道 enum 取值**：先跑 `type show <type>` 看字段定义。
 - **list/ref_list 分隔**：多个值用逗号，例如 `tags=a,b,c`。
+- **source.item 和 touchpoint 混用**：长期入口是 touchpoint，单次证据是 source.item；同一 URL 可以两者都存在，但语义不同。
 - **误删对象**：`delete` 要 `--yes`；body 文件会保留，但 SQLite 对象会删除。
 - **JSON 太大**：agent 用 `get --json object,links --no-body` 或 `--body-preview`，不要默认吃完整 body。
+- **并发重复写入**：多个 agent 不要同时批量写同一个主体，容易产生重复对象和命名不一致。推荐先主体、再 source、再 note、最后 refresh/验收。
+- **图片只做装饰**：图片应该服务证据和理解。截图/官网素材如果来自失败页，不要为了图文并茂硬放。
 - **两个浏览器窗口不同 vault**：确保 URL 有各自的 `vault=` 参数。
 - **图谱太乱**：优先用自定义 graph view、type 过滤、center object，不要默认看全图。
 
-## 17. 最小可运行例子
+## 18. 最小可运行例子
 
 ```bash
 VAULT=/tmp/mbase-demo
