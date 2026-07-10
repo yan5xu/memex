@@ -2705,6 +2705,7 @@ function ObjectBodyWorkspace({
 }) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const selectionRef = useRef({ start: 0, end: 0 });
   const [editing, setEditing] = useState(initialEditing);
   const [draft, setDraft] = useState(body || `# ${object.title || object.id}\n\n`);
   const [viewMode, setViewMode] = useState<"write" | "split" | "preview">("split");
@@ -2715,20 +2716,31 @@ function ObjectBodyWorkspace({
   const dirty = draft !== body;
   useEffect(() => {
     if (editing && dirty) return;
-    setDraft(body || `# ${object.title || object.id}\n\n`);
+    const next = body || `# ${object.title || object.id}\n\n`;
+    setDraft(next);
+    selectionRef.current = { start: next.length, end: next.length };
     setEditing(initialEditing);
     setJustSaved(false);
   }, [object.id, body, initialEditing]);
 
   function beginEdit() {
-    setDraft(body || `# ${object.title || object.id}\n\n`);
+    const next = body || `# ${object.title || object.id}\n\n`;
+    setDraft(next);
+    selectionRef.current = { start: next.length, end: next.length };
     onBeginEdit?.();
     setEditing(true);
-    requestAnimationFrame(() => textareaRef.current?.focus());
+    requestAnimationFrame(() => {
+      const input = textareaRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(next.length, next.length);
+    });
   }
 
   function cancelEdit() {
-    setDraft(body || `# ${object.title || object.id}\n\n`);
+    const next = body || `# ${object.title || object.id}\n\n`;
+    setDraft(next);
+    selectionRef.current = { start: next.length, end: next.length };
     setEditing(false);
     setLinkPickerOpen(false);
   }
@@ -2749,22 +2761,35 @@ function ObjectBodyWorkspace({
     }
   }
 
+  function rememberSelection() {
+    const input = textareaRef.current;
+    if (!input) return;
+    selectionRef.current = { start: input.selectionStart, end: input.selectionEnd };
+  }
+
   function insertText(value: string, replaceOpeningWiki = false) {
     const input = textareaRef.current;
-    if (!input) {
-      setDraft((current) => `${current}${value}`);
-      return;
-    }
-    const selectionStart = input.selectionStart;
-    const selectionEnd = input.selectionEnd;
+    const liveSelection = input && document.activeElement === input
+      ? { start: input.selectionStart, end: input.selectionEnd }
+      : null;
+    const selection = liveSelection ?? (input ? selectionRef.current : { start: draft.length, end: draft.length });
+    const selectionStart = Math.min(selection.start, draft.length);
+    const selectionEnd = Math.min(selection.end, draft.length);
     const replaceStart = replaceOpeningWiki && draft.slice(0, selectionStart).endsWith("[[") ? selectionStart - 2 : selectionStart;
-    const next = `${draft.slice(0, replaceStart)}${value}${draft.slice(selectionEnd)}`;
-    const cursor = replaceStart + value.length;
+    const prefix = draft.slice(0, replaceStart);
+    const suffix = draft.slice(selectionEnd);
+    const needsLeadingBreak = value.startsWith("\n") && prefix.length > 0 && !prefix.endsWith("\n");
+    const nextValue = needsLeadingBreak ? `\n${value}` : value;
+    const next = `${prefix}${nextValue}${suffix}`;
+    const cursor = replaceStart + nextValue.length;
+    selectionRef.current = { start: cursor, end: cursor };
     setDraft(next);
-    requestAnimationFrame(() => {
-      input.focus();
-      input.setSelectionRange(cursor, cursor);
-    });
+    if (input) {
+      requestAnimationFrame(() => {
+        input.focus();
+        input.setSelectionRange(cursor, cursor);
+      });
+    }
   }
 
   function insertLink(candidate: ObjectLinkCandidate) {
@@ -2777,13 +2802,15 @@ function ObjectBodyWorkspace({
     if (images.length === 0) return;
     setUploading(true);
     try {
+      const snippets: string[] = [];
       for (const file of images) {
         const result = await uploadAsset(file, vault);
         if (!result.ok || !result.data) {
           throw new Error(result.error?.message || `Could not import ${file.name}`);
         }
-        insertText(`\n\n${result.data.markdown}\n\n`);
+        snippets.push(result.data.markdown);
       }
+      insertText(`\n\n${snippets.join("\n\n")}\n\n`);
       toast.success(images.length === 1 ? t("bodyEditor.insertImage") : `${images.length} ${t("bodyEditor.insertImage")}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2797,6 +2824,7 @@ function ObjectBodyWorkspace({
     const next = event.target.value;
     setDraft(next);
     const cursor = event.target.selectionStart;
+    selectionRef.current = { start: cursor, end: event.target.selectionEnd };
     if (next.slice(0, cursor).endsWith("[[")) {
       setLinkPickerOpen(true);
     }
@@ -2862,7 +2890,7 @@ function ObjectBodyWorkspace({
                   </Command>
                 </PopoverContent>
               </Popover>
-	              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground">
+              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground" onMouseDown={rememberSelection}>
                 <ImagePlus className="size-3.5" />
                 {t("bodyEditor.insertImage")}
                 <input className="hidden" type="file" accept="image/*" multiple onChange={(event) => { if (event.target.files) void importFiles(event.target.files); event.currentTarget.value = ""; }} />
@@ -2885,8 +2913,13 @@ function ObjectBodyWorkspace({
                   value={draft}
                   spellCheck={false}
                   onChange={handleBodyChange}
+                  onClick={rememberSelection}
+                  onKeyUp={rememberSelection}
+                  onSelect={rememberSelection}
                   onPaste={(event) => {
                     if (event.clipboardData.files.length > 0) {
+                      event.preventDefault();
+                      rememberSelection();
                       void importFiles(event.clipboardData.files);
                     }
                   }}
