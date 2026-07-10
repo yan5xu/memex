@@ -2602,6 +2602,22 @@ This folded section keeps raw notes available without interrupting the reading r
 2026-03 | GTM takeaway linked to [[note.lightsprint-gtm-takeaway]]
 \`\`\`
 
+## Diagram
+
+\`\`\`plantuml
+@startuml
+skinparam backgroundColor transparent
+skinparam defaultFontName Inter
+skinparam shadowing false
+actor "Human" as Human
+participant "mbase Web UI" as UI
+database "SQLite graph" as DB
+Human -> UI: Edit Markdown body
+UI -> DB: Save body and refresh links
+DB --> UI: Updated object graph
+@enduml
+\`\`\`
+
 ## Implementation note
 
 \`\`\`ts
@@ -3034,6 +3050,7 @@ function MarkdownBody({
               const language = /language-([A-Za-z0-9_-]+)/.exec(child.props.className ?? "")?.[1]?.toLowerCase();
               const source = String(child.props.children ?? "").replace(/\n$/, "");
               if (language === "mermaid") return <MermaidDiagram source={source} />;
+              if (isPlantUMLLanguage(language)) return <PlantUMLDiagram source={source} />;
               if (language === "facts") return <MarkdownFacts source={normalizeStructuredBlockLinks(source, objectTitleByID)} />;
               if (language === "timeline") return <MarkdownTimeline source={normalizeStructuredBlockLinks(source, objectTitleByID)} />;
             }
@@ -3091,6 +3108,9 @@ function MarkdownCode({ className, children, ...props }: React.ComponentProps<"c
   if (language === "mermaid") {
     return <MermaidDiagram source={source} />;
   }
+  if (isPlantUMLLanguage(language)) {
+    return <PlantUMLDiagram source={source} />;
+  }
   if (!language) {
     return <code {...props}>{children}</code>;
   }
@@ -3100,6 +3120,10 @@ function MarkdownCode({ className, children, ...props }: React.ComponentProps<"c
 
 function isMarkdownFigure(node: React.ReactNode) {
   return React.isValidElement<{ className?: string }>(node) && node.type === "figure" && String(node.props.className ?? "").includes("markdown-figure");
+}
+
+function isPlantUMLLanguage(language: string | undefined) {
+  return language === "plantuml" || language === "puml" || language === "uml";
 }
 
 function MermaidDiagram({ source }: { source: string }) {
@@ -3144,6 +3168,43 @@ function MermaidDiagram({ source }: { source: string }) {
   if (error) return <pre className="markdown-mermaid-error">{error}</pre>;
   if (!svg) return <div className="markdown-mermaid-loading">Rendering diagram...</div>;
   return <div className="markdown-mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
+
+function PlantUMLDiagram({ source }: { source: string }) {
+  const [svg, setSVG] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        const res = await fetch("/api/plantuml", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source })
+        });
+        const result = await res.json() as { ok?: boolean; data?: { svg?: string }; error?: { message?: string } };
+        if (!result.ok || !result.data?.svg) {
+          throw new Error(result.error?.message || "PlantUML render failed");
+        }
+        if (!cancelled) {
+          setSVG(result.data.svg);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setSVG("");
+        }
+      }
+    }
+    void render();
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+  if (error) return <pre className="markdown-plantuml-error">{error}</pre>;
+  if (!svg) return <div className="markdown-plantuml-loading">Rendering PlantUML...</div>;
+  return <div className="markdown-plantuml" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 function MarkdownFacts({ source }: { source: string }) {

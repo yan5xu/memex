@@ -309,6 +309,7 @@ Markdown 支持：
 - GFM 表格、task list、脚注、删除线。
 - HTML：`details`、`summary`、`kbd`、`mark`、`ins`、`figure`、`figcaption`。
 - `mermaid` 代码块。
+- `plantuml` / `puml` / `uml` 代码块。Web UI 通过本机 `plantuml -tsvg -pipe` 渲染 SVG；可用 `PLANTUML_BIN` 指定二进制路径。
 - mbase 双链：`[[company.lightsprint]]`、`[[company.lightsprint|Lightsprint]]`。
 - Obsidian 风格图片：`![[assets/demo.png]]`、`![[assets/demo.png|Product demo]]`。
 - 图片 caption：`![Product demo](assets/demo.png)` 会显示说明文字。
@@ -331,6 +332,17 @@ Evidence: YC launch, website
 ```timeline
 2026-01 | YC launch captured
 2026-02 | Product demo reviewed
+```
+````
+
+`plantuml`：
+
+````md
+```plantuml
+@startuml
+Alice -> Bob: Hi
+Bob --> Alice: Done
+@enduml
 ```
 ````
 

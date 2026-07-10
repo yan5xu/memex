@@ -8,9 +8,11 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yan5xu/mbase/internal/app"
 	"github.com/yan5xu/mbase/internal/store"
@@ -28,6 +30,10 @@ type RunRequest struct {
 	Argv  []string `json:"argv"`
 	Vault string   `json:"vault,omitempty"`
 	Stdin *string  `json:"stdin,omitempty"`
+}
+
+type plantUMLRequest struct {
+	Source string `json:"source"`
 }
 
 func (s Server) ListenAndServe() error {
@@ -63,9 +69,63 @@ func (s Server) ListenAndServe() error {
 	mux.HandleFunc("/api/run", runHandler)
 	mux.HandleFunc("/api/assets", s.assetUploadHandler())
 	mux.HandleFunc("/api/file", s.vaultFileHandler())
+	mux.HandleFunc("/api/plantuml", plantUMLHandler)
 	mux.Handle("/", staticHandler())
 	fmt.Printf("mbase web listening on http://%s\n", s.Addr)
 	return http.ListenAndServe(s.Addr, mux)
+}
+
+func plantUMLHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req plantUMLRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
+		writeJSON(w, app.Fail("bad_request", err.Error()))
+		return
+	}
+	svg, err := renderPlantUMLSVG(r.Context(), req.Source)
+	if err != nil {
+		writeJSON(w, app.Fail("plantuml_failed", err.Error()))
+		return
+	}
+	writeJSON(w, app.OK(map[string]string{"svg": svg}))
+}
+
+func renderPlantUMLSVG(parent context.Context, source string) (string, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return "", fmt.Errorf("PlantUML source is required")
+	}
+	if len(source) > 200<<10 {
+		return "", fmt.Errorf("PlantUML source is too large")
+	}
+	bin := strings.TrimSpace(os.Getenv("PLANTUML_BIN"))
+	if bin == "" {
+		bin = "plantuml"
+	}
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "-tsvg", "-pipe")
+	cmd.Stdin = strings.NewReader(source)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("PlantUML render timed out")
+	}
+	if err != nil {
+		message := strings.TrimSpace(string(out))
+		if message == "" {
+			message = err.Error()
+		}
+		return "", fmt.Errorf("%s", message)
+	}
+	svg := strings.TrimSpace(string(out))
+	start := strings.Index(svg, "<svg")
+	if start < 0 {
+		return "", fmt.Errorf("PlantUML did not return SVG")
+	}
+	return svg[start:], nil
 }
 
 func (s Server) assetUploadHandler() http.HandlerFunc {
