@@ -90,7 +90,10 @@ VAULT=/path/to/my-vault
 /tmp/mbase -C "$VAULT" type list
 /tmp/mbase -C "$VAULT" type show company
 /tmp/mbase -C "$VAULT" field list company
+/tmp/mbase -C "$VAULT" field list company --json
 ```
+
+日常人读优先用 `field list <type>`，它会用表格展示字段名、kind、target、required、unique 和 enum values。窄终端下长 values 会截断；需要完整 enum values 或精确结构时，用 `field list <type> --json` 或 `type show <type>`。
 
 添加字段：
 
@@ -382,7 +385,7 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 /tmp/mbase -C "$VAULT" query source.item --where 'url = "https://example.com/a?x=1&y=2"'
 ```
 
-`--where` 的值可以用单引号或双引号包起来，适合 URL、空格和 shell 特殊字符。
+`--where` 的值可以用单引号或双引号包起来，适合 URL、空格和 shell 特殊字符。URL 查询推荐外层单引号、值用双引号：`--where 'url = "https://...?a=1&b=2"'`，这样最不容易被 zsh 展开。
 
 多个 `--where` 是 AND：
 
@@ -405,7 +408,11 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 
 ```bash
 /tmp/mbase -C "$VAULT" query note --where about_company=company.lightsprint
+/tmp/mbase -C "$VAULT" query social.post --where 'account = "social.account.x.yan5xu"'
+/tmp/mbase -C "$VAULT" query source.item --where 'about_company = "company.skywork"'
 ```
+
+关系字段查的是 object id，不是标题或显示名。`ref_list` 查询是 member match：只要列表里包含这个 object id 就会命中。
 
 ## 11. Links 和 Backlinks
 
@@ -789,11 +796,14 @@ MD
 
 - **忘记 `-C`**：命令会跑到当前目录或默认目录。长期 vault 一律显式 `-C "$VAULT"`。
 - **URL 里的 `?` 和 `&`**：shell 里写 URL 字段要加引号，否则 zsh 可能展开或截断。
+- **URL 查询写法**：推荐 `--where 'url = "https://...?a=1&b=2"'`，外层单引号保护 shell，内层双引号作为 where value。
 - **body 改完没刷新**：新增 `[[object.id]]` 后要 `body refresh <id>` 或 `refresh`。
 - **ref/ref_list 用错字段**：`link <id> <field> <target-id>` 的 `<field>` 必须是 `ref` 或 `ref_list`。
 - **ref/ref_list 写标题**：关系字段要写对象 id，例如 `about_company=company.skywork`，不要写 `about_company=Skywork`。
+- **ref/ref_list 查询**：`query --where 'about_company = "company.skywork"'` 按 object id 命中；`ref_list` 会按成员命中。
 - **enum 写错值**：enum 必须精确匹配 `--values` 里的值；错误信息会显示 allowed values。
-- **不知道 enum 取值**：先跑 `field list <type>` 或 `type show <type>` 看字段定义。
+- **不知道 enum 取值**：先跑 `field list <type>`；如果 values 被表格截断，用 `field list <type> --json` 或 `type show <type>`。
+- **失败创建残留 body**：字段/enum/unique 校验失败不应创建对象，也不应留下 orphan body；如果遇到残留 body，说明是 bug，先删掉孤儿文件再反馈。
 - **list/ref_list 分隔**：多个值用逗号，例如 `tags=a,b,c`。
 - **source.item 和 touchpoint 混用**：长期入口是 touchpoint，单次证据是 source.item；同一 URL 可以两者都存在，但语义不同。
 - **误删对象**：`delete` 要 `--yes`；body 文件会保留，但 SQLite 对象会删除。
