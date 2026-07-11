@@ -1112,15 +1112,12 @@ function App() {
             </div>
             <div className="objects-workspace">
               <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
-                <div className="mb-5 flex items-center justify-between gap-4">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
                   <TabsList className="rounded-lg bg-muted/35">
                     <TabsTrigger value="table" className="rounded-md">{t("objects.table")}</TabsTrigger>
                     <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
                   </TabsList>
-                  <div className="relative w-80 max-w-[45%]">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input placeholder={t("objects.filterPlaceholder")} value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 w-full rounded-md bg-background/68 pl-9 font-mono text-xs" />
-                  </div>
+                  <ObjectFilterBar fields={activeFields} rows={rows} filter={filter} setFilter={setFilter} />
                 </div>
                 <TabsContent value="table" className="mt-0 min-h-0 flex-1">
                     {rows.length === 0 ? (
@@ -2419,7 +2416,7 @@ function VIMarkdown() {
 
 function VIData() {
   const fields: FieldDef[] = [
-    { name: "status", kind: "enum" },
+    { name: "status", kind: "enum", enum_values: ["parsed", "linked", "discarded"] },
     { name: "url", kind: "url" },
     { name: "about_company", kind: "ref", target_type: "company" }
   ];
@@ -2427,9 +2424,13 @@ function VIData() {
     { id: "source.yc-launch.lightsprint", title: "YC Launch", status: "parsed", url: "https://www.ycombinator.com/launches", about_company: "company.lightsprint" },
     { id: "source.docs.lightsprint", title: "Docs snapshot", status: "linked", url: "https://lightsprint.com/docs", about_company: "company.lightsprint" }
   ];
+  const [filter, setFilter] = useState("");
   return (
     <div className="vi-grid">
       <VIBlock title="Object Table">
+        <div className="mb-3">
+          <ObjectFilterBar rows={rows} fields={fields} filter={filter} setFilter={setFilter} />
+        </div>
         <div className="vi-table-frame">
           <ObjectDataTable rows={rows} fields={fields} activeType="source.item" open={() => undefined} />
         </div>
@@ -3783,6 +3784,159 @@ function pruneDraggedPositions(nodes: Array<{ id: string }>, setDraggedPositions
   });
 }
 
+type ObjectFilterOperator = "=" | "!=" | "contains";
+type ParsedObjectFilter = { field: string; op: ObjectFilterOperator; value: string };
+
+function ObjectFilterBar({
+  fields,
+  rows,
+  filter,
+  setFilter
+}: {
+  fields: FieldDef[];
+  rows: Record<string, unknown>[];
+  filter: string;
+  setFilter: (filter: string) => void;
+}) {
+  const { t } = useTranslation();
+  const filterFields = useMemo(() => objectFilterFields(fields), [fields]);
+  const parsed = useMemo(() => parseObjectFilter(filter), [filter]);
+  const [advanced, setAdvanced] = useState(() => Boolean(filter && !parsed));
+  const [draftField, setDraftField] = useState(parsed?.field || filterFields[0]?.name || "title");
+  const [draftOp, setDraftOp] = useState<ObjectFilterOperator>(parsed?.op || "contains");
+  const [draftValue, setDraftValue] = useState(parsed?.value || "");
+  const selectedField = filterFields.find((field) => field.name === draftField) ?? filterFields[0];
+  const suggestedValues = useMemo(() => objectFilterValueOptions(rows, draftField, selectedField), [rows, draftField, selectedField]);
+  const canApply = Boolean(draftField && draftValue.trim());
+
+  useEffect(() => {
+    const nextParsed = parseObjectFilter(filter);
+    if (!filter) {
+      setAdvanced(false);
+      setDraftValue("");
+      return;
+    }
+    if (!nextParsed) {
+      setAdvanced(true);
+      return;
+    }
+    setDraftField(nextParsed.field);
+    setDraftOp(nextParsed.op);
+    setDraftValue(nextParsed.value);
+    setAdvanced(false);
+  }, [filter]);
+
+  useEffect(() => {
+    if (filterFields.length > 0 && !filterFields.some((field) => field.name === draftField)) {
+      setDraftField(filterFields[0].name);
+    }
+  }, [draftField, filterFields]);
+
+  function applyFilter() {
+    if (!canApply) return;
+    setFilter(buildObjectFilter(draftField, draftOp, draftValue.trim()));
+  }
+
+  function clearFilter() {
+    setFilter("");
+    setDraftValue("");
+    setAdvanced(false);
+  }
+
+  function changeField(value: string) {
+    setDraftField(value);
+    const nextField = filterFields.find((field) => field.name === value);
+    setDraftOp(nextField?.kind === "text" || nextField?.kind === "url" ? "contains" : "=");
+    setDraftValue("");
+  }
+
+  return (
+    <div className="object-filter-bar">
+      <div className="object-filter-main">
+        <Select value={draftField} onValueChange={changeField}>
+          <SelectTrigger className="object-filter-field">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {filterFields.map((field) => (
+              <SelectItem key={field.name} value={field.name}>{field.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={draftOp} onValueChange={(value) => setDraftOp(value as ObjectFilterOperator)}>
+          <SelectTrigger className="object-filter-op">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="contains">{t("objects.filterContains")}</SelectItem>
+            <SelectItem value="=">{t("objects.filterEquals")}</SelectItem>
+            <SelectItem value="!=">{t("objects.filterNotEquals")}</SelectItem>
+          </SelectContent>
+        </Select>
+        {selectedField?.enum_values?.length ? (
+          <Select value={draftValue} onValueChange={setDraftValue}>
+            <SelectTrigger className="object-filter-value">
+              <SelectValue placeholder={t("objects.filterValue")} />
+            </SelectTrigger>
+            <SelectContent>
+              {selectedField.enum_values.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : selectedField?.kind === "boolean" ? (
+          <Select value={draftValue} onValueChange={setDraftValue}>
+            <SelectTrigger className="object-filter-value">
+              <SelectValue placeholder={t("objects.filterValue")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">true</SelectItem>
+              <SelectItem value="false">false</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="relative min-w-0 flex-1">
+            <Input
+              list="object-filter-values"
+              value={draftValue}
+              onChange={(event) => setDraftValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") applyFilter();
+              }}
+              placeholder={selectedField?.target_type ? `${selectedField.target_type}.id` : t("objects.filterValue")}
+              className="object-filter-value-input"
+            />
+            <datalist id="object-filter-values">
+              {suggestedValues.map((value) => <option key={value} value={value} />)}
+            </datalist>
+          </div>
+        )}
+        <Button size="sm" onClick={applyFilter} disabled={!canApply}>
+          <Search className="size-3.5" />
+          {t("objects.filterApply")}
+        </Button>
+        {filter && (
+          <Button size="sm" variant="ghost" onClick={clearFilter} title={t("objects.filterClear")}>
+            <X className="size-3.5" />
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => setAdvanced((open) => !open)}>
+          {advanced ? t("objects.filterVisual") : t("objects.filterAdvanced")}
+        </Button>
+      </div>
+      {filter && !advanced && (
+        <div className="object-filter-summary">
+          <span>{t("objects.filterActive")}</span>
+          <code>{filter}</code>
+        </div>
+      )}
+      {advanced && (
+        <div className="object-filter-advanced">
+          <Input placeholder={t("objects.filterPlaceholder")} value={filter} onChange={(event) => setFilter(event.target.value)} className="h-8 rounded-md bg-background/68 font-mono text-xs" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<string, unknown>[]; fields: FieldDef[]; activeType: string; open: (id: string) => void }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -3997,6 +4151,76 @@ function plainCell(v: unknown) {
   if (Array.isArray(v)) return v.map((x) => String(x)).join(", ");
   if (v === undefined || v === null || v === "") return "empty";
   return String(v);
+}
+
+function objectFilterFields(fields: FieldDef[]): FieldDef[] {
+  const base: FieldDef[] = [
+    { name: "title", kind: "text" },
+    { name: "id", kind: "text" }
+  ];
+  const seen = new Set(base.map((field) => field.name));
+  for (const field of fields) {
+    if (seen.has(field.name)) continue;
+    seen.add(field.name);
+    base.push(field);
+  }
+  return base;
+}
+
+function parseObjectFilter(filter: string): ParsedObjectFilter | null {
+  const expr = filter.trim();
+  if (!expr) return null;
+  if (expr.includes(" contains ")) {
+    const [field, value] = splitOnce(expr, " contains ");
+    if (field && value !== undefined) return { field: field.trim(), op: "contains", value: cleanObjectFilterValue(value) };
+  }
+  for (const op of ["!=", "="] as const) {
+    const [field, value] = splitOnce(expr, op);
+    if (field && value !== undefined) return { field: field.trim(), op, value: cleanObjectFilterValue(value) };
+  }
+  return null;
+}
+
+function splitOnce(value: string, delimiter: string): [string, string | undefined] {
+  const index = value.indexOf(delimiter);
+  if (index < 0) return [value, undefined];
+  return [value.slice(0, index), value.slice(index + delimiter.length)];
+}
+
+function cleanObjectFilterValue(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 2) return trimmed;
+  if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed.slice(1, -1);
+    }
+  }
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/\\'/g, "'");
+  }
+  return trimmed;
+}
+
+function buildObjectFilter(field: string, op: ObjectFilterOperator, value: string) {
+  const quoted = JSON.stringify(value);
+  return op === "contains" ? `${field} contains ${quoted}` : `${field}${op}${quoted}`;
+}
+
+function objectFilterValueOptions(rows: Record<string, unknown>[], field: string, fieldDef: FieldDef | undefined) {
+  if (fieldDef?.enum_values?.length) return fieldDef.enum_values;
+  const values = new Set<string>();
+  for (const row of rows) {
+    const value = row[field];
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) {
+      if (item === undefined || item === null || item === "") continue;
+      values.add(String(item));
+      if (values.size >= 40) return [...values];
+    }
+  }
+  return [...values].sort((a, b) => a.localeCompare(b));
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {

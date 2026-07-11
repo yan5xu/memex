@@ -738,6 +738,68 @@ body {
   flex: 1;
 }
 
+.object-filter-bar {
+  display: grid;
+  min-width: min(720px, 100%);
+  gap: 0.42rem;
+}
+
+.object-filter-main {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.48rem;
+}
+
+.object-filter-field {
+  width: 9.8rem;
+}
+
+.object-filter-op {
+  width: 7.8rem;
+}
+
+.object-filter-value {
+  width: 12rem;
+}
+
+.object-filter-value-input {
+  height: 2rem;
+  min-width: 10rem;
+  border-radius: 0.42rem;
+  background: hsl(var(--background) / 0.68);
+  font-size: 0.78rem;
+}
+
+.object-filter-summary,
+.object-filter-advanced {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.object-filter-summary {
+  min-width: 0;
+  gap: 0.45rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.72rem;
+}
+
+.object-filter-summary code {
+  max-width: min(42rem, 100%);
+  overflow: hidden;
+  color: hsl(var(--foreground) / 0.78);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-filter-advanced {
+  margin-left: auto;
+  width: min(32rem, 100%);
+}
+
 .objects-workspace table {
   font-size: 0.84rem;
 }
