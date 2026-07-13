@@ -2,10 +2,23 @@ package web
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"strings"
 	"testing"
 )
+
+func TestStaticHandlerRejectsPOST(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/retired-api", strings.NewReader(`{}`))
+	res := httptest.NewRecorder()
+
+	staticHandler().ServeHTTP(res, req)
+
+	if res.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusMethodNotAllowed)
+	}
+}
 
 func TestRenderPlantUMLSVG(t *testing.T) {
 	if _, err := exec.LookPath("plantuml"); err != nil {

@@ -255,6 +255,10 @@ func staticHandler() http.Handler {
 	}
 	fileServer := http.FileServer(http.FS(dist))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/assets/") {
 			fileServer.ServeHTTP(w, r)
 			return
