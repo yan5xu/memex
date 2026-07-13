@@ -44,6 +44,26 @@ Agent  <->  CLI / JSON API / 文件
 - **让 Agent 自动化操作：** 请求稳定的 JSON 字段，使用 `--jq` 过滤结果，调用本地 API，或通过 `window.memex` 操作 Web UI。
 - **持续检查完整性：** 在提交 Vault 前发现非法 Field、断开的引用、未刷新的 Body Link 等问题。
 
+## 产品界面
+
+### 阅读和编辑丰富的对象页面
+
+对象页面把结构化身份、Markdown 正文、图片、关系和编辑能力组织在同一个阅读界面里。
+
+![Memex 图文对象页面](docs/images/memex-object-detail.png)
+
+### 把同一份知识查询为表格
+
+Type 可以直接呈现为聚焦、可筛选的表格，不需要复制出第二份数据。
+
+![Memex 对象表格与可视化筛选](docs/images/memex-objects.png)
+
+### 将关系投影为专用图谱
+
+Graph View 把可复用的路径查询变成可导航的投影。这里的 Portfolio View 将 Investment Object 收缩为 Investor 与 Company 之间带信息的边。
+
+![Memex 可配置 Portfolio Graph View](docs/images/memex-graph.png)
+
 ## 适合谁
 
 ### 用模型思考的人

@@ -44,6 +44,26 @@ Agent   <->  CLI / JSON API / files
 - **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.memex`.
 - **Validate continuously:** Detect invalid fields, broken references, stale body links, and other integrity problems before committing a vault.
 
+## Product Tour
+
+### Read and Write Rich Object Pages
+
+An object page brings structured identity, Markdown narrative, images, links, and editing into one reading surface.
+
+![Memex object page showing a rich Markdown company profile](docs/images/memex-object-detail.png)
+
+### Query the Same Knowledge as a Table
+
+Types become focused, filterable tables without creating a second copy of the data.
+
+![Memex object table with typed fields and visual filtering](docs/images/memex-objects.png)
+
+### Project Relationships into Purpose-Built Graphs
+
+Graph Views turn reusable path queries into navigable projections. This portfolio view contracts investment objects into labeled edges between an investor and companies.
+
+![Memex configurable portfolio graph view](docs/images/memex-graph.png)
+
 ## Who Is It For
 
 ### People Who Think in Models
