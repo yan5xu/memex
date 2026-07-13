@@ -1,4 +1,4 @@
-module github.com/yan5xu/mbase
+module github.com/yan5xu/mmx
 
 go 1.25.8
 

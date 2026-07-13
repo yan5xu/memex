@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yan5xu/mbase/internal/domain"
+	"github.com/yan5xu/mmx/internal/domain"
 )
 
 func (s *Store) CreateObject(typeID, id, title string, fields map[string]string) (*domain.Object, error) {

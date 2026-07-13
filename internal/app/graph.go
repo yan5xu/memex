@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yan5xu/mbase/internal/domain"
-	"github.com/yan5xu/mbase/internal/store"
+	"github.com/yan5xu/mmx/internal/domain"
+	"github.com/yan5xu/mmx/internal/store"
 )
 
 type graphNodeValue struct {
@@ -627,7 +627,7 @@ func countDerivedGraphEdges(edges []graphProjectedEdge) int {
 func graphViewSchema() map[string]any {
 	return map[string]any{
 		"version":       2,
-		"file":          "mbase.graph-views.json",
+		"file":          "mmx.graph-views.json",
 		"node_variants": []string{"compact", "standard", "rich"},
 		"step_display":  []string{"node", "bridge"},
 		"commands": []string{

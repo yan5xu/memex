@@ -285,7 +285,7 @@ function normalizeView(view: unknown): ViewID {
 
 function getVaultUIStates(): Record<string, VaultUIState> {
   try {
-    const raw = localStorage.getItem("mbase.vaultStates");
+    const raw = localStorage.getItem("mmx.vaultStates");
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -302,7 +302,7 @@ function saveVaultUIState(vault: string, state: VaultUIState) {
   if (!nextVault) return;
   const states = getVaultUIStates();
   states[nextVault] = state;
-  localStorage.setItem("mbase.vaultStates", JSON.stringify(states));
+  localStorage.setItem("mmx.vaultStates", JSON.stringify(states));
 }
 
 function parseGraphHiddenTypes(value: unknown): Set<string> {
@@ -395,7 +395,7 @@ function automationState(state: AppState): AutomationSnapshot {
 
 declare global {
   interface Window {
-    mbase?: {
+    mmx?: {
       run: typeof run;
       getVault: () => string;
       recentVaults: () => string[];
@@ -460,7 +460,7 @@ function App() {
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mbase.sidebarCollapsed") === "true");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mmx.sidebarCollapsed") === "true");
   const [types, setTypes] = useState<TypeDef[]>([]);
   const [activeType, setActiveTypeState] = useState(routeSearch.type ?? "");
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -799,7 +799,7 @@ function App() {
   function toggleSidebar() {
     setSidebarCollapsed((collapsed) => {
       const next = !collapsed;
-      localStorage.setItem("mbase.sidebarCollapsed", String(next));
+      localStorage.setItem("mmx.sidebarCollapsed", String(next));
       return next;
     });
   }
@@ -904,7 +904,7 @@ function App() {
       return result;
     };
 
-    window.mbase = {
+    window.mmx = {
       run: runAndSync,
       getVault: () => vault,
       recentVaults: () => getRecentVaults(),
@@ -912,7 +912,7 @@ function App() {
       setLanguage: async (language: "en" | "zh") => {
         await i18n.changeLanguage(language);
         await nextFrame();
-        return window.mbase?.state() ?? currentState();
+        return window.mmx?.state() ?? currentState();
       },
       setSidebarCollapsed: (collapsed: boolean) => {
         setSidebarCollapsed(collapsed);
@@ -1018,26 +1018,26 @@ function App() {
             const nextGraph = await openGraph({ syncURL: false });
             await nextFrame();
             await nextFrame();
-            return window.mbase?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: id, activeGraphCenterID: "" });
+            return window.mmx?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: id, activeGraphCenterID: "" });
           }
           await nextFrame();
           await nextFrame();
-          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphViewID: id, activeGraphCenterID: "" });
+          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphViewID: id, activeGraphCenterID: "" });
         },
         setCenter: async (id: string) => {
           setGraphWorkspaceSelection({ centerID: id });
           await nextFrame();
-          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphCenterID: id });
+          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphCenterID: id });
         },
         openFullMap: async () => {
           setGraphWorkspaceSelection({ viewID: fullGraphViewID, centerID: "" });
           if (graph.nodes.length === 0) {
             const nextGraph = await openGraph({ syncURL: false });
             await nextFrame();
-            return window.mbase?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+            return window.mmx?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
           }
           await nextFrame();
-          return window.mbase?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
         },
         searchCenter: (query: string) => graphWorkspaceCall((controller) => controller.searchCenter(query)),
         previewNode: (id: string) => graphWorkspaceCall((controller) => controller.previewNode(id)),
@@ -1072,7 +1072,7 @@ function App() {
       state: () => currentState()
     };
     return () => {
-      delete window.mbase;
+      delete window.mmx;
     };
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
 
@@ -1085,10 +1085,10 @@ function App() {
     <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${standaloneMode ? "vi-standalone-shell" : ""}`}>
       {!standaloneMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
         <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">m</div>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">M</div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <div className="text-[13px] font-medium tracking-tight text-foreground/90">mbase</div>
+              <div className="text-[13px] font-medium tracking-tight text-foreground/90">Memex</div>
               <div className="text-[10.5px] text-muted-foreground">{t("app.tagline")}</div>
             </div>
           )}
@@ -1124,7 +1124,7 @@ function App() {
             <>
               <div className="sidebar-tool-card text-[11px] text-muted-foreground">
                 <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> {t("nav.agentApi")}</div>
-                <code className="font-mono">window.mbase.state()</code>
+                <code className="font-mono">window.mmx.state()</code>
               </div>
               <VaultSwitcher
                 vault={vault}
@@ -2902,7 +2902,7 @@ function viObject(): Obj {
     type_id: "company",
     title: "Lightsprint",
     body_path: "bodies/company.lightsprint.md",
-    body_abs_path: "/tmp/mbase-yc-model/bodies/company.lightsprint.md",
+    body_abs_path: "/tmp/memex-demo/bodies/company.lightsprint.md",
     fields: { status: "active", tags: ["agentic-sdlc", "demo-led"], homepage_url: "https://lightsprint.com" }
   };
 }
@@ -2977,8 +2977,8 @@ The first pass should answer what the company is, why it matters, and which sour
 3. Refresh body links after edits.
 
    \`\`\`bash
-   mbase -C "$VAULT" body refresh company.lightsprint
-   mbase -C "$VAULT" get company.lightsprint --body-preview 800
+   mmx -C "$VAULT" body refresh company.lightsprint
+   mmx -C "$VAULT" get company.lightsprint --body-preview 800
    \`\`\`
 
 <details>
@@ -3008,7 +3008,7 @@ skinparam backgroundColor transparent
 skinparam defaultFontName Inter
 skinparam shadowing false
 actor "Human" as Human
-participant "mbase Web UI" as UI
+participant "Memex Web UI" as UI
 database "SQLite graph" as DB
 Human -> UI: Edit Markdown body
 UI -> DB: Save body and refresh links
@@ -3546,7 +3546,7 @@ function MermaidDiagram({ source }: { source: string }) {
             textColor: "#332e27"
           }
         });
-        const result = await mermaid.render(`mbase-mermaid-${rawID}`, source);
+        const result = await mermaid.render(`mmx-mermaid-${rawID}`, source);
         if (!cancelled) {
           setSVG(result.svg);
           setError("");
@@ -3668,7 +3668,7 @@ function normalizeWikiLinks(line: string, objectTitleByID: Record<string, string
     const [target, label] = raw.split("|").map((part) => part.trim());
     if (!target) return "";
     const title = label || objectTitleByID[target] || target;
-    return `[${escapeMarkdownAlt(title)}](#mbase-object:${encodeURIComponent(target)})`;
+    return `[${escapeMarkdownAlt(title)}](#mmx-object:${encodeURIComponent(target)})`;
   });
 }
 
@@ -3738,8 +3738,8 @@ function splitStructuredLine(line: string): [string, string] {
 }
 
 function objectIDFromInternalHref(href: string | undefined) {
-  if (!href?.startsWith("#mbase-object:")) return "";
-  return decodeURIComponent(href.slice("#mbase-object:".length));
+  if (!href?.startsWith("#mmx-object:")) return "";
+  return decodeURIComponent(href.slice("#mmx-object:".length));
 }
 
 function isExternalHref(href: string | undefined) {
@@ -3789,7 +3789,7 @@ function LanguageSwitcher() {
 
 function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; activeType: string; activeObject: Obj | null }) {
   const { t } = useTranslation();
-  const parts = ["mbase"];
+  const parts = ["Memex"];
   if (view === "objects") {
     if (activeType) parts.push(activeType);
   } else if (view === "detail") {

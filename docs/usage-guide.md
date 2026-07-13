@@ -1,10 +1,10 @@
-# mbase 使用指南
+# Memex 使用指南
 
-`mbase` 是一个 local-first 的对象图谱知识库。它把结构化对象存在 SQLite，把长正文、研究记录、证据说明存在 Markdown 文件里。人可以在 Web UI 阅读和编辑，agent 可以用 CLI/API 稳定创建、查询和更新。
+Memex 是一个 local-first 的对象图谱知识库，`mmx` 是它的 CLI。Memex 把结构化对象存在 SQLite，把长正文、研究记录、证据说明存在 Markdown 文件里。人可以在 Web UI 阅读和编辑，agent 可以用 CLI/API 稳定创建、查询和更新。
 
 ## 1. 核心概念
 
-- `Vault`：一个 mbase 知识库目录。目录里有 `.mbase/mbase.db`、`bodies/`、`assets/`，也可以放 `mbase.graph-views.json`。
+- `Vault`：一个 Memex 知识库目录。目录里有 `.mmx/mmx.db`、`bodies/`、`assets/`，也可以放 `mmx.graph-views.json`。
 - `Type`：对象类型，例如 `company`、`person`、`source.item`、`note`、`concept`。
 - `Field`：type 上的字段。字段可以是普通属性，也可以是关系字段。
 - `Object`：某个 type 的实例，例如 `company.lightsprint`。
@@ -17,23 +17,23 @@
 
 ## 2. 安装和启动
 
-当前系统默认使用 `/tmp/mbase`：
+当前系统默认使用 `/tmp/mmx`：
 
 ```bash
-/tmp/mbase --help
+/tmp/mmx --help
 ```
 
 如果在源码目录开发：
 
 ```bash
-cd /Users/cp/workspace/assistant/system/tools/mbase
-go build -o /tmp/mbase ./cmd/mbase
+cd /Users/cp/workspace/assistant/system/tools/mmx
+go build -o /tmp/mmx ./cmd/mmx
 ```
 
 启动 Web UI：
 
 ```bash
-/tmp/mbase serve --addr 127.0.0.1:8766
+/tmp/mmx serve --addr 127.0.0.1:8766
 ```
 
 打开：
@@ -56,16 +56,16 @@ http://127.0.0.1:8766/?vault=%2Fpath%2Fto%2Fvault
 
 ```bash
 VAULT=/path/to/my-vault
-/tmp/mbase -C "$VAULT" init
+/tmp/mmx -C "$VAULT" init
 ```
 
 检查 vault：
 
 ```bash
-/tmp/mbase -C "$VAULT" vault info
-/tmp/mbase -C "$VAULT" status
-/tmp/mbase -C "$VAULT" issues
-/tmp/mbase -C "$VAULT" doctor
+/tmp/mmx -C "$VAULT" vault info
+/tmp/mmx -C "$VAULT" status
+/tmp/mmx -C "$VAULT" issues
+/tmp/mmx -C "$VAULT" doctor
 ```
 
 常用约定：
@@ -79,18 +79,18 @@ VAULT=/path/to/my-vault
 先创建 type：
 
 ```bash
-/tmp/mbase -C "$VAULT" type create company
-/tmp/mbase -C "$VAULT" type create person
-/tmp/mbase -C "$VAULT" type create source.item
+/tmp/mmx -C "$VAULT" type create company
+/tmp/mmx -C "$VAULT" type create person
+/tmp/mmx -C "$VAULT" type create source.item
 ```
 
 查看 type：
 
 ```bash
-/tmp/mbase -C "$VAULT" type list
-/tmp/mbase -C "$VAULT" type show company
-/tmp/mbase -C "$VAULT" field list company
-/tmp/mbase -C "$VAULT" field list company --json
+/tmp/mmx -C "$VAULT" type list
+/tmp/mmx -C "$VAULT" type show company
+/tmp/mmx -C "$VAULT" field list company
+/tmp/mmx -C "$VAULT" field list company --json
 ```
 
 日常人读优先用 `field list <type>`，它会用表格展示字段名、kind、target、required、unique 和 enum values。窄终端下长 values 会截断；需要完整 enum values 或精确结构时，用 `field list <type> --json` 或 `type show <type>`。
@@ -98,12 +98,12 @@ VAULT=/path/to/my-vault
 添加字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" field add company name --kind text --required
-/tmp/mbase -C "$VAULT" field add company status --kind enum --values active,archived,ignored
-/tmp/mbase -C "$VAULT" field add company tags --kind list
-/tmp/mbase -C "$VAULT" field add company website --kind url
-/tmp/mbase -C "$VAULT" field add company founders --kind ref_list --target person
-/tmp/mbase -C "$VAULT" field add source.item about_company --kind ref --target company
+/tmp/mmx -C "$VAULT" field add company name --kind text --required
+/tmp/mmx -C "$VAULT" field add company status --kind enum --values active,archived,ignored
+/tmp/mmx -C "$VAULT" field add company tags --kind list
+/tmp/mmx -C "$VAULT" field add company website --kind url
+/tmp/mmx -C "$VAULT" field add company founders --kind ref_list --target person
+/tmp/mmx -C "$VAULT" field add source.item about_company --kind ref --target company
 ```
 
 字段类型：
@@ -132,7 +132,7 @@ VAULT=/path/to/my-vault
 推荐日常命令：
 
 ```bash
-/tmp/mbase -C "$VAULT" create company company.lightsprint \
+/tmp/mmx -C "$VAULT" create company company.lightsprint \
   name=Lightsprint \
   title=Lightsprint \
   status=active \
@@ -143,7 +143,7 @@ VAULT=/path/to/my-vault
 创建时同时写 body：
 
 ```bash
-cat <<'EOF' | /tmp/mbase -C "$VAULT" create company company.lightsprint \
+cat <<'EOF' | /tmp/mmx -C "$VAULT" create company company.lightsprint \
   name=Lightsprint title=Lightsprint status=active --body-stdin
 # Lightsprint
 
@@ -154,7 +154,7 @@ EOF
 从文件写 body：
 
 ```bash
-/tmp/mbase -C "$VAULT" create note note.product-takeaway \
+/tmp/mmx -C "$VAULT" create note note.product-takeaway \
   title="Product takeaway" \
   --body ./note.product-takeaway.md
 ```
@@ -165,14 +165,14 @@ create 与 upsert：
 - `upsert`：对象不存在就创建，存在就更新字段，适合 agent 重复写入。
 
 ```bash
-/tmp/mbase -C "$VAULT" upsert company company.lightsprint \
+/tmp/mmx -C "$VAULT" upsert company company.lightsprint \
   name=Lightsprint status=active
 ```
 
 删除对象：
 
 ```bash
-/tmp/mbase -C "$VAULT" delete company.lightsprint --yes
+/tmp/mmx -C "$VAULT" delete company.lightsprint --yes
 ```
 
 删除只移除 SQLite 对象和关系，Markdown body 文件会保留在磁盘上，避免误删正文。
@@ -182,38 +182,38 @@ create 与 upsert：
 读取对象详情：
 
 ```bash
-/tmp/mbase -C "$VAULT" get company.lightsprint
+/tmp/mmx -C "$VAULT" get company.lightsprint
 ```
 
 不返回完整 body，适合 agent 节省 token：
 
 ```bash
-/tmp/mbase -C "$VAULT" get company.lightsprint --no-body
-/tmp/mbase -C "$VAULT" get company.lightsprint --body-preview 800
+/tmp/mmx -C "$VAULT" get company.lightsprint --no-body
+/tmp/mmx -C "$VAULT" get company.lightsprint --body-preview 800
 ```
 
 设置普通字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" set company.lightsprint status active
-/tmp/mbase -C "$VAULT" set company.lightsprint tags agentic-sdlc,demo-led
+/tmp/mmx -C "$VAULT" set company.lightsprint status active
+/tmp/mmx -C "$VAULT" set company.lightsprint tags agentic-sdlc,demo-led
 ```
 
 设置关系字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" link company.lightsprint founders person.alice
-/tmp/mbase -C "$VAULT" link source.launch-lightsprint about_company company.lightsprint
+/tmp/mmx -C "$VAULT" link company.lightsprint founders person.alice
+/tmp/mmx -C "$VAULT" link source.launch-lightsprint about_company company.lightsprint
 ```
 
 底层兼容命令仍可用：
 
 ```bash
-/tmp/mbase -C "$VAULT" object create company --id company.lightsprint --field name=Lightsprint
-/tmp/mbase -C "$VAULT" object get company.lightsprint
-/tmp/mbase -C "$VAULT" object set company.lightsprint status active
-/tmp/mbase -C "$VAULT" object link company.lightsprint founders person.alice
-/tmp/mbase -C "$VAULT" object unlink company.lightsprint founders person.alice
+/tmp/mmx -C "$VAULT" object create company --id company.lightsprint --field name=Lightsprint
+/tmp/mmx -C "$VAULT" object get company.lightsprint
+/tmp/mmx -C "$VAULT" object set company.lightsprint status active
+/tmp/mmx -C "$VAULT" object link company.lightsprint founders person.alice
+/tmp/mmx -C "$VAULT" object unlink company.lightsprint founders person.alice
 ```
 
 日常优先用顶层 `create/get/set/link/query`，不要把心智停留在底层 `object` 子系统。
@@ -225,7 +225,7 @@ create 与 upsert：
 如果 schema 里已有 `source.item` 和相应字段，可以用：
 
 ```bash
-cat <<'EOF' | /tmp/mbase -C "$VAULT" source add source.yc-launch.lightsprint \
+cat <<'EOF' | /tmp/mmx -C "$VAULT" source add source.yc-launch.lightsprint \
   --title "Lightsprint YC Launch" \
   --url "https://www.ycombinator.com/launches/..." \
   --platform yc \
@@ -266,7 +266,7 @@ EOF
 也可以继续写任意字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" source add source.website.demo \
+/tmp/mmx -C "$VAULT" source add source.website.demo \
   --title "Website snapshot" \
   --field custom_field=value
 ```
@@ -276,19 +276,19 @@ EOF
 查看 body 路径：
 
 ```bash
-/tmp/mbase -C "$VAULT" body path company.lightsprint
+/tmp/mmx -C "$VAULT" body path company.lightsprint
 ```
 
 覆盖 body：
 
 ```bash
-cat ./company.lightsprint.md | /tmp/mbase -C "$VAULT" body write company.lightsprint --stdin
+cat ./company.lightsprint.md | /tmp/mmx -C "$VAULT" body write company.lightsprint --stdin
 ```
 
 追加 body：
 
 ```bash
-cat <<'EOF' | /tmp/mbase -C "$VAULT" body append company.lightsprint --stdin
+cat <<'EOF' | /tmp/mmx -C "$VAULT" body append company.lightsprint --stdin
 
 ## Follow-up
 
@@ -299,8 +299,8 @@ EOF
 刷新 body links：
 
 ```bash
-/tmp/mbase -C "$VAULT" body refresh company.lightsprint
-/tmp/mbase -C "$VAULT" refresh
+/tmp/mmx -C "$VAULT" body refresh company.lightsprint
+/tmp/mmx -C "$VAULT" refresh
 ```
 
 Markdown 支持：
@@ -310,11 +310,11 @@ Markdown 支持：
 - HTML：`details`、`summary`、`kbd`、`mark`、`ins`、`figure`、`figcaption`。
 - `mermaid` 代码块。
 - `plantuml` / `puml` / `uml` 代码块。Web UI 通过本机 `plantuml -tsvg -pipe` 渲染 SVG；可用 `PLANTUML_BIN` 指定二进制路径。
-- mbase 双链：`[[company.lightsprint]]`、`[[company.lightsprint|Lightsprint]]`。
+- Memex 双链：`[[company.lightsprint]]`、`[[company.lightsprint|Lightsprint]]`。
 - Obsidian 风格图片：`![[assets/demo.png]]`、`![[assets/demo.png|Product demo]]`。
 - 图片 caption：`![Product demo](assets/demo.png)` 会显示说明文字。
 - 图片布局：`{wide}`、`{full}`、`{inline}`，例如 `![Product demo {wide}](assets/demo.png)`。
-- mbase 结构化块：`facts`、`timeline`。
+- Memex 结构化块：`facts`、`timeline`。
 
 `facts`：
 
@@ -346,14 +346,14 @@ Bob --> Alice: Done
 ```
 ````
 
-注意：`> [!NOTE]` 这类 GitHub Alert 不是 mbase 核心语法。
+注意：`> [!NOTE]` 这类 GitHub Alert 不是 Memex 核心语法。
 
 ## 9. 图片和资产
 
 导入本地图片到 vault：
 
 ```bash
-/tmp/mbase -C "$VAULT" asset import ./screenshot.png --name company-demo.png
+/tmp/mmx -C "$VAULT" asset import ./screenshot.png --name company-demo.png
 ```
 
 输出会包含可直接粘进 Markdown 的图片语法：
@@ -379,22 +379,22 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 查询某个 type：
 
 ```bash
-/tmp/mbase -C "$VAULT" query company
+/tmp/mmx -C "$VAULT" query company
 ```
 
 选择字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" query company --select id,title,status,tags
+/tmp/mmx -C "$VAULT" query company --select id,title,status,tags
 ```
 
 过滤：
 
 ```bash
-/tmp/mbase -C "$VAULT" query company --where status=active
-/tmp/mbase -C "$VAULT" query company --where "title contains sprint"
-/tmp/mbase -C "$VAULT" query company --where status!=ignored
-/tmp/mbase -C "$VAULT" query source.item --where 'url = "https://example.com/a?x=1&y=2"'
+/tmp/mmx -C "$VAULT" query company --where status=active
+/tmp/mmx -C "$VAULT" query company --where "title contains sprint"
+/tmp/mmx -C "$VAULT" query company --where status!=ignored
+/tmp/mmx -C "$VAULT" query source.item --where 'url = "https://example.com/a?x=1&y=2"'
 ```
 
 `--where` 的值可以用单引号或双引号包起来，适合 URL、空格和 shell 特殊字符。URL 查询推荐外层单引号、值用双引号：`--where 'url = "https://...?a=1&b=2"'`，这样最不容易被 zsh 展开。
@@ -402,7 +402,7 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 多个 `--where` 是 AND：
 
 ```bash
-/tmp/mbase -C "$VAULT" query source.item \
+/tmp/mmx -C "$VAULT" query source.item \
   --where about_company=company.lightsprint \
   --where quality=full
 ```
@@ -410,7 +410,7 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 排序和限制：
 
 ```bash
-/tmp/mbase -C "$VAULT" query source.item \
+/tmp/mmx -C "$VAULT" query source.item \
   --select id,title,published_at \
   --sort published_at:desc \
   --limit 20
@@ -419,9 +419,9 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 `ref` / `ref_list` 字段可以按对象 id 查询：
 
 ```bash
-/tmp/mbase -C "$VAULT" query note --where about_company=company.lightsprint
-/tmp/mbase -C "$VAULT" query social.post --where 'account = "social.account.x.yan5xu"'
-/tmp/mbase -C "$VAULT" query source.item --where 'about_company = "company.skywork"'
+/tmp/mmx -C "$VAULT" query note --where about_company=company.lightsprint
+/tmp/mmx -C "$VAULT" query social.post --where 'account = "social.account.x.yan5xu"'
+/tmp/mmx -C "$VAULT" query source.item --where 'about_company = "company.skywork"'
 ```
 
 关系字段查的是 object id，不是标题或显示名。`ref_list` 查询是 member match：只要列表里包含这个 object id 就会命中。
@@ -431,22 +431,22 @@ curl -F "vault=$VAULT" -F "file=@./screenshot.png" http://127.0.0.1:8766/api/ass
 看一个对象指向谁：
 
 ```bash
-/tmp/mbase -C "$VAULT" links company.lightsprint
+/tmp/mmx -C "$VAULT" links company.lightsprint
 ```
 
 看谁指向这个对象：
 
 ```bash
-/tmp/mbase -C "$VAULT" backlinks company.lightsprint
+/tmp/mmx -C "$VAULT" backlinks company.lightsprint
 ```
 
 过滤：
 
 ```bash
-/tmp/mbase -C "$VAULT" backlinks company.lightsprint --type source.item
-/tmp/mbase -C "$VAULT" backlinks company.lightsprint --kind field
-/tmp/mbase -C "$VAULT" backlinks company.lightsprint --relation about_company
-/tmp/mbase -C "$VAULT" backlinks company.lightsprint --filter launch
+/tmp/mmx -C "$VAULT" backlinks company.lightsprint --type source.item
+/tmp/mmx -C "$VAULT" backlinks company.lightsprint --kind field
+/tmp/mmx -C "$VAULT" backlinks company.lightsprint --relation about_company
+/tmp/mmx -C "$VAULT" backlinks company.lightsprint --filter launch
 ```
 
 link 的 `kind`：
@@ -459,7 +459,7 @@ link 的 `kind`：
 导出全图：
 
 ```bash
-/tmp/mbase -C "$VAULT" graph export --json
+/tmp/mmx -C "$VAULT" graph export --json
 ```
 
 Web UI 的 Graph 页面可以：
@@ -472,7 +472,7 @@ Web UI 的 Graph 页面可以：
 - 点击节点预览 Markdown。
 - 双击节点切换中心。
 
-`mbase.graph-views.json` 是 Graph View 的唯一事实源：CLI、Web UI 和 agent 都读写同一个文件，适合直接纳入 Git。现有 version 1 配置继续兼容。version 2 支持多个查询路径、节点内容模板，以及把中间对象收缩为派生边。
+`mmx.graph-views.json` 是 Graph View 的唯一事实源：CLI、Web UI 和 agent 都读写同一个文件，适合直接纳入 Git。现有 version 1 配置继续兼容。version 2 支持多个查询路径、节点内容模板，以及把中间对象收缩为派生边。
 
 配置自定义 graph view：
 
@@ -519,39 +519,39 @@ Web UI 的 Graph 页面可以：
 
 ```bash
 # 直接编辑 Vault 中的配置后，按动态 schema 校验 type、relation 和展示字段
-/tmp/mbase -C "$VAULT" graph view validate
+/tmp/mmx -C "$VAULT" graph view validate
 
 # 校验草稿文件，不改 Vault
-/tmp/mbase -C "$VAULT" graph view validate --file ./draft-graph-views.json
+/tmp/mmx -C "$VAULT" graph view validate --file ./draft-graph-views.json
 
 # 校验通过后原子写入 Vault
-/tmp/mbase -C "$VAULT" graph view apply --file ./draft-graph-views.json
+/tmp/mmx -C "$VAULT" graph view apply --file ./draft-graph-views.json
 
 # 也可以走 stdin
-/tmp/mbase -C "$VAULT" graph view apply --stdin < ./draft-graph-views.json
+/tmp/mmx -C "$VAULT" graph view apply --stdin < ./draft-graph-views.json
 ```
 
 查看：
 
 ```bash
-/tmp/mbase -C "$VAULT" graph view list
-/tmp/mbase -C "$VAULT" graph view show investor-portfolio --json
-/tmp/mbase -C "$VAULT" graph view schema --json
+/tmp/mmx -C "$VAULT" graph view list
+/tmp/mmx -C "$VAULT" graph view show investor-portfolio --json
+/tmp/mmx -C "$VAULT" graph view schema --json
 ```
 
 不打开 Web UI，直接执行视图并检查投影结果：
 
 ```bash
-/tmp/mbase -C "$VAULT" graph query \
+/tmp/mmx -C "$VAULT" graph query \
   --view investor-portfolio \
   --center investor.lightspeed-venture-partners \
   --json
 
 # 只读取最终节点、边和统计
-/tmp/mbase -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json nodes,edges,stats
+/tmp/mmx -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json nodes,edges,stats
 
 # 检查收缩产生的派生边
-/tmp/mbase -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json --jq '.data.edges[] | select(.derived == true)'
+/tmp/mmx -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json --jq '.data.edges[] | select(.derived == true)'
 ```
 
 `display: "bridge"` 只改变视图投影，不删除中间对象或底层链接。派生边会返回 `derived: true`、`via_ids`、`via` 和完整的 `relations`；同一对端点存在多条中间对象时，`aggregate: true` 会合并并保留全部来源。
@@ -577,7 +577,7 @@ Web UI 的 Graph 页面可以：
 启动：
 
 ```bash
-/tmp/mbase serve --addr 127.0.0.1:8766
+/tmp/mmx serve --addr 127.0.0.1:8766
 ```
 
 主要页面：
@@ -592,25 +592,25 @@ Web UI 的 Graph 页面可以：
 浏览器 automation：
 
 ```js
-window.mbase.state()
-window.mbase.uiState()
-window.mbase.openObject("company.lightsprint")
-window.mbase.selectType("company")
-window.mbase.openGraph()
-window.mbase.graphWorkspace.state()
-window.mbase.graphWorkspace.reloadViews()
-window.mbase.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed-venture-partners")
-window.mbase.graphWorkspace.previewNode("company.lightsprint")
-window.mbase.graphWorkspace.newView()       // 打开新建视图
-window.mbase.graphWorkspace.configure(true) // 编辑当前视图
-window.mbase.graphWorkspace.setDetailsOpen(true) // 展开画布内视图信息
-window.mbase.graphWorkspace.setCanvasFocus(true) // 进入页内聚焦
-window.mbase.graphWorkspace.setEditor({
+window.mmx.state()
+window.mmx.uiState()
+window.mmx.openObject("company.lightsprint")
+window.mmx.selectType("company")
+window.mmx.openGraph()
+window.mmx.graphWorkspace.state()
+window.mmx.graphWorkspace.reloadViews()
+window.mmx.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed-venture-partners")
+window.mmx.graphWorkspace.previewNode("company.lightsprint")
+window.mmx.graphWorkspace.newView()       // 打开新建视图
+window.mmx.graphWorkspace.configure(true) // 编辑当前视图
+window.mmx.graphWorkspace.setDetailsOpen(true) // 展开画布内视图信息
+window.mmx.graphWorkspace.setCanvasFocus(true) // 进入页内聚焦
+window.mmx.graphWorkspace.setEditor({
   nodes: { company: { variant: "rich", title_field: "name", subtitle_field: "one_liner" } },
   bridges: { investment: { label_fields: ["round", "amount_text"], aggregate: true } }
 })
-window.mbase.graphWorkspace.selectEdge("investor.lightspeed-venture-partners", "company.luel")
-window.mbase.relationGraph.state()
+window.mmx.graphWorkspace.selectEdge("investor.lightspeed-venture-partners", "company.luel")
+window.mmx.relationGraph.state()
 ```
 
 这让 agent 可以用 `browser eval` 直接操作 UI 和读取状态。
@@ -620,14 +620,14 @@ window.mbase.relationGraph.state()
 CLI 默认输出给人看。加 `--json` 输出机器可读 JSON：
 
 ```bash
-/tmp/mbase -C "$VAULT" get company.lightsprint --json
+/tmp/mmx -C "$VAULT" get company.lightsprint --json
 ```
 
 选择 JSON 字段：
 
 ```bash
-/tmp/mbase -C "$VAULT" get company.lightsprint --json object,links,backlinks
-/tmp/mbase -C "$VAULT" get company.lightsprint --json object,body_abs_path --jq '.body_abs_path'
+/tmp/mmx -C "$VAULT" get company.lightsprint --json object,links,backlinks
+/tmp/mmx -C "$VAULT" get company.lightsprint --json object,body_abs_path --jq '.body_abs_path'
 ```
 
 `--json field,field` 会从 result data 里挑字段，类似 `gh` 的字段选择。`--jq` 使用内置 jq 表达式，不要求系统安装 `jq`。
@@ -648,14 +648,12 @@ curl http://127.0.0.1:8766/api/run \
   --data-raw '{"vault":"/path/to/vault","argv":["body","write","company.lightsprint","--stdin"],"stdin":"# Lightsprint\n"}'
 ```
 
-兼容旧入口：`POST /_mbase/run`。
-
 ## 15. 推荐工作流
 
 创建研究对象：
 
 ```bash
-/tmp/mbase -C "$VAULT" upsert company company.demo \
+/tmp/mmx -C "$VAULT" upsert company company.demo \
   name="Demo Company" \
   title="Demo Company" \
   status=active \
@@ -665,7 +663,7 @@ curl http://127.0.0.1:8766/api/run \
 创建证据：
 
 ```bash
-cat evidence.md | /tmp/mbase -C "$VAULT" source add source.demo.website \
+cat evidence.md | /tmp/mmx -C "$VAULT" source add source.demo.website \
   --title "Demo website snapshot" \
   --url "https://demo.example" \
   --platform website \
@@ -678,7 +676,7 @@ cat evidence.md | /tmp/mbase -C "$VAULT" source add source.demo.website \
 创建人的判断：
 
 ```bash
-cat note.md | /tmp/mbase -C "$VAULT" create note note.demo-takeaway \
+cat note.md | /tmp/mmx -C "$VAULT" create note note.demo-takeaway \
   title="Demo takeaway" \
   about_company=company.demo \
   --body-stdin
@@ -687,9 +685,9 @@ cat note.md | /tmp/mbase -C "$VAULT" create note note.demo-takeaway \
 刷新和验证：
 
 ```bash
-/tmp/mbase -C "$VAULT" body refresh company.demo
-/tmp/mbase -C "$VAULT" issues
-/tmp/mbase -C "$VAULT" get company.demo --body-preview 800
+/tmp/mmx -C "$VAULT" body refresh company.demo
+/tmp/mmx -C "$VAULT" issues
+/tmp/mmx -C "$VAULT" get company.demo --body-preview 800
 ```
 
 Web UI 打开：
@@ -707,7 +705,7 @@ http://127.0.0.1:8766/?view=detail&vault=/path/to/vault&object=company.demo
 先查重：
 
 ```bash
-/tmp/mbase -C "$VAULT" query company \
+/tmp/mmx -C "$VAULT" query company \
   --select id,title,website,tags \
   --where "title=Skywork"
 ```
@@ -715,7 +713,7 @@ http://127.0.0.1:8766/?view=detail&vault=/path/to/vault&object=company.demo
 没有对象就 `upsert`，并尽量用 `--body-stdin` 一次写入字段和主体报告：
 
 ```bash
-cat <<'MD' | /tmp/mbase -C "$VAULT" upsert company company.skywork \
+cat <<'MD' | /tmp/mmx -C "$VAULT" upsert company company.skywork \
   name="Skywork" \
   title="Skywork" \
   slug="skywork" \
@@ -748,7 +746,7 @@ MD
 `source.item` 是单条证据，不是长期入口。文章、PR、Product Hunt 页面抓取、LinkedIn company snapshot、Similarweb snapshot、GitHub org snapshot、一次抓取失败记录，都可以是 `source.item`。
 
 ```bash
-cat <<'MD' | /tmp/mbase -C "$VAULT" source add source.producthunt.skywork-super-agents-2026-07-10 \
+cat <<'MD' | /tmp/mmx -C "$VAULT" source add source.producthunt.skywork-super-agents-2026-07-10 \
   --title "Skywork Super Agents on Product Hunt" \
   --url "https://www.producthunt.com/products/skywork-super-agents" \
   item_type="launch" \
@@ -768,7 +766,7 @@ MD
 空壳页、抓取失败和不采信材料也可以建成 source，但要明确质量和状态：
 
 ```bash
-/tmp/mbase -C "$VAULT" source add source.website.skywork-failed-2026-07-10 \
+/tmp/mmx -C "$VAULT" source add source.website.skywork-failed-2026-07-10 \
   --title "Skywork website failed capture" \
   --url "https://skywork.ai/" \
   quality="empty_shell" \
@@ -801,7 +799,7 @@ about_company/about_person/about_investor
 `note` 是人的判断，不是事实库。CP takeaway、research 判断、产品方法反思、风险、不确定性、下一步追问，都应该进 `note`，并用字段挂回主体和证据。
 
 ```bash
-cat <<'MD' | /tmp/mbase -C "$VAULT" upsert note note.skywork-product-takeaway-2026-07-10 \
+cat <<'MD' | /tmp/mmx -C "$VAULT" upsert note note.skywork-product-takeaway-2026-07-10 \
   title="Skywork takeaway：把 deep research 做成办公交付物 agent" \
   kind="takeaway" \
   author="cici-research" \
@@ -844,12 +842,12 @@ MD
 每轮结束至少跑：
 
 ```bash
-/tmp/mbase -C "$VAULT" issues
-/tmp/mbase -C "$VAULT" get company.skywork --no-body
-/tmp/mbase -C "$VAULT" query source.item \
+/tmp/mmx -C "$VAULT" issues
+/tmp/mmx -C "$VAULT" get company.skywork --no-body
+/tmp/mmx -C "$VAULT" query source.item \
   --select id,title,platform,evidence_level,quality \
   --where "about_company=company.skywork"
-/tmp/mbase -C "$VAULT" backlinks company.skywork --type source.item --kind field
+/tmp/mmx -C "$VAULT" backlinks company.skywork --type source.item --kind field
 ```
 
 这能确认：
@@ -862,13 +860,13 @@ MD
 只要 body 里写了 `[[object.id]]`，最后必须：
 
 ```bash
-/tmp/mbase -C "$VAULT" body refresh company.skywork
-/tmp/mbase -C "$VAULT" body refresh note.skywork-product-takeaway-2026-07-10
+/tmp/mmx -C "$VAULT" body refresh company.skywork
+/tmp/mmx -C "$VAULT" body refresh note.skywork-product-takeaway-2026-07-10
 ```
 
 ### 16.7 给新 agent 的最短建议
 
-1. 不要直接写 SQLite，只用 `/tmp/mbase -C <vault>`。
+1. 不要直接写 SQLite，只用 `/tmp/mmx -C <vault>`。
 2. 先 `query` 查重，再 `upsert`。
 3. `company` / `person` / `investor` 是主体；`touchpoint` 是长期入口；`source.item` 是单条证据；`note` 是人的判断；`concept` / `method` 是跨主体复用的模式。
 4. 每条事实尽量挂 `source.item`；每个判断尽量挂 `note`。
@@ -903,37 +901,37 @@ MD
 ## 18. 最小可运行例子
 
 ```bash
-VAULT=/tmp/mbase-demo
+VAULT=/tmp/mmx-demo
 rm -rf "$VAULT"
 
-/tmp/mbase -C "$VAULT" init
-/tmp/mbase -C "$VAULT" type create concept
-/tmp/mbase -C "$VAULT" field add concept title --kind text --required
-/tmp/mbase -C "$VAULT" field add concept related --kind ref_list --target concept
+/tmp/mmx -C "$VAULT" init
+/tmp/mmx -C "$VAULT" type create concept
+/tmp/mmx -C "$VAULT" field add concept title --kind text --required
+/tmp/mmx -C "$VAULT" field add concept related --kind ref_list --target concept
 
-/tmp/mbase -C "$VAULT" create concept concept.rag title=RAG
+/tmp/mmx -C "$VAULT" create concept concept.rag title=RAG
 
-cat <<'EOF' | /tmp/mbase -C "$VAULT" create concept concept.llm-wiki title="LLM Wiki" --body-stdin
+cat <<'EOF' | /tmp/mmx -C "$VAULT" create concept concept.llm-wiki title="LLM Wiki" --body-stdin
 # LLM Wiki
 
 Different from [[concept.rag]], but related.
 EOF
 
-/tmp/mbase -C "$VAULT" link concept.llm-wiki related concept.rag
-/tmp/mbase -C "$VAULT" body refresh concept.llm-wiki
-/tmp/mbase -C "$VAULT" get concept.llm-wiki
-/tmp/mbase -C "$VAULT" query concept --select id,title,related
-/tmp/mbase -C "$VAULT" issues
+/tmp/mmx -C "$VAULT" link concept.llm-wiki related concept.rag
+/tmp/mmx -C "$VAULT" body refresh concept.llm-wiki
+/tmp/mmx -C "$VAULT" get concept.llm-wiki
+/tmp/mmx -C "$VAULT" query concept --select id,title,related
+/tmp/mmx -C "$VAULT" issues
 ```
 
 启动 UI：
 
 ```bash
-/tmp/mbase serve --addr 127.0.0.1:8766
+/tmp/mmx serve --addr 127.0.0.1:8766
 ```
 
 打开：
 
 ```text
-http://127.0.0.1:8766/?vault=/tmp/mbase-demo
+http://127.0.0.1:8766/?vault=/tmp/mmx-demo
 ```

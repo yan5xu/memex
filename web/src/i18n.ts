@@ -25,7 +25,7 @@ i18n
     },
     detection: {
       order: ["localStorage", "navigator"],
-      lookupLocalStorage: "mbase.language",
+      lookupLocalStorage: "mmx.language",
       caches: ["localStorage"]
     }
   });

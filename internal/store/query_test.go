@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yan5xu/mbase/internal/domain"
+	"github.com/yan5xu/mmx/internal/domain"
 )
 
 func TestQueryWhereMatchesRefAndRefListIDs(t *testing.T) {

@@ -11,10 +11,10 @@ import (
 
 	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
-	"github.com/yan5xu/mbase/internal/app"
-	"github.com/yan5xu/mbase/internal/domain"
-	"github.com/yan5xu/mbase/internal/store"
-	"github.com/yan5xu/mbase/internal/web"
+	"github.com/yan5xu/mmx/internal/app"
+	"github.com/yan5xu/mmx/internal/domain"
+	"github.com/yan5xu/mmx/internal/store"
+	"github.com/yan5xu/mmx/internal/web"
 )
 
 var rootDir = "."
@@ -24,8 +24,8 @@ var jqExpr string
 
 func Execute() error {
 	root := &cobra.Command{
-		Use:                "mbase",
-		Short:              "Local-first object graph base",
+		Use:                "mmx",
+		Short:              "Memex local-first typed knowledge workspace",
 		DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			argv, err := preprocess(args)
@@ -699,7 +699,7 @@ func truncate(s string, width int) string {
 }
 
 func commandPrefix() string {
-	return "mbase -C " + shellQuote(rootDir)
+	return "mmx -C " + shellQuote(rootDir)
 }
 
 func shellQuote(s string) string {

@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestInitUsesMMXStoragePath(t *testing.T) {
+	if DBPath != ".mmx/mmx.db" {
+		t.Fatalf("unexpected database path %q", DBPath)
+	}
+	root := t.TempDir()
+	s, err := Init(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, DBPath)); err != nil {
+		t.Fatalf("expected database at %s: %v", DBPath, err)
+	}
+}
+
 func TestOpenWithRelativeRootUsesAbsoluteSQLitePath(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "vault")

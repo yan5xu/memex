@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yan5xu/mbase/internal/domain"
+	"github.com/yan5xu/mmx/internal/domain"
 )
 
 type QueryOptions struct {

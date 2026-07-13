@@ -63,10 +63,10 @@ The next useful step is to add a `concept` type and connect it to companies, not
 
 ## Body Writing Practice
 
-The body workflow is now central to mbase. Agents should prefer creating objects with body content in one step:
+The body workflow is now central to Memex. Agents should prefer creating objects with body content in one step:
 
 ```bash
-mbase create source.item source.some-evidence title="Some Evidence" --body-stdin <<'EOF'
+mmx create source.item source.some-evidence title="Some Evidence" --body-stdin <<'EOF'
 # Some Evidence
 
 Summary and evidence notes.

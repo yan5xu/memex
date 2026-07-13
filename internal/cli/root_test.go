@@ -1,6 +1,16 @@
 package cli
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestCommandPrefixUsesMMXCommandName(t *testing.T) {
+	rootDir = "/tmp/example-vault"
+	if got := commandPrefix(); !strings.HasPrefix(got, "mmx -C ") {
+		t.Fatalf("command prefix does not start with mmx: %q", got)
+	}
+}
 
 func TestHelpFlagIsDetectedAfterPreprocess(t *testing.T) {
 	rootDir = "."

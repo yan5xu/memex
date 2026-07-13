@@ -1,8 +1,8 @@
 # Markdown Render Lab
 
-This fixture is used to manually verify mbase Markdown rendering. It mirrors the body used in `/tmp/mbase-yc-model` as `note.markdown-render-lab`.
+This fixture is used to manually verify Memex Markdown rendering. It mirrors the body used in `/tmp/memex-demo` as `note.markdown-render-lab`.
 
-这是一份用于检查 mbase Markdown 渲染的综合样本。它故意把 **结构化笔记**、[[company.lightsprint|对象双链]]、外部链接、内联代码 `mbase get note.markdown-render-lab`、<mark>高亮文字</mark>、<ins>新增观点</ins> 和 ~~废弃口径~~ 放在同一篇正文里。
+这是一份用于检查 Memex Markdown 渲染的综合样本。它故意把 **结构化笔记**、[[company.lightsprint|对象双链]]、外部链接、内联代码 `mmx get note.markdown-render-lab`、<mark>高亮文字</mark>、<ins>新增观点</ins> 和 ~~废弃口径~~ 放在同一篇正文里。
 
 ## 1. 段落与语义层级
 
@@ -94,8 +94,8 @@ This fixture is used to manually verify mbase Markdown rendering. It mirrors the
 - details 内的列表、段落和代码块都应该保持阅读宽度。
 
 ```bash
-mbase -C /tmp/mbase-yc-model get note.markdown-render-lab
-mbase -C /tmp/mbase-yc-model body refresh note.markdown-render-lab
+mmx -C /tmp/memex-demo get note.markdown-render-lab
+mmx -C /tmp/memex-demo body refresh note.markdown-render-lab
 ```
 </details>
 

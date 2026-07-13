@@ -8,20 +8,20 @@ export type RunResult<T = unknown> = {
 };
 
 export function getCurrentVault() {
-  return localStorage.getItem("mbase.currentVault") || "";
+  return localStorage.getItem("mmx.currentVault") || "";
 }
 
 export function setCurrentVault(vault: string) {
   const next = vault.trim();
   if (next) {
-    localStorage.setItem("mbase.currentVault", next);
+    localStorage.setItem("mmx.currentVault", next);
     rememberVault(next);
   }
 }
 
 export function getRecentVaults() {
   try {
-    const raw = localStorage.getItem("mbase.recentVaults");
+    const raw = localStorage.getItem("mmx.recentVaults");
     const values = raw ? JSON.parse(raw) : [];
     return Array.isArray(values) ? values.filter((v): v is string => typeof v === "string" && v.trim() !== "") : [];
   } catch {
@@ -33,7 +33,7 @@ export function rememberVault(vault: string) {
   const next = vault.trim();
   if (!next) return;
   const recent = [next, ...getRecentVaults().filter((v) => v !== next)].slice(0, 8);
-  localStorage.setItem("mbase.recentVaults", JSON.stringify(recent));
+  localStorage.setItem("mmx.recentVaults", JSON.stringify(recent));
 }
 
 export async function run<T>(argv: string[], vault = getCurrentVault(), options: { stdin?: string } = {}): Promise<RunResult<T>> {

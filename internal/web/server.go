@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yan5xu/mbase/internal/app"
-	"github.com/yan5xu/mbase/internal/store"
+	"github.com/yan5xu/mmx/internal/app"
+	"github.com/yan5xu/mmx/internal/store"
 )
 
 //go:embed dist/*
@@ -65,13 +65,12 @@ func (s Server) ListenAndServe() error {
 		result := reqRunner.Run(context.Background(), req.Argv)
 		writeJSON(w, result)
 	}
-	mux.HandleFunc("/_mbase/run", runHandler)
 	mux.HandleFunc("/api/run", runHandler)
 	mux.HandleFunc("/api/assets", s.assetUploadHandler())
 	mux.HandleFunc("/api/file", s.vaultFileHandler())
 	mux.HandleFunc("/api/plantuml", plantUMLHandler)
 	mux.Handle("/", staticHandler())
-	fmt.Printf("mbase web listening on http://%s\n", s.Addr)
+	fmt.Printf("Memex web listening on http://%s\n", s.Addr)
 	return http.ListenAndServe(s.Addr, mux)
 }
 

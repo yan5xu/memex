@@ -10,7 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const DBPath = ".mbase/mbase.db"
+const DBPath = ".mmx/mmx.db"
 
 type Store struct {
 	DB   *sql.DB
@@ -24,7 +24,7 @@ func Open(root string) (*Store, error) {
 	}
 	dbPath := filepath.Join(root, DBPath)
 	if _, err := os.Stat(dbPath); err != nil {
-		return nil, fmt.Errorf("mbase db not found at %s; run mbase init", dbPath)
+		return nil, fmt.Errorf("Memex database not found at %s; run mmx init", dbPath)
 	}
 	db, err := openSQLite(dbPath)
 	if err != nil {
@@ -43,7 +43,7 @@ func Init(root string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".mbase"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".mmx"), 0755); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Join(root, "bodies"), 0755); err != nil {
