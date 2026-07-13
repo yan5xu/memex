@@ -10,7 +10,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: "../internal/web/dist",
+    outDir: process.env.MEMEX_WEB_OUT_DIR || "../internal/web/dist",
     emptyOutDir: true
   }
 });

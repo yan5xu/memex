@@ -25,7 +25,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
-import { getCurrentVault, getRecentVaults, getServerInfo, run, setCurrentVault, uploadAsset } from "./api";
+import { getCurrentVault, getRecentVaults, getServerInfo, run, setCurrentVault, uploadAsset, type ServerInfo } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
@@ -483,8 +483,13 @@ function App() {
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
   const [showcaseVault, setShowcaseVault] = useState("");
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [savingObjectImage, setSavingObjectImage] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const readOnly = Boolean(serverInfo?.read_only);
+  const brandName = serverInfo?.brand_name || "Memex";
+  const brandMark = serverInfo?.brand_mark || "M";
+  const brandTagline = serverInfo?.brand_tagline || t("app.tagline");
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
@@ -620,9 +625,14 @@ function App() {
     void (async () => {
       try {
         const info = await getServerInfo();
+        setServerInfo(info.data ?? null);
         const defaultVault = info.data?.vault_exists ? info.data.default_vault : "";
         if (cancelled) return;
         setShowcaseVault(info.data?.showcase_exists ? info.data.showcase_vault : "");
+        if (info.data?.read_only && defaultVault) {
+          await openVaultPath(defaultVault, { silent: true, remember: false });
+          return;
+        }
         if (initialVault) {
           const loaded = await loadBase(activeType, filter, initialVault);
           if (cancelled || loaded.vaultOK || routeSearch.vault) return;
@@ -643,6 +653,10 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    document.title = brandName;
+  }, [brandName]);
 
   useEffect(() => {
     if (view === "vi" || routeSearch.vault || !vault) return;
@@ -831,7 +845,7 @@ function App() {
     });
   }
 
-  async function openVaultPath(path: string): Promise<BaseLoadResult | null> {
+  async function openVaultPath(path: string, options: { silent?: boolean; remember?: boolean } = {}): Promise<BaseLoadResult | null> {
     const nextPath = path.trim();
     if (!nextPath) {
       toast.error("Vault path is required");
@@ -852,8 +866,10 @@ function App() {
     const nextGraphCenter = saved?.view === "graph" ? saved?.object ?? "" : "";
     const nextGraphMode = saved?.graphMode ?? "core";
     const nextHiddenGraphTypes = parseGraphHiddenTypes(saved?.graphHiddenTypes);
-    setCurrentVault(nextPath);
-    setRecentVaults(getRecentVaults());
+    if (options.remember !== false) {
+      setCurrentVault(nextPath);
+      setRecentVaults(getRecentVaults());
+    }
     queryClient.invalidateQueries();
     setVaultDraft(nextPath);
     setVault(nextPath);
@@ -876,7 +892,7 @@ function App() {
     if (nextView === "detail" && saved?.object) {
       await openObject(saved.object, { vault: nextPath });
     }
-    toast.success(`Opened ${shortPath(nextPath)}`);
+    if (!options.silent) toast.success(`Opened ${shortPath(nextPath)}`);
     return loaded;
   }
 
@@ -1112,11 +1128,11 @@ function App() {
     <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${standaloneMode ? "vi-standalone-shell" : ""}`}>
       {!standaloneMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
         <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[17px] font-medium italic text-background">M</div>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[13px] font-medium italic text-background">{brandMark}</div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <div className="text-[13px] font-medium tracking-tight text-foreground/90">Memex</div>
-              <div className="text-[10.5px] text-muted-foreground">{t("app.tagline")}</div>
+              <div className="truncate text-[13px] font-medium tracking-tight text-foreground/90">{brandName}</div>
+              <div className="truncate text-[10.5px] text-muted-foreground">{brandTagline}</div>
             </div>
           )}
         </div>
@@ -1125,7 +1141,7 @@ function App() {
           <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-3.5" />} label={t("nav.objects")} active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
           <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-3.5" />} label={t("nav.schema")} active={view === "types"} onClick={() => setView("types")} />
           <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-3.5" />} label={t("nav.graph")} active={view === "graph"} onClick={() => void openGraph()} />
-          <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label={t("nav.health")} active={view === "health"} onClick={() => setView("health")} />
+          {!readOnly && <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label={t("nav.health")} active={view === "health"} onClick={() => setView("health")} />}
         </nav>
 
         {!sidebarCollapsed && (
@@ -1147,7 +1163,7 @@ function App() {
         )}
 
         <div className="mt-auto space-y-2.5 pt-3">
-          {!sidebarCollapsed && (
+          {!sidebarCollapsed && !readOnly && (
             <>
               <div className="sidebar-tool-card text-[11px] text-muted-foreground">
                 <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> {t("nav.agentApi")}</div>
@@ -1164,6 +1180,12 @@ function App() {
               />
             </>
           )}
+          {!sidebarCollapsed && readOnly && serverInfo?.source_url && (
+            <a className="sidebar-tool-card flex items-center gap-2 text-[11px] text-muted-foreground transition hover:text-foreground" href={serverInfo.source_url} target="_blank" rel="noreferrer">
+              <GitBranch className="size-3 text-[hsl(var(--earth))]" />
+              <span className="truncate">Open-source repository</span>
+            </a>
+          )}
           <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}>
             {sidebarCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
             {!sidebarCollapsed && <span>{t("nav.collapseSidebar")}</span>}
@@ -1173,12 +1195,12 @@ function App() {
 
       <main className={`${standaloneMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
         {!standaloneMode && <div className="console-topbar">
-          <BreadcrumbTrail view={view} activeType={activeType} activeObject={activeObject} />
+          <BreadcrumbTrail product={brandName} view={view} activeType={activeType} activeObject={activeObject} />
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
             <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
               <span className={`size-1.5 rounded-full ${vaultOK ? "bg-[hsl(var(--moss))]" : "bg-[hsl(var(--clay))]"}`} />
-              {vaultOK ? t("status.vaultReady") : t("status.vaultMissing")}
+              {readOnly && serverInfo?.status_label ? serverInfo.status_label : vaultOK ? t("status.vaultReady") : t("status.vaultMissing")}
             </span>
           </div>
         </div>}
@@ -1225,6 +1247,7 @@ function App() {
                   objectTitleByID={objectTitleByID}
                   openObject={(id) => void openObject(id)}
                   saveBody={saveObjectBody}
+                  readOnly={readOnly}
                   onBeginEdit={() => setInspectorOpen(false)}
                   inspectorToggle={
                     <button
@@ -1251,11 +1274,11 @@ function App() {
                           {savingObjectImage ? t("detail.savingImage") : t("detail.saveAsPng")}
                         </Button>
                       </Panel>
-                      <Panel title={t("detail.body")} icon={<FileText className="size-4" />}>
+                      {!readOnly && <Panel title={t("detail.body")} icon={<FileText className="size-4" />}>
                         <div className="tray break-all rounded-md p-2.5 font-mono text-xs text-muted-foreground">{activeObject.body_abs_path || activeObject.body_path}</div>
-                      </Panel>
+                      </Panel>}
                       <Panel title={t("detail.relationGraph")} icon={<Network className="size-4" />}>
-                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} vault={vault} automationRef={relationGraphAutomationRef} open={(id) => void openObject(id)} />
+                        <InspectorRelationGraph object={activeObject} links={links} backlinks={backlinks} graphNodes={graph.nodes} graphEdges={graph.edges} vault={vault} readOnly={readOnly} automationRef={relationGraphAutomationRef} open={(id) => void openObject(id)} />
                       </Panel>
                       <Panel title={t("detail.fields")} icon={<Braces className="size-4" />}>{Object.entries(activeObject.fields ?? {}).map(([k, v]) => <KV key={k} k={k} v={renderCell(v)} />)}</Panel>
                       <Panel title={t("detail.fieldLinks")} icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "field").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
@@ -1324,6 +1347,7 @@ function App() {
             setSelection={setGraphWorkspaceSelection}
             openObject={(id) => void openObject(id)}
             automationRef={graphWorkspaceAutomationRef}
+            readOnly={readOnly}
             fullGraph={{
               graphView,
               graphTypeControls,
@@ -1386,6 +1410,7 @@ function GraphWorkspacePage({
   setSelection,
   openObject,
   automationRef,
+  readOnly = false,
   fullGraph
 }: {
   graph: GraphData;
@@ -1396,6 +1421,7 @@ function GraphWorkspacePage({
   setSelection: (next: { viewID?: string; centerID?: string }, options?: { replace?: boolean }) => void;
   openObject: (id: string) => void;
   automationRef?: React.MutableRefObject<GraphWorkspaceAutomationController | null>;
+  readOnly?: boolean;
   fullGraph: {
     graphView: ReturnType<typeof buildGraphView>;
     graphTypeControls: ReturnType<typeof buildGraphTypeControls>;
@@ -1613,12 +1639,12 @@ function GraphWorkspacePage({
       if (!cancelled) setConfigLoading(false);
     });
 
-    const poll = window.setInterval(() => void reloadGraphViews(), 2000);
+    const poll = readOnly ? null : window.setInterval(() => void reloadGraphViews(), 2000);
     return () => {
       cancelled = true;
-      window.clearInterval(poll);
+      if (poll !== null) window.clearInterval(poll);
     };
-  }, [vault]);
+  }, [vault, readOnly]);
 
   useEffect(() => {
     if (showingFullGraph || !activeDefinition || !centerObject) {
@@ -1843,7 +1869,7 @@ function GraphWorkspacePage({
             ? (editorOriginalID ? t("graph.editViewDescription") : t("graph.newViewDescription"))
             : showingFullGraph ? t("graph.fullGraphDescription") : activeDefinition?.description || t("graph.focusedDescription")}
         />
-        {!editorOpen && <div className="graph-workspace-actions">
+        {!editorOpen && !readOnly && <div className="graph-workspace-actions">
           {!showingFullGraph && activeDefinition && (
             <Button variant="secondary" className="rounded-md" onClick={() => openEditor(activeDefinition)}>
               <Edit3 className="size-4" />
@@ -1917,7 +1943,7 @@ function GraphWorkspacePage({
         </div>
       )}
 
-      {editorOpen && (
+      {editorOpen && !readOnly && (
         <div className="graph-workspace-editor">
           <div className="graph-view-editor">
             <div className="graph-view-editor-heading">
@@ -2190,7 +2216,7 @@ function GraphWorkspacePage({
           </aside>
         </div>
       ))}
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+      <Dialog open={!readOnly && deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent className="graph-delete-dialog">
           <DialogHeader>
             <DialogTitle>{t("graph.deleteViewTitle", { name: editorLabel || editorOriginalID })}</DialogTitle>
@@ -3131,7 +3157,8 @@ function ObjectBodyWorkspace({
   onBeginEdit,
   inspectorToggle,
   inspectorPanel,
-  initialEditing = false
+  initialEditing = false,
+  readOnly = false
 }: {
   object: Obj;
   body: string;
@@ -3144,6 +3171,7 @@ function ObjectBodyWorkspace({
   inspectorToggle?: React.ReactNode;
   inspectorPanel?: React.ReactNode;
   initialEditing?: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -3285,19 +3313,19 @@ function ObjectBodyWorkspace({
           <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
         </div>
         <div className="body-workspace-actions">
-          <span className={`body-save-state ${dirty ? "body-save-state-dirty" : ""}`}>
+          {!readOnly && <span className={`body-save-state ${dirty ? "body-save-state-dirty" : ""}`}>
             {(saving || uploading) && <Loader2 className="size-3.5 animate-spin" />}
             {status}
-          </span>
+          </span>}
           {inspectorToggle}
-          {editing ? (
+          {!readOnly && (editing ? (
             <>
               <Button variant="ghost" className="h-8 rounded-md px-2.5" onClick={cancelEdit} disabled={saving}><X className="size-3.5" />{t("common.cancel")}</Button>
               <Button className="h-8 rounded-md px-3" onClick={() => void commitBody()} disabled={saving || uploading || !dirty}><Save className="size-3.5" />{t("bodyEditor.save")}</Button>
             </>
           ) : (
             <Button className="h-8 rounded-md px-3" onClick={beginEdit}><Edit3 className="size-3.5" />{t("bodyEditor.write")}</Button>
-          )}
+          ))}
           {inspectorPanel}
         </div>
       </div>
@@ -3815,9 +3843,9 @@ function LanguageSwitcher() {
   );
 }
 
-function BreadcrumbTrail({ view, activeType, activeObject }: { view: ViewID; activeType: string; activeObject: Obj | null }) {
+function BreadcrumbTrail({ product, view, activeType, activeObject }: { product: string; view: ViewID; activeType: string; activeObject: Obj | null }) {
   const { t } = useTranslation();
-  const parts = ["Memex"];
+  const parts = [product];
   if (view === "objects") {
     if (activeType) parts.push(activeType);
   } else if (view === "detail") {
@@ -4806,7 +4834,7 @@ type ProjectedGraphNode = { id: string; type_id: string; title: string; fields: 
 type ProjectedGraphEdge = { from_id: string; to_id: string; kind: string; relation: string; label?: string; count: number; derived: boolean; via_ids?: string[]; via?: GraphBridgeDetail[]; relations?: string[] };
 type ProjectedGraphResult = { view: GraphViewDefinition; center: string; nodes: ProjectedGraphNode[]; edges: ProjectedGraphEdge[]; stats: { nodes: number; edges: number; derived_edges: number } };
 
-function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, vault, automationRef, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; vault: string; automationRef?: React.MutableRefObject<RelationGraphAutomationController | null>; open: (id: string) => void }) {
+function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, vault, readOnly = false, automationRef, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; vault: string; readOnly?: boolean; automationRef?: React.MutableRefObject<RelationGraphAutomationController | null>; open: (id: string) => void }) {
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewConfig, setViewConfig] = useState<GraphViewConfig>({ version: 1, views: [] });
@@ -5031,7 +5059,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
           setHiddenRelations={setHiddenRelations}
           resetFilters={resetFilters}
         />
-        <div className="relation-graph-config-section">
+        {!readOnly && <div className="relation-graph-config-section">
           <div className="relation-graph-config-bar">
             <div className="relation-graph-config-copy">
               <span>{t("graph.viewSource")}</span>
@@ -5071,7 +5099,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
               </div>
             </div>
           )}
-        </div>
+        </div>}
         <RelationGraphCanvas graph={graph} openObject={(id) => {
           setDialogOpen(false);
           open(id);

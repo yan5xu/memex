@@ -14,6 +14,12 @@ export type ServerInfo = {
   showcase_vault: string;
   showcase_exists: boolean;
   showcase_start_object: string;
+  read_only?: boolean;
+  brand_name?: string;
+  brand_mark?: string;
+  brand_tagline?: string;
+  source_url?: string;
+  status_label?: string;
 };
 
 export async function getServerInfo(): Promise<RunResult<ServerInfo>> {
