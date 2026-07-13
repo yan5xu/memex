@@ -3,7 +3,7 @@ package store
 import (
 	"fmt"
 
-	"github.com/yan5xu/mmx/internal/domain"
+	"github.com/yan5xu/memex/internal/domain"
 )
 
 func (s *Store) RevalidateObject(id string) error {

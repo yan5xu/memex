@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yan5xu/mmx/internal/cli"
+	"github.com/yan5xu/memex/internal/cli"
 )
 
 func main() {

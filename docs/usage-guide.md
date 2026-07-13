@@ -4,7 +4,7 @@ Memex 是一个 local-first 的对象图谱知识库，`mmx` 是它的 CLI。Mem
 
 ## 1. 核心概念
 
-- `Vault`：一个 Memex 知识库目录。目录里有 `.mmx/mmx.db`、`bodies/`、`assets/`，也可以放 `mmx.graph-views.json`。
+- `Vault`：一个 Memex 知识库目录。目录里有 `.memex/memex.db`、`bodies/`、`assets/`，也可以放 `memex.graph-views.json`。
 - `Type`：对象类型，例如 `company`、`person`、`source.item`、`note`、`concept`。
 - `Field`：type 上的字段。字段可以是普通属性，也可以是关系字段。
 - `Object`：某个 type 的实例，例如 `company.lightsprint`。
@@ -26,7 +26,7 @@ Memex 是一个 local-first 的对象图谱知识库，`mmx` 是它的 CLI。Mem
 如果在源码目录开发：
 
 ```bash
-cd /Users/cp/workspace/assistant/system/tools/mmx
+cd /Users/cp/workspace/assistant/system/tools/memex
 go build -o /tmp/mmx ./cmd/mmx
 ```
 
@@ -472,7 +472,7 @@ Web UI 的 Graph 页面可以：
 - 点击节点预览 Markdown。
 - 双击节点切换中心。
 
-`mmx.graph-views.json` 是 Graph View 的唯一事实源：CLI、Web UI 和 agent 都读写同一个文件，适合直接纳入 Git。现有 version 1 配置继续兼容。version 2 支持多个查询路径、节点内容模板，以及把中间对象收缩为派生边。
+`memex.graph-views.json` 是 Graph View 的唯一事实源：CLI、Web UI 和 agent 都读写同一个文件，适合直接纳入 Git。现有 version 1 配置继续兼容。version 2 支持多个查询路径、节点内容模板，以及把中间对象收缩为派生边。
 
 配置自定义 graph view：
 
@@ -592,25 +592,25 @@ Web UI 的 Graph 页面可以：
 浏览器 automation：
 
 ```js
-window.mmx.state()
-window.mmx.uiState()
-window.mmx.openObject("company.lightsprint")
-window.mmx.selectType("company")
-window.mmx.openGraph()
-window.mmx.graphWorkspace.state()
-window.mmx.graphWorkspace.reloadViews()
-window.mmx.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed-venture-partners")
-window.mmx.graphWorkspace.previewNode("company.lightsprint")
-window.mmx.graphWorkspace.newView()       // 打开新建视图
-window.mmx.graphWorkspace.configure(true) // 编辑当前视图
-window.mmx.graphWorkspace.setDetailsOpen(true) // 展开画布内视图信息
-window.mmx.graphWorkspace.setCanvasFocus(true) // 进入页内聚焦
-window.mmx.graphWorkspace.setEditor({
+window.memex.state()
+window.memex.uiState()
+window.memex.openObject("company.lightsprint")
+window.memex.selectType("company")
+window.memex.openGraph()
+window.memex.graphWorkspace.state()
+window.memex.graphWorkspace.reloadViews()
+window.memex.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed-venture-partners")
+window.memex.graphWorkspace.previewNode("company.lightsprint")
+window.memex.graphWorkspace.newView()       // 打开新建视图
+window.memex.graphWorkspace.configure(true) // 编辑当前视图
+window.memex.graphWorkspace.setDetailsOpen(true) // 展开画布内视图信息
+window.memex.graphWorkspace.setCanvasFocus(true) // 进入页内聚焦
+window.memex.graphWorkspace.setEditor({
   nodes: { company: { variant: "rich", title_field: "name", subtitle_field: "one_liner" } },
   bridges: { investment: { label_fields: ["round", "amount_text"], aggregate: true } }
 })
-window.mmx.graphWorkspace.selectEdge("investor.lightspeed-venture-partners", "company.luel")
-window.mmx.relationGraph.state()
+window.memex.graphWorkspace.selectEdge("investor.lightspeed-venture-partners", "company.luel")
+window.memex.relationGraph.state()
 ```
 
 这让 agent 可以用 `browser eval` 直接操作 UI 和读取状态。
@@ -901,7 +901,7 @@ MD
 ## 18. 最小可运行例子
 
 ```bash
-VAULT=/tmp/mmx-demo
+VAULT=/tmp/memex-demo
 rm -rf "$VAULT"
 
 /tmp/mmx -C "$VAULT" init
@@ -933,5 +933,5 @@ EOF
 打开：
 
 ```text
-http://127.0.0.1:8766/?vault=/tmp/mmx-demo
+http://127.0.0.1:8766/?vault=/tmp/memex-demo
 ```

@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yan5xu/mmx/internal/app"
-	"github.com/yan5xu/mmx/internal/store"
+	"github.com/yan5xu/memex/internal/app"
+	"github.com/yan5xu/memex/internal/store"
 )
 
 //go:embed dist/*

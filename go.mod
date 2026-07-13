@@ -1,4 +1,4 @@
-module github.com/yan5xu/mmx
+module github.com/yan5xu/memex
 
 go 1.25.8
 

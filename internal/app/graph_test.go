@@ -76,7 +76,7 @@ func TestGraphViewValidateUsesVaultSchema(t *testing.T) {
 	if result.OK || result.Error == nil || !strings.Contains(result.Error.Message, `field "missing" does not exist on type investment`) {
 		t.Fatalf("expected schema-aware validation error, got %#v", result)
 	}
-	if err := os.WriteFile(filepath.Join(runner.Root, "mmx.graph-views.json"), []byte(invalid), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(runner.Root, "memex.graph-views.json"), []byte(invalid), 0644); err != nil {
 		t.Fatal(err)
 	}
 	listResult := runner.Run(context.Background(), []string{"graph", "view", "list"})

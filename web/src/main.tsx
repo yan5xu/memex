@@ -285,7 +285,7 @@ function normalizeView(view: unknown): ViewID {
 
 function getVaultUIStates(): Record<string, VaultUIState> {
   try {
-    const raw = localStorage.getItem("mmx.vaultStates");
+    const raw = localStorage.getItem("memex.vaultStates");
     const parsed = raw ? JSON.parse(raw) : {};
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
@@ -302,7 +302,7 @@ function saveVaultUIState(vault: string, state: VaultUIState) {
   if (!nextVault) return;
   const states = getVaultUIStates();
   states[nextVault] = state;
-  localStorage.setItem("mmx.vaultStates", JSON.stringify(states));
+  localStorage.setItem("memex.vaultStates", JSON.stringify(states));
 }
 
 function parseGraphHiddenTypes(value: unknown): Set<string> {
@@ -395,7 +395,7 @@ function automationState(state: AppState): AutomationSnapshot {
 
 declare global {
   interface Window {
-    mmx?: {
+    memex?: {
       run: typeof run;
       getVault: () => string;
       recentVaults: () => string[];
@@ -460,7 +460,7 @@ function App() {
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("mmx.sidebarCollapsed") === "true");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("memex.sidebarCollapsed") === "true");
   const [types, setTypes] = useState<TypeDef[]>([]);
   const [activeType, setActiveTypeState] = useState(routeSearch.type ?? "");
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -799,7 +799,7 @@ function App() {
   function toggleSidebar() {
     setSidebarCollapsed((collapsed) => {
       const next = !collapsed;
-      localStorage.setItem("mmx.sidebarCollapsed", String(next));
+      localStorage.setItem("memex.sidebarCollapsed", String(next));
       return next;
     });
   }
@@ -904,7 +904,7 @@ function App() {
       return result;
     };
 
-    window.mmx = {
+    window.memex = {
       run: runAndSync,
       getVault: () => vault,
       recentVaults: () => getRecentVaults(),
@@ -912,7 +912,7 @@ function App() {
       setLanguage: async (language: "en" | "zh") => {
         await i18n.changeLanguage(language);
         await nextFrame();
-        return window.mmx?.state() ?? currentState();
+        return window.memex?.state() ?? currentState();
       },
       setSidebarCollapsed: (collapsed: boolean) => {
         setSidebarCollapsed(collapsed);
@@ -1018,26 +1018,26 @@ function App() {
             const nextGraph = await openGraph({ syncURL: false });
             await nextFrame();
             await nextFrame();
-            return window.mmx?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: id, activeGraphCenterID: "" });
+            return window.memex?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: id, activeGraphCenterID: "" });
           }
           await nextFrame();
           await nextFrame();
-          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphViewID: id, activeGraphCenterID: "" });
+          return window.memex?.state() ?? currentState({ view: "graph", activeGraphViewID: id, activeGraphCenterID: "" });
         },
         setCenter: async (id: string) => {
           setGraphWorkspaceSelection({ centerID: id });
           await nextFrame();
-          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphCenterID: id });
+          return window.memex?.state() ?? currentState({ view: "graph", activeGraphCenterID: id });
         },
         openFullMap: async () => {
           setGraphWorkspaceSelection({ viewID: fullGraphViewID, centerID: "" });
           if (graph.nodes.length === 0) {
             const nextGraph = await openGraph({ syncURL: false });
             await nextFrame();
-            return window.mmx?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+            return window.memex?.state() ?? currentState({ view: "graph", graph: nextGraph, activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
           }
           await nextFrame();
-          return window.mmx?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
+          return window.memex?.state() ?? currentState({ view: "graph", activeGraphViewID: fullGraphViewID, activeGraphCenterID: "" });
         },
         searchCenter: (query: string) => graphWorkspaceCall((controller) => controller.searchCenter(query)),
         previewNode: (id: string) => graphWorkspaceCall((controller) => controller.previewNode(id)),
@@ -1072,7 +1072,7 @@ function App() {
       state: () => currentState()
     };
     return () => {
-      delete window.mmx;
+      delete window.memex;
     };
   }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
 
@@ -1124,7 +1124,7 @@ function App() {
             <>
               <div className="sidebar-tool-card text-[11px] text-muted-foreground">
                 <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> {t("nav.agentApi")}</div>
-                <code className="font-mono">window.mmx.state()</code>
+                <code className="font-mono">window.memex.state()</code>
               </div>
               <VaultSwitcher
                 vault={vault}
@@ -3546,7 +3546,7 @@ function MermaidDiagram({ source }: { source: string }) {
             textColor: "#332e27"
           }
         });
-        const result = await mermaid.render(`mmx-mermaid-${rawID}`, source);
+        const result = await mermaid.render(`memex-mermaid-${rawID}`, source);
         if (!cancelled) {
           setSVG(result.svg);
           setError("");
@@ -3668,7 +3668,7 @@ function normalizeWikiLinks(line: string, objectTitleByID: Record<string, string
     const [target, label] = raw.split("|").map((part) => part.trim());
     if (!target) return "";
     const title = label || objectTitleByID[target] || target;
-    return `[${escapeMarkdownAlt(title)}](#mmx-object:${encodeURIComponent(target)})`;
+    return `[${escapeMarkdownAlt(title)}](#memex-object:${encodeURIComponent(target)})`;
   });
 }
 
@@ -3738,8 +3738,8 @@ function splitStructuredLine(line: string): [string, string] {
 }
 
 function objectIDFromInternalHref(href: string | undefined) {
-  if (!href?.startsWith("#mmx-object:")) return "";
-  return decodeURIComponent(href.slice("#mmx-object:".length));
+  if (!href?.startsWith("#memex-object:")) return "";
+  return decodeURIComponent(href.slice("#memex-object:".length));
 }
 
 function isExternalHref(href: string | undefined) {

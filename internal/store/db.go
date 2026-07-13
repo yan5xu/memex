@@ -10,7 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const DBPath = ".mmx/mmx.db"
+const DBPath = ".memex/memex.db"
 
 type Store struct {
 	DB   *sql.DB
@@ -43,7 +43,7 @@ func Init(root string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".mmx"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".memex"), 0755); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Join(root, "bodies"), 0755); err != nil {

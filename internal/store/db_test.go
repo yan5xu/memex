@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestInitUsesMMXStoragePath(t *testing.T) {
-	if DBPath != ".mmx/mmx.db" {
+func TestInitUsesMemexStoragePath(t *testing.T) {
+	if DBPath != ".memex/memex.db" {
 		t.Fatalf("unexpected database path %q", DBPath)
 	}
 	root := t.TempDir()

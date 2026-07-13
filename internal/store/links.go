@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yan5xu/mmx/internal/domain"
-	"github.com/yan5xu/mmx/internal/markdown"
+	"github.com/yan5xu/memex/internal/domain"
+	"github.com/yan5xu/memex/internal/markdown"
 )
 
 func (s *Store) RefreshBody(id string) error {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yan5xu/mmx/internal/domain"
+	"github.com/yan5xu/memex/internal/domain"
 )
 
 func fieldID(typeID, name string) string {

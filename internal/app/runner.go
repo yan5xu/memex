@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yan5xu/mmx/internal/domain"
-	"github.com/yan5xu/mmx/internal/store"
+	"github.com/yan5xu/memex/internal/domain"
+	"github.com/yan5xu/memex/internal/store"
 )
 
 type Runner struct {
@@ -599,7 +599,7 @@ func (r *Runner) runGraphViews(args []string) Result {
 }
 
 func (r *Runner) readGraphViewConfig() (graphViewConfig, error) {
-	path := filepath.Join(r.Root, "mmx.graph-views.json")
+	path := filepath.Join(r.Root, "memex.graph-views.json")
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return graphViewConfig{Version: 1, Views: []graphView{}}, nil
@@ -623,8 +623,8 @@ func (r *Runner) writeGraphViewConfig(config graphViewConfig) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	path := filepath.Join(r.Root, "mmx.graph-views.json")
-	tmp, err := os.CreateTemp(r.Root, ".mmx.graph-views-*.json")
+	path := filepath.Join(r.Root, "memex.graph-views.json")
+	tmp, err := os.CreateTemp(r.Root, ".memex.graph-views-*.json")
 	if err != nil {
 		return err
 	}

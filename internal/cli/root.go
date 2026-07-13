@@ -11,10 +11,10 @@ import (
 
 	"github.com/itchyny/gojq"
 	"github.com/spf13/cobra"
-	"github.com/yan5xu/mmx/internal/app"
-	"github.com/yan5xu/mmx/internal/domain"
-	"github.com/yan5xu/mmx/internal/store"
-	"github.com/yan5xu/mmx/internal/web"
+	"github.com/yan5xu/memex/internal/app"
+	"github.com/yan5xu/memex/internal/domain"
+	"github.com/yan5xu/memex/internal/store"
+	"github.com/yan5xu/memex/internal/web"
 )
 
 var rootDir = "."

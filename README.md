@@ -41,7 +41,7 @@ Agent   <->  CLI / JSON API / files
 - **Separate facts from narrative:** Keep queryable properties in SQLite and longer explanation, evidence, and judgment in Markdown.
 - **Use multiple views:** Browse the same vault as tables, object pages, backlinks, and interactive graphs.
 - **Configure graph projections:** Define path queries, node presentation, and bridge contraction in a Git-friendly JSON file.
-- **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.mmx`.
+- **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.memex`.
 - **Validate continuously:** Detect invalid fields, broken references, stale body links, and other integrity problems before committing a vault.
 
 ## Who Is It For
@@ -143,7 +143,7 @@ Memex does not create a separate dataset for every interface.
 - **Object page:** Read fields, Markdown, links, backlinks, and a local relationship graph together.
 - **Graph:** Explore either the whole vault or a configured question such as `investor <- investment -> company`.
 
-Graph Views live in `mmx.graph-views.json`. Agents can edit this file directly, validate it, and execute a view without opening the browser. Version 2 views can combine multiple paths, choose which fields appear on nodes, and contract intermediate objects into derived edges.
+Graph Views live in `memex.graph-views.json`. Agents can edit this file directly, validate it, and execute a view without opening the browser. Version 2 views can combine multiple paths, choose which fields appear on nodes, and contract intermediate objects into derived edges.
 
 ```sh
 mmx -C /path/to/vault graph view validate
@@ -218,7 +218,7 @@ curl -F 'vault=/path/to/vault' \
   http://127.0.0.1:8766/api/assets
 ```
 
-For browser automation and UI development, `window.mmx` exposes navigation, state inspection, graph operations, editing, and other high-level actions without requiring an agent to reproduce low-level click sequences.
+For browser automation and UI development, `window.memex` exposes navigation, state inspection, graph operations, editing, and other high-level actions without requiring an agent to reproduce low-level click sequences.
 
 ## Product Boundary
 
@@ -231,7 +231,7 @@ Memex also does not replace a general Markdown editor or attempt to infer every 
 - **Core:** Go, Cobra, `database/sql`, and `modernc.org/sqlite`
 - **Web:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui primitives, TanStack, and React Flow
 - **Storage:** SQLite object model plus Markdown bodies and local assets
-- **Interfaces:** CLI, local JSON API, Web UI, and `window.mmx` browser automation
+- **Interfaces:** CLI, local JSON API, Web UI, and `window.memex` browser automation
 
 The Web UI and CLI share the same internal command runner through `POST /api/run`.
 
