@@ -1,174 +1,263 @@
-# mbase
+# Memex
 
-Local-first object graph base for people and agents.
+> **Build a shared world model without giving up Markdown.**
 
-## Concept
+**A local-first, typed knowledge workspace for people and agents.**
 
-`mbase` stores structured objects in SQLite and keeps each object's narrative body in Markdown.
+Memex gives people and agents one place to build durable knowledge together.
 
-- `Type`: object model and relation capability.
-- `Field`: typed attribute on a type.
-- `Object`: an instance of a type.
-- `Field link`: a strong relation asserted by a `ref` or `ref_list` field.
-- `Body link`: a weak mention parsed from Markdown `[[object.id]]`.
-- `Body`: Markdown narrative for human reading and open editing.
+People can read and write rich Markdown in the Web UI or their editor. Agents can create, query, link, and validate the same knowledge through a deterministic CLI and JSON API. Schema makes the knowledge queryable; links make it reusable; Markdown keeps it expressive and open.
 
-The same data is exposed as:
+> **Schema says what a thing is. Links place it in the model. Markdown explains why it matters.**
 
-- table view: objects by type
-- page view: object fields + Markdown body + links
-- graph view: field links and body links
+[Why Memex](#why-memex) · [Core model](#the-core-model) · [Get started](#quick-start) · [Documentation](#documentation)
 
-## Stack
+> **Naming migration:** Memex is the product name. The canonical CLI will become `mmx`. The current executable remains `mbase` until that migration is implemented, after which `mbase` will remain temporarily as a compatibility link.
 
-- Go, Cobra, `database/sql`, `modernc.org/sqlite`, `net/http`
-- Vite, React, TypeScript, Tailwind, shadcn-style components, React Flow
-- Web UI calls `POST /api/run`, which invokes the same internal command runner as the CLI. `POST /_mbase/run` is kept as a compatibility alias.
+## What Is Memex
 
-## Commands
+Memex is a local-first knowledge system in which every thing can be modeled as a typed object, every durable relationship can be made explicit, and every object can carry a Markdown body for narrative context.
 
-For a complete user manual, see [docs/usage-guide.md](docs/usage-guide.md).
+A company can link to its founders and sources. A research note can link to the evidence behind a judgment. An investor can be viewed through its investments without exposing every intermediate record. The same vault can then appear as a table, an object page, or a purpose-built graph.
 
-```bash
-mbase init
-mbase serve
-mbase status
-mbase vault info
+Memex is not just a Markdown folder with generated pages, and it is not a database that forces all knowledge into rows and columns. It keeps structured facts and long-form understanding in their natural forms while giving both a shared identity and link model.
 
-mbase create <type> <id> title="..." field=value
-mbase create <type> <id> --body ./note.md title="..."
-printf '# Title\n\nBody\n' | mbase create <type> <id> --body-stdin title="..."
-mbase get <id>
-mbase get <id> --json object,links,backlinks
-mbase get <id> --json object,body_preview --body-preview 400
-mbase get <id> --json object,body_abs_path --jq '.body_abs_path'
-mbase set <id> <field> <value>
-mbase link <id> <field> <target-id>
-mbase delete <id> --yes
-mbase query <type> --select title,related --where "title contains Wiki"
+The name follows Vannevar Bush's Memex: a system for extending memory through stored knowledge and associative trails. This project makes that idea operational for a world in which people and agents maintain the same knowledge space.
 
-mbase type list
-mbase type show <type>
-mbase type create <type>
-
-mbase field list <type>
-mbase field list <type> --json
-mbase field add <type> <field> --kind text|number|boolean|date|url|enum|list|ref|ref_list
-mbase field add concept related --kind ref_list --target concept
-mbase field add source.article judged --kind enum --values pending,keep,kill,deep
-
-mbase object create <type> --id <id> --field title="..."
-mbase object get <id>
-mbase object list --type <type>
-mbase object set <id> <field> <value>
-mbase object link <id> <field> <target-id>
-mbase object unlink <id> <field> <target-id>
-
-mbase links <id>
-mbase backlinks <id>
-mbase graph export
-mbase graph views
-cat mbase.graph-views.json | mbase graph views write --stdin
-
-mbase body path <id>
-mbase body refresh <id>
-printf '\nMore notes\n' | mbase body append <id> --stdin
-printf '# Replacement\n' | mbase body write <id> --stdin
-mbase asset import ./screenshot.png --name company-demo.png
-mbase refresh
-mbase issues
-mbase doctor
+```text
+Person  <->  Web UI / Markdown editor
+                    |
+          Memex Vault
+      Objects + Links + Bodies
+                    |
+Agent   <->  CLI / JSON API / files
 ```
 
-Daily CLI commands print human-readable summaries by default. Add `--json` for agent/script output. `--json` alone preserves the full command result envelope; `--json field,field` selects fields from the result data, similar to `gh`. Add `--jq <expr>` to filter selected JSON without requiring the system `jq` binary. `mbase delete <id> --yes` removes the object from SQLite and keeps its Markdown body file on disk. Web API requests always return JSON and can pass a `vault` path:
+## What You Can Do Today
 
-```json
-{"vault":"/path/to/vault","argv":["query","concept"]}
+- **Model a domain:** Define Types and typed Fields, including enums, lists, dates, URLs, references, and reference lists.
+- **Work with objects:** Create, update, query, link, delete, and inspect objects from the CLI or Web UI.
+- **Write real documents:** Give every object a Markdown body with tables, images, diagrams, code, footnotes, and `[[object.id]]` links.
+- **Separate facts from narrative:** Keep queryable properties in SQLite and longer explanation, evidence, and judgment in Markdown.
+- **Use multiple views:** Browse the same vault as tables, object pages, backlinks, and interactive graphs.
+- **Configure graph projections:** Define path queries, node presentation, and bridge contraction in a Git-friendly JSON file.
+- **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.mbase`.
+- **Validate continuously:** Detect invalid fields, broken references, stale body links, and other integrity problems before committing a vault.
+
+## Who Is It For
+
+### People Who Think in Models
+
+Memex is for people who do not want knowledge to remain a pile of pages. They want concepts, companies, people, evidence, decisions, projects, or any other domain object to have a clear identity, a reusable schema, and explicit relationships.
+
+### People Working with Agents
+
+Agents need more than prose retrieval. They need stable IDs, discoverable schemas, exact queries, predictable writes, and machine-readable results. People still need context, visual reading, flexible writing, and the freedom to edit files directly. Memex gives both sides the same underlying objects without forcing them into the same interface.
+
+## Why Memex
+
+### Markdown Is Open but Underspecified
+
+Markdown is durable, portable, and easy for people and agents to edit. But a folder of Markdown files does not by itself answer basic modeling questions:
+
+- Is this page a company, a source, a person, or a decision?
+- Which fields are valid, required, or queryable?
+- Does a link mean ownership, evidence, authorship, investment, or a passing mention?
+- How can a table or graph be derived consistently from the same content?
+
+### A Database Is Queryable but Not Enough
+
+A database is good at identity, constraints, relations, and filtering. It is a poor home for evolving explanations, research reports, screenshots, code examples, and editorial structure. Moving the entire object into JSON or SQL makes writing less natural and direct file access less useful.
+
+Memex therefore uses two complementary forms:
+
+| Form | Owns | Best for |
+|---|---|---|
+| SQLite | Identity, type, fields, links, timestamps, integrity | Querying, constraints, automation, views |
+| Markdown | Narrative body and embedded media | Reading, writing, evidence, explanation |
+
+Neither is a cache of the other. Together they form one object.
+
+### People and Agents Need a Shared Contract
+
+The Web UI is optimized for reading, editing, filtering, and visual exploration. The CLI is optimized for exact operations and agent workflows. Both use the same application runner and the same vault, so a change made through one interface is immediately part of the same model seen by the other.
+
+> **People shape understanding through pages; agents operate the model through objects.**
+
+## The Core Model
+
+| Concept | Meaning |
+|---|---|
+| **Vault** | A local Memex workspace containing its database, bodies, assets, and view configuration. |
+| **Type** | The schema and relation capabilities of a class of objects. |
+| **Field** | A typed property declared on a Type. |
+| **Object** | A stable instance with an ID, Type, title, fields, and body. |
+| **Body** | The object's Markdown narrative, stored as a normal file. |
+| **Link** | A typed relation or a body mention between objects. |
+| **View** | A table, page, or graph projection over the same underlying objects. |
+
+### Three Layers of Links
+
+Memex distinguishes three things that are often collapsed into one vague notion of a link:
+
+1. **Link definition:** A Type declares a `ref` or `ref_list` Field and the Type it may target.
+2. **Field link:** An Object assigns another object ID to that Field, asserting a durable, typed relation.
+3. **Body link:** Markdown contains `[[object.id]]` or `[[object.id|label]]`, recording a contextual mention.
+
+This distinction lets a graph separate modeled relationships from narrative associations. A person's `founder_of` relation is not treated the same as a passing mention in a research note, even though both remain navigable.
+
+## One Vault, Different Ways to Work
+
+### Human Workflow
+
+A person typically starts from an object page, reads the Markdown body, follows links, edits the document, uploads images, filters a table, or opens a graph around the current object. The interface stays local and single-user; there is no account or cloud workspace model.
+
+### Agent Workflow
+
+An agent inspects the schema, checks for an existing object, writes structured fields and a body in one operation, links evidence, refreshes body mentions, and runs integrity checks:
+
+```sh
+mbase -C /path/to/vault field list company
+mbase -C /path/to/vault query company --where 'title = "Example"'
+
+cat <<'MD' | mbase -C /path/to/vault upsert company company.example \
+  name="Example" \
+  status=active \
+  --body-stdin
+# Example
+
+Example is supported by [[source.example-home]].
+MD
+
+mbase -C /path/to/vault body refresh company.example
+mbase -C /path/to/vault issues
 ```
 
-Web body editing uses the same runner for Markdown saves and a dedicated multipart endpoint for binary assets:
+Direct Markdown editing remains supported. After editing body files outside Memex, run `body refresh <id>` or `refresh` so body links and the local index reflect the files on disk.
 
-```bash
-curl -F 'vault=/path/to/vault' -F 'file=@./screenshot.png' http://127.0.0.1:8766/api/assets
+## Views Are Projections, Not Copies
+
+Memex does not create a separate dataset for every interface.
+
+- **Table:** Compare objects of one Type, sort fields, and build filters visually.
+- **Object page:** Read fields, Markdown, links, backlinks, and a local relationship graph together.
+- **Graph:** Explore either the whole vault or a configured question such as `investor <- investment -> company`.
+
+Graph Views live in `mbase.graph-views.json`. Agents can edit this file directly, validate it, and execute a view without opening the browser. Version 2 views can combine multiple paths, choose which fields appear on nodes, and contract intermediate objects into derived edges.
+
+```sh
+mbase -C /path/to/vault graph view validate
+mbase -C /path/to/vault graph query \
+  --view portfolio \
+  --center investor.example \
+  --json nodes,edges,stats
 ```
 
-Graph Viewer reads configurable views from `mbase.graph-views.json` in the vault root. The file is the source of truth for the CLI, Web UI, agents, and Git history. Version 1 path-only views remain supported; version 2 adds multiple paths, node presentation, and bridge contraction:
+The file is suitable for Git, review, reuse, and agent-generated changes. It remains the source of truth for both the CLI and Web UI.
+
+## Quick Start
+
+Build the current CLI:
+
+```sh
+cd /path/to/mbase
+go build -o mbase ./cmd/mbase
+```
+
+Create a vault and its first linked objects:
+
+```sh
+VAULT=/tmp/memex-demo
+
+./mbase -C "$VAULT" init
+./mbase -C "$VAULT" type create concept
+./mbase -C "$VAULT" field add concept title --kind text --required
+./mbase -C "$VAULT" field add concept related --kind ref_list --target concept
+
+./mbase -C "$VAULT" create concept concept.rag title="Retrieval-augmented generation"
+printf '# Memex\n\nDifferent from [[concept.rag]].\n' | \
+  ./mbase -C "$VAULT" create concept concept.memex title="Memex" --body-stdin
+./mbase -C "$VAULT" link concept.memex related concept.rag
+./mbase -C "$VAULT" body refresh concept.memex
+./mbase -C "$VAULT" issues
+```
+
+Start the local Web UI:
+
+```sh
+./mbase serve --addr 127.0.0.1:8766
+```
+
+Open <http://127.0.0.1:8766> and select `/tmp/memex-demo` as the current vault.
+
+## Agent and API Surfaces
+
+Human-readable output is the CLI default. Agents and scripts can request the full result envelope, select fields, and apply a `jq`-style expression without depending on a system `jq` binary:
+
+```sh
+mbase -C /path/to/vault get company.example --json
+mbase -C /path/to/vault get company.example \
+  --json object,body_abs_path,links,backlinks \
+  --jq '.body_abs_path'
+```
+
+The Web UI calls the same internal runner through `POST /api/run`:
 
 ```json
 {
-  "version": 2,
-  "views": [
-    {
-      "id": "portfolio",
-      "label": "Portfolio",
-      "root_type": "investor",
-      "paths": [{
-        "steps": [
-          { "direction": "in", "relation": "investor", "target_type": "investment", "display": "bridge" },
-          { "direction": "out", "relation": "company", "target_type": "company" }
-        ]
-      }],
-      "nodes": {
-        "company": {
-          "title_field": "name",
-          "subtitle_field": "one_liner",
-          "meta_fields": ["status", "batch"]
-        }
-      },
-      "bridges": {
-        "investment": {
-          "label_fields": ["round", "amount_text", "announced_at"],
-          "aggregate": true
-        }
-      }
-    }
-  ]
+  "vault": "/path/to/vault",
+  "argv": ["query", "company", "--where", "status=active"]
 }
 ```
 
-Agents can edit the file directly, then validate and execute it without opening the browser:
+Binary assets use a dedicated multipart endpoint because file upload is not naturally represented as command JSON:
 
-```bash
-mbase graph view validate
-mbase graph view apply --file ./draft-graph-views.json
-mbase graph query --view portfolio --center investor.example --json
+```sh
+curl -F 'vault=/path/to/vault' \
+  -F 'file=@./screenshot.png' \
+  http://127.0.0.1:8766/api/assets
 ```
+
+For browser automation and UI development, `window.mbase` exposes navigation, state inspection, graph operations, editing, and other high-level actions without requiring an agent to reproduce low-level click sequences.
+
+## Product Boundary
+
+Memex is local-first and single-user. It does not currently provide cloud hosting, accounts, permissions, or real-time multi-user collaboration. Git can version a vault as local files, while Markdown bodies and JSON view configuration remain directly reviewable; Memex itself remains responsible for object integrity and indexes.
+
+Memex also does not replace a general Markdown editor or attempt to infer every relation automatically. People and agents decide which concepts deserve stable identity, which facts belong in fields, and which relationships should become explicit. Automation helps maintain the model, but the model remains inspectable and editable.
+
+## Architecture
+
+- **Core:** Go, Cobra, `database/sql`, and `modernc.org/sqlite`
+- **Web:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui primitives, TanStack, and React Flow
+- **Storage:** SQLite object model plus Markdown bodies and local assets
+- **Interfaces:** CLI, local JSON API, Web UI, and `window.mbase` browser automation
+
+The Web UI and CLI share the same internal command runner. `POST /_mbase/run` remains a compatibility alias for `POST /api/run`.
 
 ## Development
 
-Build frontend assets:
+Build and verify the frontend:
 
-```bash
+```sh
 cd web
 npm install
 npm run build
 ```
 
-Build the CLI:
+Build and verify the Go application:
 
-```bash
-go build ./cmd/mbase
+```sh
+go test ./...
+go build ./...
 ```
 
-Quick fixture:
+## Documentation
 
-```bash
-FIXTURE=/tmp/mbase-fixture
-rm -rf "$FIXTURE"
-mkdir -p "$FIXTURE"
+- [Complete usage guide](docs/usage-guide.md)
+- [Markdown rendering lab](docs/markdown-render-lab.md)
+- [YC modeling field notes](docs/yc-modeling-field-notes.md)
 
-./mbase -C "$FIXTURE" init --json
-./mbase -C "$FIXTURE" type create concept --json
-./mbase -C "$FIXTURE" field add concept title --kind text --required --json
-./mbase -C "$FIXTURE" field add concept related --kind ref_list --target concept --json
+## Project Status
 
-./mbase -C "$FIXTURE" create concept concept.rag title=RAG
-./mbase -C "$FIXTURE" create concept concept.llm-wiki title="LLM Wiki"
-./mbase -C "$FIXTURE" link concept.llm-wiki related concept.rag
-
-printf '# LLM Wiki\n\nDifferent from [[concept.rag]].\n' > "$FIXTURE/bodies/concept.llm-wiki.md"
-./mbase -C "$FIXTURE" body refresh concept.llm-wiki
-./mbase -C "$FIXTURE" get concept.llm-wiki
-./mbase -C "$FIXTURE" query concept --select title,related
-./mbase -C "$FIXTURE" graph export --json
-```
+Memex is under active development. The object model, Markdown body workflow, CLI/API runner, table and object views, configurable Graph Views, and local Web UI are usable today. Naming is being migrated from `mbase` to Memex with `mmx` as the future canonical CLI; vault storage paths and compatibility behavior will be migrated separately and explicitly.
