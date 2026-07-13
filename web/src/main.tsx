@@ -28,6 +28,7 @@ import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
+import { Checkbox } from "./components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
@@ -139,6 +140,14 @@ type GraphWorkspaceAutomationState = {
   visibleCenterIDs: string[];
   previewOpen: boolean;
   previewObjectID: string | null;
+  configVersion: number;
+  configError: string | null;
+  projectedNodesCount: number;
+  projectedEdgesCount: number;
+  derivedEdgesCount: number;
+  editorOpen: boolean;
+  editorID: string;
+  selectedEdge: { fromID: string; toID: string } | null;
 };
 
 type GraphWorkspaceAutomationController = {
@@ -147,6 +156,13 @@ type GraphWorkspaceAutomationController = {
   previewNode: (id: string) => Promise<GraphWorkspaceAutomationState>;
   closePreview: () => Promise<GraphWorkspaceAutomationState>;
   setCenterFromNode: (id: string) => Promise<GraphWorkspaceAutomationState>;
+  reloadViews: () => Promise<GraphWorkspaceAutomationState>;
+  queryView: (viewID: string, centerID: string) => Promise<GraphWorkspaceAutomationState>;
+  configure: (open?: boolean) => Promise<GraphWorkspaceAutomationState>;
+  setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState>;
+  saveView: () => Promise<GraphWorkspaceAutomationState>;
+  deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState>;
+  selectEdge: (fromID: string, toID: string) => Promise<GraphWorkspaceAutomationState>;
 };
 
 const queryClient = new QueryClient({
@@ -399,6 +415,13 @@ declare global {
         previewNode: (id: string) => Promise<GraphWorkspaceAutomationState | null>;
         closePreview: () => Promise<GraphWorkspaceAutomationState | null>;
         setCenterFromNode: (id: string) => Promise<GraphWorkspaceAutomationState | null>;
+        reloadViews: () => Promise<GraphWorkspaceAutomationState | null>;
+        queryView: (viewID: string, centerID: string) => Promise<GraphWorkspaceAutomationState | null>;
+        configure: (open?: boolean) => Promise<GraphWorkspaceAutomationState | null>;
+        setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState | null>;
+        saveView: () => Promise<GraphWorkspaceAutomationState | null>;
+        deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState | null>;
+        selectEdge: (fromID: string, toID: string) => Promise<GraphWorkspaceAutomationState | null>;
       };
       openHealth: () => Promise<AutomationSnapshot>;
       relationGraph: {
@@ -967,9 +990,17 @@ function App() {
           activeCenterID: activeGraphCenterID || null,
           fullMap: activeGraphViewID === fullGraphViewID,
           centerSearch: "",
-          visibleCenterIDs: [],
-          previewOpen: false,
-          previewObjectID: null
+        visibleCenterIDs: [],
+        previewOpen: false,
+        previewObjectID: null,
+        configVersion: 1,
+        configError: null,
+          projectedNodesCount: 0,
+          projectedEdgesCount: 0,
+          derivedEdgesCount: 0,
+          editorOpen: false,
+          editorID: "",
+          selectedEdge: null
         }),
         setView: async (id: string) => {
           setGraphWorkspaceSelection({ viewID: id, centerID: "" });
@@ -1001,7 +1032,14 @@ function App() {
         searchCenter: (query: string) => graphWorkspaceCall((controller) => controller.searchCenter(query)),
         previewNode: (id: string) => graphWorkspaceCall((controller) => controller.previewNode(id)),
         closePreview: () => graphWorkspaceCall((controller) => controller.closePreview()),
-        setCenterFromNode: (id: string) => graphWorkspaceCall((controller) => controller.setCenterFromNode(id))
+        setCenterFromNode: (id: string) => graphWorkspaceCall((controller) => controller.setCenterFromNode(id)),
+        reloadViews: () => graphWorkspaceCall((controller) => controller.reloadViews()),
+        queryView: (viewID: string, centerID: string) => graphWorkspaceCall((controller) => controller.queryView(viewID, centerID)),
+        configure: (open?: boolean) => graphWorkspaceCall((controller) => controller.configure(open)),
+        setEditor: (patch) => graphWorkspaceCall((controller) => controller.setEditor(patch)),
+        saveView: () => graphWorkspaceCall((controller) => controller.saveView()),
+        deleteView: (id?: string) => graphWorkspaceCall((controller) => controller.deleteView(id)),
+        selectEdge: (fromID: string, toID: string) => graphWorkspaceCall((controller) => controller.selectEdge(fromID, toID))
       },
       openHealth: async () => {
         setView("health");
@@ -1238,6 +1276,7 @@ function App() {
         {view === "graph" && (
           <GraphWorkspacePage
             graph={graph}
+            types={types}
             vault={vault}
             activeViewID={activeGraphViewID}
             activeCenterID={activeGraphCenterID}
@@ -1299,6 +1338,7 @@ function App() {
 
 function GraphWorkspacePage({
   graph,
+  types,
   vault,
   activeViewID,
   activeCenterID,
@@ -1308,6 +1348,7 @@ function GraphWorkspacePage({
   fullGraph
 }: {
   graph: GraphData;
+  types: TypeDef[];
   vault: string;
   activeViewID: string;
   activeCenterID: string;
@@ -1338,12 +1379,18 @@ function GraphWorkspacePage({
   const [editorLabel, setEditorLabel] = useState("");
   const [editorRootType, setEditorRootType] = useState("");
   const [editorSteps, setEditorSteps] = useState("");
+  const [editorNodes, setEditorNodes] = useState<Record<string, GraphNodeTemplate>>({});
+  const [editorBridges, setEditorBridges] = useState<Record<string, GraphBridgeConfig>>({});
   const [centerSearch, setCenterSearch] = useState("");
   const [centerPickerOpen, setCenterPickerOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewObject, setPreviewObject] = useState<Obj | null>(null);
   const [previewBody, setPreviewBody] = useState("");
+  const [projectedResult, setProjectedResult] = useState<ProjectedGraphResult | null>(null);
+  const [queryLoading, setQueryLoading] = useState(false);
+  const [configError, setConfigError] = useState("");
+  const [selectedProjectedEdge, setSelectedProjectedEdge] = useState<ProjectedGraphEdge | null>(null);
   const clickTimerRef = useRef<number | null>(null);
   const configuredViews = viewConfig.views;
   const activeDefinition = configuredViews.find((view) => view.id === activeViewID) ?? configuredViews[0] ?? null;
@@ -1367,14 +1414,12 @@ function GraphWorkspacePage({
   const centerSelectOptions = useMemo(() => {
     return filteredCenterCandidates;
   }, [filteredCenterCandidates]);
-  const activeTemplate = activeDefinition ? graphViewDefinitionToTemplate(activeDefinition, activeDefinition.root_type) : null;
-  const queryGraph = useMemo(() => {
-    if (!centerObject || !activeTemplate) return null;
-    return buildInspectorQueryGraph(centerObject, graph.nodes, graph.edges, activeTemplate, []);
-  }, [centerObject, activeTemplate, graph.nodes, graph.edges]);
+  const queryGraph = useMemo(() => projectedResult ? buildProjectedRelationGraph(projectedResult) : null, [projectedResult]);
   const queryNodes = queryGraph ? [queryGraph.focus, ...queryGraph.incoming, ...queryGraph.outgoing] : [];
   const queryGroups = queryGraph ? relationGraphGroups(queryGraph, queryNodes) : [];
   const rootTypes = useMemo(() => graphTypeOrder([...new Set(graph.nodes.map((node) => node.type_id))]), [graph.nodes]);
+  const editorParsedSteps = useMemo(() => parseRelationStepsText(editorSteps).steps, [editorSteps]);
+  const editorTypeIDs = useMemo(() => [...new Set([editorRootType, ...editorParsedSteps.map((step) => step.targetType || "")].filter(Boolean))], [editorRootType, editorParsedSteps]);
   const previewTitleByID = useMemo(() => buildObjectTitleByID(previewObject, [], graph.nodes), [previewObject, graph.nodes]);
 
   function graphWorkspaceState(): GraphWorkspaceAutomationState {
@@ -1385,7 +1430,51 @@ function GraphWorkspacePage({
       centerSearch,
       visibleCenterIDs: centerSelectOptions.map((object) => object.id),
       previewOpen,
-      previewObjectID: previewObject?.id ?? null
+      previewObjectID: previewObject?.id ?? null,
+      configVersion: viewConfig.version,
+      configError: configError || null,
+      projectedNodesCount: projectedResult?.stats.nodes ?? 0,
+      projectedEdgesCount: projectedResult?.stats.edges ?? 0,
+      derivedEdgesCount: projectedResult?.stats.derived_edges ?? 0,
+      editorOpen,
+      editorID,
+      selectedEdge: selectedProjectedEdge ? { fromID: selectedProjectedEdge.from_id, toID: selectedProjectedEdge.to_id } : null
+    };
+  }
+
+  async function reloadGraphViews() {
+    const result = await run<GraphViewConfig>(["graph", "views"], vault);
+    if (!result.ok || !result.data) {
+      const message = result.error?.message || t("graph.loadConfigFailed");
+      setConfigError(message);
+      return { ...graphWorkspaceState(), configError: message };
+    }
+    const normalized = normalizeGraphViewConfigForUI(result.data);
+    setViewConfig((current) => graphViewConfigEqual(current, normalized) ? current : normalized);
+    setConfigError("");
+    return { ...graphWorkspaceState(), configVersion: normalized.version, configError: null };
+  }
+
+  async function queryConfiguredView(viewID: string, centerID: string) {
+    setQueryLoading(true);
+    const result = await run<ProjectedGraphResult>(["graph", "query", "--view", viewID, "--center", centerID], vault);
+    setQueryLoading(false);
+    if (!result.ok || !result.data) {
+      const message = result.error?.message || t("graph.queryFailed");
+      setConfigError(message);
+      toast.error(message);
+      return { ...graphWorkspaceState(), configError: message };
+    }
+    setProjectedResult(result.data);
+    setConfigError("");
+    setSelectedProjectedEdge(null);
+    return {
+      ...graphWorkspaceState(),
+      activeViewID: viewID,
+      activeCenterID: centerID,
+      projectedNodesCount: result.data.stats.nodes,
+      projectedEdgesCount: result.data.stats.edges,
+      derivedEdgesCount: result.data.stats.derived_edges
     };
   }
 
@@ -1465,16 +1554,32 @@ function GraphWorkspacePage({
     setConfigLoading(true);
     run<GraphViewConfig>(["graph", "views"], vault).then((result) => {
       if (cancelled) return;
+      if (!result.ok || !result.data) {
+        setConfigError(result.error?.message || t("graph.loadConfigFailed"));
+        return;
+      }
       setViewConfig(normalizeGraphViewConfigForUI(result.data));
+      setConfigError("");
     }).catch(() => {
-      if (!cancelled) setViewConfig({ version: 1, views: [] });
+      if (!cancelled) setConfigError(t("graph.loadConfigFailed"));
     }).finally(() => {
       if (!cancelled) setConfigLoading(false);
     });
+
+    const poll = window.setInterval(() => void reloadGraphViews(), 2000);
     return () => {
       cancelled = true;
+      window.clearInterval(poll);
     };
   }, [vault]);
+
+  useEffect(() => {
+    if (showingFullGraph || !activeDefinition || !centerObject) {
+      setProjectedResult(null);
+      return;
+    }
+    void queryConfiguredView(activeDefinition.id, centerObject.id);
+  }, [showingFullGraph, activeDefinition?.id, centerObject?.id, viewConfig]);
 
   useEffect(() => {
     if (activeViewID || configuredViews.length === 0) return;
@@ -1506,7 +1611,41 @@ function GraphWorkspacePage({
         await nextFrame();
         return { ...graphWorkspaceState(), previewOpen: false };
       },
-      setCenterFromNode
+      setCenterFromNode,
+      reloadViews: reloadGraphViews,
+      queryView: async (viewID: string, centerID: string) => {
+        const view = configuredViews.find((candidate) => candidate.id === viewID);
+        if (!view) throw new Error(`unknown graph view: ${viewID}`);
+        const center = graph.nodes.find((candidate) => candidate.id === centerID);
+        if (!center) throw new Error(`unknown graph center: ${centerID}`);
+        if (center.type_id !== view.root_type) throw new Error(`center ${centerID} is ${center.type_id}, expected ${view.root_type}`);
+        setSelection({ viewID, centerID });
+        return queryConfiguredView(viewID, centerID);
+      },
+      configure: async (open = true) => {
+        if (open) openEditor(); else setEditorOpen(false);
+        await nextFrame();
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), editorOpen: open };
+      },
+      setEditor: async (patch) => {
+        if (patch.id !== undefined) setEditorID(patch.id);
+        if (patch.label !== undefined) setEditorLabel(patch.label);
+        if (patch.rootType !== undefined) setEditorRootType(patch.rootType);
+        if (patch.steps !== undefined) setEditorSteps(patch.steps);
+        if (patch.nodes !== undefined) setEditorNodes(patch.nodes);
+        if (patch.bridges !== undefined) setEditorBridges(patch.bridges);
+        await nextFrame();
+        return automationRef.current?.state() ?? graphWorkspaceState();
+      },
+      saveView: saveGraphView,
+      deleteView: deleteGraphView,
+      selectEdge: async (fromID: string, toID: string) => {
+        const edge = projectedResult?.edges.find((candidate) => candidate.from_id === fromID && candidate.to_id === toID);
+        if (!edge) throw new Error(`projected edge not found: ${fromID} -> ${toID}`);
+        setSelectedProjectedEdge(edge);
+        await nextFrame();
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), selectedEdge: { fromID, toID } };
+      }
     };
     return () => {
       if (automationRef.current?.state === graphWorkspaceState) automationRef.current = null;
@@ -1520,11 +1659,27 @@ function GraphWorkspacePage({
   }, []);
 
   function openEditor(source = activeDefinition) {
+    const sourceSteps = source ? graphViewPrimarySteps(source) : [];
     setEditorID(source?.id ?? slugifyGraphViewLabel(`${rootTypes[0] || "object"} view`));
     setEditorLabel(source?.label ?? `${rootTypes[0] || "object"} view`);
     setEditorRootType(source?.root_type ?? rootTypes[0] ?? "");
-    setEditorSteps(source ? relationStepsToText(source.steps.map((step) => ({ relation: step.relation, direction: step.direction, targetType: step.target_type }))) : "");
+    setEditorSteps(relationStepsToText(sourceSteps.map((step) => ({ relation: step.relation, direction: step.direction, targetType: step.target_type }))));
+    setEditorNodes(source?.nodes ?? {});
+    setEditorBridges(source?.bridges ?? {});
     setEditorOpen(true);
+  }
+
+  function updateEditorNode(typeID: string, patch: Partial<GraphNodeTemplate>) {
+    setEditorNodes((current) => ({ ...current, [typeID]: { ...(current[typeID] ?? {}), ...patch } }));
+  }
+
+  function toggleEditorBridge(typeID: string, enabled: boolean) {
+    setEditorBridges((current) => {
+      if (enabled) return { ...current, [typeID]: current[typeID] ?? { label_fields: [], aggregate: true } };
+      const next = { ...current };
+      delete next[typeID];
+      return next;
+    });
   }
 
   async function saveGraphView() {
@@ -1534,46 +1689,53 @@ function GraphWorkspacePage({
     const parsed = parseRelationStepsText(editorSteps);
     if (!id || !label || !rootType || parsed.error || parsed.steps.length === 0) {
       toast.error(parsed.error || t("graph.requiredViewFields"));
-      return;
+      return graphWorkspaceState();
     }
     const nextView: GraphViewDefinition = {
       id,
       label,
       root_type: rootType,
       description: `Follow ${relationQueryPathLabel(rootType, parsed.steps)} from the current ${rootType}`,
-      steps: parsed.steps.map((step) => ({ relation: step.relation, direction: step.direction, target_type: step.targetType }))
+      paths: [{ steps: parsed.steps.map((step) => ({ relation: step.relation, direction: step.direction, target_type: step.targetType })) }],
+      nodes: cleanGraphNodeTemplates(editorNodes),
+      bridges: cleanGraphBridgeConfigs(editorBridges)
     };
-    const nextConfig = { version: 1, views: [...viewConfig.views.filter((view) => view.id !== id), nextView] };
+    const nextConfig = { version: 2, views: [...viewConfig.views.filter((view) => view.id !== id), nextView] };
     setConfigSaving(true);
-    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    const result = await run<GraphViewConfig>(["graph", "view", "apply", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
       toast.error(result.error?.message || t("graph.saveFailed"));
-      return;
+      return graphWorkspaceState();
     }
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
-    setSelection({ viewID: id, centerID: "" }, { replace: true });
+    const nextCenterID = centerObject?.type_id === rootType ? centerObject.id : "";
+    setSelection({ viewID: id, centerID: nextCenterID }, { replace: true });
     setEditorOpen(false);
     toast.success(t("graph.viewSaved"));
+    await nextFrame();
+    return automationRef?.current?.state() ?? { ...graphWorkspaceState(), activeViewID: id, activeCenterID: nextCenterID || null, editorOpen: false };
   }
 
-  async function deleteGraphView() {
-    const id = editorID.trim() || activeDefinition?.id;
-    if (!id) return;
-    const nextConfig = { version: 1, views: viewConfig.views.filter((view) => view.id !== id) };
+  async function deleteGraphView(idOverride?: string) {
+    const id = idOverride?.trim() || editorID.trim() || activeDefinition?.id;
+    if (!id) return graphWorkspaceState();
+    const nextConfig = { version: viewConfig.version, views: viewConfig.views.filter((view) => view.id !== id) };
     setConfigSaving(true);
-    const result = await run<GraphViewConfig>(["graph", "views", "write", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    const result = await run<GraphViewConfig>(["graph", "view", "apply", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
     if (!result.ok || !result.data) {
       toast.error(result.error?.message || t("graph.deleteFailed"));
-      return;
+      return graphWorkspaceState();
     }
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
     setSelection({ viewID: normalized.views[0]?.id ?? fullGraphViewID, centerID: "" }, { replace: true });
     setEditorOpen(false);
     toast.success(t("graph.viewDeleted"));
+    await nextFrame();
+    return automationRef?.current?.state() ?? { ...graphWorkspaceState(), editorOpen: false };
   }
 
   return (
@@ -1645,6 +1807,13 @@ function GraphWorkspacePage({
         )}
       </div>
 
+      {configError && (
+        <div className="graph-config-error">
+          <span>{configError}</span>
+          <Button size="sm" variant="secondary" onClick={() => void reloadGraphViews()}>{t("graph.reloadConfig")}</Button>
+        </div>
+      )}
+
       {editorOpen && (
         <div className="graph-workspace-editor">
           <div className="graph-view-editor">
@@ -1668,6 +1837,64 @@ function GraphWorkspacePage({
               <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
             </label>
             <div className="graph-view-editor-help">{t("graph.editorHelp")} <code>in investor investment</code>, <code>out company company</code>.</div>
+            <div className="graph-presentation-editor">
+              <div className="graph-presentation-heading">
+                <span>{t("graph.nodePresentation")}</span>
+                <span>{t("graph.nodePresentationHelp")}</span>
+              </div>
+              {editorTypeIDs.map((typeID, index) => {
+                const template = editorNodes[typeID] ?? {};
+                const typeDef = types.find((candidate) => candidate.id === typeID);
+                const fieldNames = ["title", "id", ...(typeDef?.fields ?? []).map((field) => field.name)];
+                const canBridge = index > 0 && index < editorTypeIDs.length - 1;
+                const bridge = editorBridges[typeID];
+                return (
+                  <div key={typeID} className="graph-presentation-row">
+                    <div className="graph-presentation-type">
+                      <span className="graph-type-dot" style={{ background: graphTypeColor(typeID) }} />
+                      <span>{typeID}</span>
+                    </div>
+                    <label>
+                      <span>{t("graph.density")}</span>
+                      <select value={template.variant ?? "standard"} onChange={(event) => updateEditorNode(typeID, { variant: event.target.value as GraphNodeTemplate["variant"] })}>
+                        <option value="compact">{t("graph.compact")}</option>
+                        <option value="standard">{t("graph.standard")}</option>
+                        <option value="rich">{t("graph.rich")}</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t("graph.titleField")}</span>
+                      <select value={template.title_field ?? "title"} onChange={(event) => updateEditorNode(typeID, { title_field: event.target.value })}>
+                        {fieldNames.map((field) => <option key={field} value={field}>{field}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t("graph.subtitleField")}</span>
+                      <select value={template.subtitle_field ?? ""} onChange={(event) => updateEditorNode(typeID, { subtitle_field: event.target.value || undefined })}>
+                        <option value="">{t("common.none")}</option>
+                        {fieldNames.map((field) => <option key={field} value={field}>{field}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span>{t("graph.metaFields")}</span>
+                      <Input value={(template.meta_fields ?? []).join(", ")} onChange={(event) => updateEditorNode(typeID, { meta_fields: splitCommaList(event.target.value) })} placeholder="status, batch" />
+                    </label>
+                    {canBridge && (
+                      <label className="graph-bridge-toggle">
+                        <Checkbox checked={Boolean(bridge)} onCheckedChange={(checked) => toggleEditorBridge(typeID, checked === true)} />
+                        <span>{t("graph.foldIntoEdge")}</span>
+                      </label>
+                    )}
+                    {bridge && (
+                      <label className="graph-bridge-fields">
+                        <span>{t("graph.edgeLabelFields")}</span>
+                        <Input value={(bridge.label_fields ?? []).join(", ")} onChange={(event) => setEditorBridges((current) => ({ ...current, [typeID]: { ...current[typeID], label_fields: splitCommaList(event.target.value), aggregate: true } }))} placeholder="round, amount_text, announced_at" />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
             <div className="graph-view-editor-actions">
               <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
                 <Save className="size-3.5" />
@@ -1743,7 +1970,13 @@ function GraphWorkspacePage({
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
           <div className="graph-lab-canvas">
-            {queryGraph ? <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} /> : <EmptyState title={t("graph.noResultTitle")} description={centerCandidates.length === 0 ? t("graph.noTypeObjects", { type: rootType }) : t("graph.selectCenterDescription")} />}
+            {queryLoading ? (
+              <div className="graph-query-loading"><Loader2 className="size-4 animate-spin" />{t("graph.runningQuery")}</div>
+            ) : queryGraph ? (
+              <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} onEdgeClick={(edge) => setSelectedProjectedEdge(edge as ProjectedGraphEdge)} />
+            ) : (
+              <EmptyState title={t("graph.noResultTitle")} description={centerCandidates.length === 0 ? t("graph.noTypeObjects", { type: rootType }) : t("graph.selectCenterDescription")} />
+            )}
           </div>
           <aside className="graph-lab-panel">
             <Panel title={t("graph.currentView")} icon={<Play className="size-4" />}>
@@ -1754,8 +1987,25 @@ function GraphWorkspacePage({
                 <div><span className="text-foreground/80">{t("graph.source")}:</span> {configLoading ? t("graph.loadingConfig") : t("graph.vaultConfig")}</div>
                 <div><span className="text-foreground/80">{t("graph.nodes")}:</span> {queryNodes.length}</div>
                 <div><span className="text-foreground/80">{t("graph.edges")}:</span> {queryGraph?.edges.length ?? 0}</div>
+                <div><span className="text-foreground/80">{t("graph.derivedEdges")}:</span> {projectedResult?.stats.derived_edges ?? 0}</div>
               </div>
             </Panel>
+            {selectedProjectedEdge?.derived && (
+              <Panel title={t("graph.bridgeDetails")} icon={<GitBranch className="size-4" />}>
+                <div className="space-y-3">
+                  <div className="text-sm font-medium">{selectedProjectedEdge.label || selectedProjectedEdge.relation}</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{selectedProjectedEdge.from_id} → {selectedProjectedEdge.to_id}</div>
+                  <div className="space-y-1.5">
+                    {(selectedProjectedEdge.via ?? []).map((via) => (
+                      <button key={via.id} className="graph-bridge-object" onClick={() => void openMarkdownPreview(via.id)}>
+                        <span>{via.title || via.id}</span>
+                        <span>{via.type_id}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Panel>
+            )}
             <Panel title={t("graph.groups")} icon={<Braces className="size-4" />}>
               <div className="graph-lab-groups">
                 {queryGroups.map((group) => (
@@ -4277,6 +4527,7 @@ type InspectorGraphNode = {
   kind: string;
   count: number;
   direction: "incoming" | "outgoing" | "focus";
+  display?: GraphNodeDisplay;
   x: number;
   y: number;
 };
@@ -4287,6 +4538,11 @@ type InspectorGraphEdge = {
   kind: string;
   relation: string;
   count: number;
+  label?: string;
+  derived?: boolean;
+  via_ids?: string[];
+  via?: GraphBridgeDetail[];
+  relations?: string[];
 };
 
 type InspectorGraphColumn = {
@@ -4336,14 +4592,35 @@ type GraphViewDefinition = {
   label: string;
   root_type: string;
   description?: string;
-  steps: GraphViewStepDefinition[];
+  steps?: GraphViewStepDefinition[];
+  paths?: GraphViewPathDefinition[];
+  nodes?: Record<string, GraphNodeTemplate>;
+  bridges?: Record<string, GraphBridgeConfig>;
 };
 
 type GraphViewStepDefinition = {
   relation: string;
   direction: "in" | "out";
   target_type?: string;
+  display?: "node" | "bridge";
 };
+
+type GraphViewPathDefinition = { steps: GraphViewStepDefinition[] };
+type GraphNodeTemplate = {
+  variant?: "compact" | "standard" | "rich";
+  title_field?: string;
+  subtitle_field?: string;
+  meta_fields?: string[];
+  badge_fields?: string[];
+  image_field?: string;
+};
+type GraphBridgeConfig = { label_fields?: string[]; aggregate?: boolean };
+type GraphNodeValue = { field: string; value: string };
+type GraphNodeDisplay = { variant: string; title: string; subtitle?: string; meta?: GraphNodeValue[]; badges?: GraphNodeValue[]; image?: string };
+type GraphBridgeDetail = { id: string; type_id: string; title: string; fields: Record<string, unknown> };
+type ProjectedGraphNode = { id: string; type_id: string; title: string; fields: Record<string, unknown>; depth: number; display: GraphNodeDisplay };
+type ProjectedGraphEdge = { from_id: string; to_id: string; kind: string; relation: string; label?: string; count: number; derived: boolean; via_ids?: string[]; via?: GraphBridgeDetail[]; relations?: string[] };
+type ProjectedGraphResult = { view: GraphViewDefinition; center: string; nodes: ProjectedGraphNode[]; edges: ProjectedGraphEdge[]; stats: { nodes: number; edges: number; derived_edges: number } };
 
 function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdges, vault, automationRef, open }: { object: Obj; links: Link[]; backlinks: Link[]; graphNodes: Obj[]; graphEdges: Link[]; vault: string; automationRef?: React.MutableRefObject<RelationGraphAutomationController | null>; open: (id: string) => void }) {
   const { t } = useTranslation();
@@ -4723,12 +5000,14 @@ function RelationGraphCanvas({
   graph,
   openObject,
   onNodeClick,
-  onNodeDoubleClick
+  onNodeDoubleClick,
+  onEdgeClick
 }: {
   graph: InspectorRelationGraphData;
   openObject: (id: string) => void;
   onNodeClick?: (id: string) => void;
   onNodeDoubleClick?: (id: string) => void;
+  onEdgeClick?: (edge: InspectorGraphEdge) => void;
 }) {
   const { t } = useTranslation();
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -4896,13 +5175,13 @@ function RelationGraphCanvas({
               const from = nodeMap.get(edge.from_id);
               const to = nodeMap.get(edge.to_id);
               const active = !hoveredID || edge.from_id === hoveredID || edge.to_id === hoveredID;
-              return from && to ? <RelationGraphEdge key={`${edge.from_id}-${edge.relation}-${edge.to_id}`} from={from} to={to} edge={edge} active={active} /> : null;
+              return from && to ? <RelationGraphEdge key={`${edge.from_id}-${edge.relation}-${edge.to_id}-${(edge.via_ids ?? []).join("-")}`} from={from} to={to} edge={edge} active={active} onClick={onEdgeClick} /> : null;
             })}
           </svg>
           {nodes.map((node) => (
             <button
               key={node.id}
-              className={`relation-canvas-node relation-canvas-node-${node.direction} ${hoveredID && !connectedToHovered.has(node.id) ? "relation-canvas-node-dimmed" : ""} ${hoveredID === node.id ? "relation-canvas-node-hovered" : ""}`}
+              className={`relation-canvas-node relation-canvas-node-${node.direction} relation-canvas-node-${node.display?.variant ?? "standard"} ${hoveredID && !connectedToHovered.has(node.id) ? "relation-canvas-node-dimmed" : ""} ${hoveredID === node.id ? "relation-canvas-node-hovered" : ""}`}
               data-relation-node={node.id}
               style={{ left: node.x, top: node.y }}
               title={node.id}
@@ -4930,7 +5209,14 @@ function RelationGraphCanvas({
                 openObject(node.id);
               }}
             >
-              <span className="relation-canvas-node-title">{node.title}</span>
+              <span className="relation-canvas-node-title">{node.display?.title || node.title}</span>
+              {node.display?.subtitle && <span className="relation-canvas-node-subtitle">{node.display.subtitle}</span>}
+              {(node.display?.meta?.length ?? 0) > 0 && (
+                <span className="relation-canvas-node-meta">{node.display!.meta!.map((item) => item.value).join(" · ")}</span>
+              )}
+              {(node.display?.badges?.length ?? 0) > 0 && (
+                <span className="relation-canvas-node-badges">{node.display!.badges!.map((item) => item.value).join(" · ")}</span>
+              )}
               <span className="relation-canvas-node-type">{node.type}</span>
               {node.direction !== "focus" && <span className="relation-canvas-node-relation">{node.relation}{node.count > 1 ? ` x${node.count}` : ""}</span>}
             </button>
@@ -4941,19 +5227,33 @@ function RelationGraphCanvas({
   );
 }
 
-function RelationGraphEdge({ from, to, edge, active }: { from: InspectorGraphNode; to: InspectorGraphNode; edge: InspectorGraphEdge; active: boolean }) {
+function RelationGraphEdge({ from, to, edge, active, onClick }: { from: InspectorGraphNode; to: InspectorGraphNode; edge: InspectorGraphEdge; active: boolean; onClick?: (edge: InspectorGraphEdge) => void }) {
   const start = relationNodeAnchor(from, to.x >= from.x ? "right" : "left");
   const end = relationNodeAnchor(to, to.x >= from.x ? "left" : "right");
   const distance = Math.max(90, Math.abs(end.x - start.x) * 0.42);
   const forward = end.x >= start.x;
   const d = `M ${start.x} ${start.y} C ${start.x + (forward ? distance : -distance)} ${start.y}, ${end.x - (forward ? distance : -distance)} ${end.y}, ${end.x} ${end.y}`;
   const marker = edge.kind === "field" ? "relation-arrow-field" : "relation-arrow-body";
-  return <path className={active ? "relation-canvas-edge-active" : "relation-canvas-edge-dimmed"} d={d} fill="none" stroke={edge.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth={active ? "1.7" : "1.2"} markerEnd={`url(#${marker})`} />;
+  const labelX = (start.x + end.x) / 2;
+  const labelY = (start.y + end.y) / 2 - 8;
+  return (
+    <g className={`relation-canvas-edge-group ${edge.derived ? "is-derived" : ""}`} onClick={() => onClick?.(edge)}>
+      <path className={active ? "relation-canvas-edge-active" : "relation-canvas-edge-dimmed"} d={d} fill="none" stroke={edge.derived ? "hsl(var(--teal) / 0.58)" : edge.kind === "field" ? "hsl(var(--moss) / 0.48)" : "hsl(var(--earth) / 0.38)"} strokeWidth={active ? "1.7" : "1.2"} strokeDasharray={edge.derived ? "6 4" : undefined} markerEnd={`url(#${marker})`} />
+      {edge.label && <text className="relation-canvas-edge-label" x={labelX} y={labelY}>{edge.label}</text>}
+    </g>
+  );
 }
 
 function relationNodeAnchor(node: InspectorGraphNode, side: "left" | "right") {
-  const width = node.direction === "focus" ? 190 : 170;
-  return { x: node.x + (side === "right" ? width : 0), y: node.y + 38 };
+  const dimensions = relationNodeDimensions(node);
+  return { x: node.x + (side === "right" ? dimensions.width : 0), y: node.y + dimensions.height / 2 };
+}
+
+function relationNodeDimensions(node: InspectorGraphNode) {
+  const variant = node.display?.variant ?? "standard";
+  if (variant === "compact") return { width: node.direction === "focus" ? 180 : 160, height: 62 };
+  if (variant === "rich") return { width: node.direction === "focus" ? 230 : 220, height: 112 };
+  return { width: node.direction === "focus" ? 200 : 190, height: 86 };
 }
 
 function relationGraphFitView(graph: InspectorRelationGraphData, nodes: InspectorGraphNode[], rect: DOMRect) {
@@ -4976,8 +5276,7 @@ function relationGraphBounds(graph: InspectorRelationGraphData, nodes: Inspector
   const nodeBoxes = nodes.map((node) => ({
     x: node.x,
     y: node.y,
-    width: node.direction === "focus" ? 190 : 170,
-    height: 76
+    ...relationNodeDimensions(node)
   }));
   for (const column of graph.columns) {
     nodeBoxes.push({ x: column.x, y: 52, width: 170, height: 28 });
@@ -5120,6 +5419,73 @@ function buildInspectorQueryGraph(object: Obj, graphNodes: Obj[], graphEdges: Li
   };
 }
 
+function buildProjectedRelationGraph(result: ProjectedGraphResult): InspectorRelationGraphData {
+  const projectedByID = new Map(result.nodes.map((node) => [node.id, node]));
+  const center = projectedByID.get(result.center);
+  if (!center) throw new Error(`projected graph center missing: ${result.center}`);
+  const depths = [...new Set(result.nodes.map((node) => node.depth))].sort((a, b) => a - b);
+  const rowGap = 126;
+  const maxRowsPerLane = 5;
+  const depthCounts = depths.map((depth) => result.nodes.filter((node) => node.depth === depth).length);
+  const maxRows = Math.max(1, ...depthCounts.map((count) => Math.min(count, maxRowsPerLane)));
+  const totalLanes = Math.max(1, ...depthCounts.map((count) => Math.ceil(count / maxRowsPerLane)));
+  const width = Math.max(1800, 680 + Math.max(...depths, 0) * 390 + Math.max(0, totalLanes - 1) * 300);
+  const height = Math.max(920, maxRows * rowGap + 300);
+  const toNode = (node: ProjectedGraphNode): InspectorGraphNode => {
+    const incoming = result.edges.find((edge) => edge.to_id === node.id);
+    return {
+      id: node.id,
+      title: node.display.title || node.title || node.id,
+      type: node.type_id,
+      relation: incoming?.label || incoming?.relation || "focus",
+      kind: incoming?.kind || "field",
+      count: incoming?.count || 1,
+      direction: node.id === result.center ? "focus" : "outgoing",
+      display: node.display,
+      x: 0,
+      y: 0
+    };
+  };
+  const focus = { ...toNode(center), x: 220, y: height / 2 - 38 };
+  const outgoing: InspectorGraphNode[] = [];
+  const columns: InspectorGraphColumn[] = [{ id: "root", label: center.type_id, x: focus.x }];
+  for (const depth of depths.filter((value) => value > 0)) {
+    const items = result.nodes.filter((node) => node.depth === depth).map(toNode);
+    const labels = [...new Set(items.map((node) => node.type))];
+    const laneCount = Math.ceil(items.length / maxRowsPerLane);
+    for (let lane = 0; lane < laneCount; lane++) {
+      const laneItems = items.slice(lane * maxRowsPerLane, (lane + 1) * maxRowsPerLane);
+      const x = focus.x + depth * 390 + lane * 300;
+      outgoing.push(...positionProjectedLane(laneItems, height, rowGap, x, lane, Math.min(items.length, maxRowsPerLane)));
+      columns.push({ id: `depth-${depth}-${lane}`, label: laneCount > 1 ? `${labels.join(" / ")} ${lane + 1}` : labels.join(" / "), x });
+    }
+  }
+  return {
+    focus,
+    incoming: [],
+    outgoing,
+    edges: result.edges.map((edge) => ({ ...edge })),
+    columns,
+    fitMode: "bounds",
+    width,
+    height
+  };
+}
+
+function positionProjectedLane(nodes: InspectorGraphNode[], height: number, rowGap: number, x: number, lane: number, primaryRows: number) {
+  if (lane === 0 || primaryRows < 2) return positionInspectorLane(nodes, height, rowGap, x);
+  const primaryContentHeight = (primaryRows - 1) * rowGap;
+  const primaryStart = Math.max(96, height / 2 - primaryContentHeight / 2 - 38);
+  const gapPositions = Array.from({ length: primaryRows - 1 }, (_, index) => primaryStart + rowGap * (index + 0.5));
+  if (nodes.length === 1) {
+    return [{ ...nodes[0], x, y: gapPositions[Math.floor(gapPositions.length / 2)] }];
+  }
+  return nodes.map((node, index) => {
+    const gapIndex = Math.round(index * (gapPositions.length - 1) / Math.max(nodes.length - 1, 1));
+    return { ...node, x, y: gapPositions[gapIndex] };
+  });
+}
+
 function executeRelationQuery(rootID: string, graphEdges: Link[], objectByID: Map<string, Obj>, template: RelationQueryTemplate, hiddenTypes: string[]) {
   let frontier = new Set([rootID]);
   let orderByID = new Map([[rootID, 0]]);
@@ -5254,7 +5620,7 @@ function relationQueryTemplate(rootType: string, steps: RelationQueryStep[]): Re
 }
 
 function graphViewDefinitionToTemplate(view: GraphViewDefinition, rootType: string): RelationQueryTemplate {
-  const steps = view.steps.map((step) => ({
+  const steps = graphViewPrimarySteps(view).map((step) => ({
     relation: step.relation,
     direction: step.direction,
     targetType: step.target_type
@@ -5282,11 +5648,56 @@ function normalizeGraphViewConfigForUI(input: GraphViewConfig | undefined): Grap
         steps: Array.isArray(view.steps) ? view.steps.filter((step) => step.direction === "in" || step.direction === "out").map((step) => ({
           relation: step.relation,
           direction: step.direction,
-          target_type: step.target_type
-        })) : []
+          target_type: step.target_type,
+          display: step.display
+        })) : undefined,
+        paths: Array.isArray(view.paths) ? view.paths.map((path) => ({ steps: Array.isArray(path.steps) ? path.steps.filter((step) => step.direction === "in" || step.direction === "out").map((step) => ({
+          relation: step.relation,
+          direction: step.direction,
+          target_type: step.target_type,
+          display: step.display
+        })) : [] })).filter((path) => path.steps.length > 0) : undefined,
+        nodes: view.nodes ?? {},
+        bridges: view.bridges ?? {}
       }))
-      .filter((view) => view.steps.length > 0)
+      .filter((view) => graphViewPrimarySteps(view).length > 0)
   };
+}
+
+function graphViewPrimarySteps(view: GraphViewDefinition) {
+  return view.paths?.[0]?.steps ?? view.steps ?? [];
+}
+
+function graphViewConfigEqual(left: GraphViewConfig, right: GraphViewConfig) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function cleanGraphNodeTemplates(templates: Record<string, GraphNodeTemplate>) {
+  const out: Record<string, GraphNodeTemplate> = {};
+  for (const [typeID, template] of Object.entries(templates)) {
+    const cleaned: GraphNodeTemplate = {
+      variant: template.variant || "standard",
+      title_field: template.title_field || "title",
+      subtitle_field: template.subtitle_field || undefined,
+      meta_fields: template.meta_fields?.filter(Boolean),
+      badge_fields: template.badge_fields?.filter(Boolean),
+      image_field: template.image_field || undefined
+    };
+    out[typeID] = cleaned;
+  }
+  return out;
+}
+
+function cleanGraphBridgeConfigs(configs: Record<string, GraphBridgeConfig>) {
+  const out: Record<string, GraphBridgeConfig> = {};
+  for (const [typeID, config] of Object.entries(configs)) {
+    out[typeID] = { label_fields: config.label_fields?.filter(Boolean), aggregate: config.aggregate !== false };
+  }
+  return out;
+}
+
+function splitCommaList(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function parseRelationStepsText(text: string): { steps: RelationQueryStep[]; error?: string } {

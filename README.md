@@ -92,23 +92,46 @@ Web body editing uses the same runner for Markdown saves and a dedicated multipa
 curl -F 'vault=/path/to/vault' -F 'file=@./screenshot.png' http://127.0.0.1:8766/api/assets
 ```
 
-Graph Viewer reads configurable views from `mbase.graph-views.json` in the vault root. Each view declares the root object type and the field-link path to follow:
+Graph Viewer reads configurable views from `mbase.graph-views.json` in the vault root. The file is the source of truth for the CLI, Web UI, agents, and Git history. Version 1 path-only views remain supported; version 2 adds multiple paths, node presentation, and bridge contraction:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "views": [
     {
-      "id": "investment-chain",
-      "label": "Investment chain",
+      "id": "portfolio",
+      "label": "Portfolio",
       "root_type": "investor",
-      "steps": [
-        { "direction": "in", "relation": "investor", "target_type": "investment" },
-        { "direction": "out", "relation": "company", "target_type": "company" }
-      ]
+      "paths": [{
+        "steps": [
+          { "direction": "in", "relation": "investor", "target_type": "investment", "display": "bridge" },
+          { "direction": "out", "relation": "company", "target_type": "company" }
+        ]
+      }],
+      "nodes": {
+        "company": {
+          "title_field": "name",
+          "subtitle_field": "one_liner",
+          "meta_fields": ["status", "batch"]
+        }
+      },
+      "bridges": {
+        "investment": {
+          "label_fields": ["round", "amount_text", "announced_at"],
+          "aggregate": true
+        }
+      }
     }
   ]
 }
+```
+
+Agents can edit the file directly, then validate and execute it without opening the browser:
+
+```bash
+mbase graph view validate
+mbase graph view apply --file ./draft-graph-views.json
+mbase graph query --view portfolio --center investor.example --json
 ```
 
 ## Development

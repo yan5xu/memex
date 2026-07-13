@@ -493,7 +493,7 @@ func (r *Runner) runLinks(args []string, back bool) Result {
 
 func (r *Runner) runGraph(args []string) Result {
 	if len(args) == 0 {
-		return Fail("usage", "usage: graph export|views")
+		return Fail("usage", "usage: graph export|query|view|views")
 	}
 	switch args[0] {
 	case "export":
@@ -510,6 +510,10 @@ func (r *Runner) runGraph(args []string) Result {
 		})
 	case "views":
 		return r.runGraphViews(args[1:])
+	case "view":
+		return r.runGraphView(args[1:])
+	case "query":
+		return r.runGraphQuery(args[1:])
 	default:
 		return Fail("unknown_command", "unknown graph command: "+args[0])
 	}
@@ -521,17 +525,39 @@ type graphViewConfig struct {
 }
 
 type graphView struct {
-	ID          string          `json:"id"`
-	Label       string          `json:"label"`
-	RootType    string          `json:"root_type"`
-	Description string          `json:"description,omitempty"`
-	Steps       []graphViewStep `json:"steps"`
+	ID          string                       `json:"id"`
+	Label       string                       `json:"label"`
+	RootType    string                       `json:"root_type"`
+	Description string                       `json:"description,omitempty"`
+	Steps       []graphViewStep              `json:"steps,omitempty"`
+	Paths       []graphViewPath              `json:"paths,omitempty"`
+	Nodes       map[string]graphNodeTemplate `json:"nodes,omitempty"`
+	Bridges     map[string]graphBridgeConfig `json:"bridges,omitempty"`
 }
 
 type graphViewStep struct {
 	Relation   string `json:"relation"`
 	Direction  string `json:"direction"`
 	TargetType string `json:"target_type,omitempty"`
+	Display    string `json:"display,omitempty"`
+}
+
+type graphViewPath struct {
+	Steps []graphViewStep `json:"steps"`
+}
+
+type graphNodeTemplate struct {
+	Variant       string   `json:"variant,omitempty"`
+	TitleField    string   `json:"title_field,omitempty"`
+	SubtitleField string   `json:"subtitle_field,omitempty"`
+	MetaFields    []string `json:"meta_fields,omitempty"`
+	BadgeFields   []string `json:"badge_fields,omitempty"`
+	ImageField    string   `json:"image_field,omitempty"`
+}
+
+type graphBridgeConfig struct {
+	LabelFields []string `json:"label_fields,omitempty"`
+	Aggregate   *bool    `json:"aggregate,omitempty"`
 }
 
 func (r *Runner) runGraphViews(args []string) Result {
@@ -540,7 +566,16 @@ func (r *Runner) runGraphViews(args []string) Result {
 		if err != nil {
 			return fromErr(err)
 		}
-		return OK(config)
+		return r.withStore(func(s *store.Store) Result {
+			types, err := s.ListTypes()
+			if err != nil {
+				return fromErr(err)
+			}
+			if err := validateGraphViewConfig(config, types); err != nil {
+				return fromErr(err)
+			}
+			return OK(config)
+		})
 	}
 	if args[0] != "write" {
 		return Fail("usage", "usage: graph views [list]|write --stdin")
@@ -560,14 +595,7 @@ func (r *Runner) runGraphViews(args []string) Result {
 	if err := json.Unmarshal(raw, &config); err != nil {
 		return fromErr(err)
 	}
-	config, err = normalizeGraphViewConfig(config)
-	if err != nil {
-		return fromErr(err)
-	}
-	if err := r.writeGraphViewConfig(config); err != nil {
-		return fromErr(err)
-	}
-	return OK(config, Effect{Kind: "graph.views.write"})
+	return r.validateAndWriteGraphViewConfig(config)
 }
 
 func (r *Runner) readGraphViewConfig() (graphViewConfig, error) {
@@ -595,7 +623,25 @@ func (r *Runner) writeGraphViewConfig(config graphViewConfig) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	return os.WriteFile(filepath.Join(r.Root, "mbase.graph-views.json"), raw, 0644)
+	path := filepath.Join(r.Root, "mbase.graph-views.json")
+	tmp, err := os.CreateTemp(r.Root, ".mbase.graph-views-*.json")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(raw); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func normalizeGraphViewConfig(config graphViewConfig) (graphViewConfig, error) {
@@ -621,19 +667,44 @@ func normalizeGraphViewConfig(config graphViewConfig) (graphViewConfig, error) {
 		if view.RootType == "" {
 			return graphViewConfig{}, fmt.Errorf("graph view %s root_type is required", view.ID)
 		}
-		if len(view.Steps) == 0 {
+		if len(view.Paths) == 0 && len(view.Steps) > 0 {
+			view.Paths = []graphViewPath{{Steps: view.Steps}}
+		}
+		if len(view.Paths) == 0 {
 			return graphViewConfig{}, fmt.Errorf("graph view %s requires at least one step", view.ID)
 		}
-		for i := range view.Steps {
-			view.Steps[i].Relation = strings.TrimSpace(view.Steps[i].Relation)
-			view.Steps[i].Direction = strings.TrimSpace(view.Steps[i].Direction)
-			view.Steps[i].TargetType = strings.TrimSpace(view.Steps[i].TargetType)
-			if view.Steps[i].Relation == "" {
-				return graphViewConfig{}, fmt.Errorf("graph view %s step relation is required", view.ID)
+		for pathIndex := range view.Paths {
+			if len(view.Paths[pathIndex].Steps) == 0 {
+				return graphViewConfig{}, fmt.Errorf("graph view %s path %d requires at least one step", view.ID, pathIndex)
 			}
-			if view.Steps[i].Direction != "in" && view.Steps[i].Direction != "out" {
-				return graphViewConfig{}, fmt.Errorf("graph view %s step direction must be in or out", view.ID)
+			for stepIndex := range view.Paths[pathIndex].Steps {
+				step := &view.Paths[pathIndex].Steps[stepIndex]
+				step.Relation = strings.TrimSpace(step.Relation)
+				step.Direction = strings.TrimSpace(step.Direction)
+				step.TargetType = strings.TrimSpace(step.TargetType)
+				step.Display = strings.TrimSpace(step.Display)
+				if step.Relation == "" {
+					return graphViewConfig{}, fmt.Errorf("graph view %s path %d step %d relation is required", view.ID, pathIndex, stepIndex)
+				}
+				if step.Direction != "in" && step.Direction != "out" {
+					return graphViewConfig{}, fmt.Errorf("graph view %s path %d step %d direction must be in or out", view.ID, pathIndex, stepIndex)
+				}
+				if step.Display != "" && step.Display != "node" && step.Display != "bridge" {
+					return graphViewConfig{}, fmt.Errorf("graph view %s path %d step %d display must be node or bridge", view.ID, pathIndex, stepIndex)
+				}
+				if step.Display == "bridge" && stepIndex == len(view.Paths[pathIndex].Steps)-1 {
+					return graphViewConfig{}, fmt.Errorf("graph view %s path %d cannot bridge its terminal step", view.ID, pathIndex)
+				}
 			}
+		}
+		if config.Version < 2 && (len(view.Nodes) > 0 || len(view.Bridges) > 0 || len(view.Paths) > 1) {
+			config.Version = 2
+		}
+		if config.Version >= 2 {
+			view.Steps = nil
+		} else {
+			view.Steps = append([]graphViewStep(nil), view.Paths[0].Steps...)
+			view.Paths = nil
 		}
 		seen[view.ID] = true
 		out = append(out, view)
@@ -1135,6 +1206,8 @@ func usage() string {
   links <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]
   backlinks <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]
   graph export
+  graph query --view <id> --center <object-id>
+  graph view list|show|validate|apply
   graph views [list]|write --stdin
   body path|refresh|write|append <id>
   asset import <file> [--name <filename>]

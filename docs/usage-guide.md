@@ -472,41 +472,104 @@ Web UI 的 Graph 页面可以：
 - 点击节点预览 Markdown。
 - 双击节点切换中心。
 
+`mbase.graph-views.json` 是 Graph View 的唯一事实源：CLI、Web UI 和 agent 都读写同一个文件，适合直接纳入 Git。现有 version 1 配置继续兼容。version 2 支持多个查询路径、节点内容模板，以及把中间对象收缩为派生边。
+
 配置自定义 graph view：
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "views": [
     {
-      "id": "company-investors",
-      "label": "Company Investors",
-      "root_type": "company",
-      "steps": [
-        { "direction": "in", "relation": "company", "target_type": "investment" },
-        { "direction": "out", "relation": "investor", "target_type": "investor" }
-      ]
+      "id": "investor-portfolio",
+      "label": "Investor Portfolio",
+      "root_type": "investor",
+      "paths": [{
+        "steps": [
+          { "direction": "in", "relation": "investor", "target_type": "investment", "display": "bridge" },
+          { "direction": "out", "relation": "company", "target_type": "company" }
+        ]
+      }],
+      "nodes": {
+        "investor": {
+          "variant": "standard",
+          "title_field": "name",
+          "subtitle_field": "focus"
+        },
+        "company": {
+          "variant": "rich",
+          "title_field": "name",
+          "subtitle_field": "one_liner",
+          "meta_fields": ["status", "batch"],
+          "badge_fields": ["tags"]
+        }
+      },
+      "bridges": {
+        "investment": {
+          "label_fields": ["round", "amount_text", "announced_at"],
+          "aggregate": true
+        }
+      }
     }
   ]
 }
 ```
 
-写入：
+推荐的 agent 工作流：
 
 ```bash
-cat mbase.graph-views.json | /tmp/mbase -C "$VAULT" graph views write --stdin
+# 直接编辑 Vault 中的配置后，按动态 schema 校验 type、relation 和展示字段
+/tmp/mbase -C "$VAULT" graph view validate
+
+# 校验草稿文件，不改 Vault
+/tmp/mbase -C "$VAULT" graph view validate --file ./draft-graph-views.json
+
+# 校验通过后原子写入 Vault
+/tmp/mbase -C "$VAULT" graph view apply --file ./draft-graph-views.json
+
+# 也可以走 stdin
+/tmp/mbase -C "$VAULT" graph view apply --stdin < ./draft-graph-views.json
 ```
 
 查看：
 
 ```bash
-/tmp/mbase -C "$VAULT" graph views
+/tmp/mbase -C "$VAULT" graph view list
+/tmp/mbase -C "$VAULT" graph view show investor-portfolio --json
+/tmp/mbase -C "$VAULT" graph view schema --json
 ```
+
+不打开 Web UI，直接执行视图并检查投影结果：
+
+```bash
+/tmp/mbase -C "$VAULT" graph query \
+  --view investor-portfolio \
+  --center investor.lightspeed-venture-partners \
+  --json
+
+# 只读取最终节点、边和统计
+/tmp/mbase -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json nodes,edges,stats
+
+# 检查收缩产生的派生边
+/tmp/mbase -C "$VAULT" graph query --view investor-portfolio --center investor.lightspeed-venture-partners --json --jq '.data.edges[] | select(.derived == true)'
+```
+
+`display: "bridge"` 只改变视图投影，不删除中间对象或底层链接。派生边会返回 `derived: true`、`via_ids`、`via` 和完整的 `relations`；同一对端点存在多条中间对象时，`aggregate: true` 会合并并保留全部来源。
+
+节点模板使用受控字段槽位，不执行 HTML 或脚本：
+
+- `variant`：`compact`、`standard`、`rich`。
+- `title_field`：主标题字段，缺失时回退到 object title/id。
+- `subtitle_field`：副标题字段。
+- `meta_fields`：简短元信息。
+- `badge_fields`：标签信息。
+- `image_field`：预留的图片或 asset 字段。
 
 设计 graph view 的原则：
 
 - 不要写死业务视图到代码里，优先放 vault 配置。
 - view 是“从中心对象沿字段路径看几层”，不是全图过滤器。
+- Graph Query 先获得完整关系路径，再做节点模板、bridge 收缩和边聚合；底层数据始终不变。
 - 大图默认用 type 过滤和局部 view，避免所有节点一屏堆出来。
 
 ## 13. Web UI
@@ -535,6 +598,15 @@ window.mbase.openObject("company.lightsprint")
 window.mbase.selectType("company")
 window.mbase.openGraph()
 window.mbase.graphWorkspace.state()
+window.mbase.graphWorkspace.reloadViews()
+window.mbase.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed-venture-partners")
+window.mbase.graphWorkspace.previewNode("company.lightsprint")
+window.mbase.graphWorkspace.configure(true)
+window.mbase.graphWorkspace.setEditor({
+  nodes: { company: { variant: "rich", title_field: "name", subtitle_field: "one_liner" } },
+  bridges: { investment: { label_fields: ["round", "amount_text"], aggregate: true } }
+})
+window.mbase.graphWorkspace.selectEdge("investor.lightspeed-venture-partners", "company.luel")
 window.mbase.relationGraph.state()
 ```
 
