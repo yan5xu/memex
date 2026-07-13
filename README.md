@@ -4,6 +4,8 @@
 
 **A local-first, typed knowledge workspace for people and agents.**
 
+**English** · [简体中文](README.zh-CN.md)
+
 Memex gives people and agents one place to build durable knowledge together.
 
 People can read and write rich Markdown in the Web UI or their editor. Agents can create, query, link, and validate the same knowledge through a deterministic CLI and JSON API. Schema makes the knowledge queryable; links make it reusable; Markdown keeps it expressive and open.
@@ -11,8 +13,6 @@ People can read and write rich Markdown in the Web UI or their editor. Agents ca
 > **Schema says what a thing is. Links place it in the model. Markdown explains why it matters.**
 
 [Why Memex](#why-memex) · [Core model](#the-core-model) · [Get started](#quick-start) · [Documentation](#documentation)
-
-> **Naming migration:** Memex is the product name. The canonical CLI will become `mmx`. The current executable remains `mbase` until that migration is implemented, after which `mbase` will remain temporarily as a compatibility link.
 
 ## What Is Memex
 
@@ -41,7 +41,7 @@ Agent   <->  CLI / JSON API / files
 - **Separate facts from narrative:** Keep queryable properties in SQLite and longer explanation, evidence, and judgment in Markdown.
 - **Use multiple views:** Browse the same vault as tables, object pages, backlinks, and interactive graphs.
 - **Configure graph projections:** Define path queries, node presentation, and bridge contraction in a Git-friendly JSON file.
-- **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.mbase`.
+- **Automate from agents:** Request stable JSON fields, filter with `--jq`, call the local API, or control the Web UI through `window.mmx`.
 - **Validate continuously:** Detect invalid fields, broken references, stale body links, and other integrity problems before committing a vault.
 
 ## Who Is It For
@@ -117,10 +117,10 @@ A person typically starts from an object page, reads the Markdown body, follows 
 An agent inspects the schema, checks for an existing object, writes structured fields and a body in one operation, links evidence, refreshes body mentions, and runs integrity checks:
 
 ```sh
-mbase -C /path/to/vault field list company
-mbase -C /path/to/vault query company --where 'title = "Example"'
+mmx -C /path/to/vault field list company
+mmx -C /path/to/vault query company --where 'title = "Example"'
 
-cat <<'MD' | mbase -C /path/to/vault upsert company company.example \
+cat <<'MD' | mmx -C /path/to/vault upsert company company.example \
   name="Example" \
   status=active \
   --body-stdin
@@ -129,8 +129,8 @@ cat <<'MD' | mbase -C /path/to/vault upsert company company.example \
 Example is supported by [[source.example-home]].
 MD
 
-mbase -C /path/to/vault body refresh company.example
-mbase -C /path/to/vault issues
+mmx -C /path/to/vault body refresh company.example
+mmx -C /path/to/vault issues
 ```
 
 Direct Markdown editing remains supported. After editing body files outside Memex, run `body refresh <id>` or `refresh` so body links and the local index reflect the files on disk.
@@ -143,11 +143,11 @@ Memex does not create a separate dataset for every interface.
 - **Object page:** Read fields, Markdown, links, backlinks, and a local relationship graph together.
 - **Graph:** Explore either the whole vault or a configured question such as `investor <- investment -> company`.
 
-Graph Views live in `mbase.graph-views.json`. Agents can edit this file directly, validate it, and execute a view without opening the browser. Version 2 views can combine multiple paths, choose which fields appear on nodes, and contract intermediate objects into derived edges.
+Graph Views live in `mmx.graph-views.json`. Agents can edit this file directly, validate it, and execute a view without opening the browser. Version 2 views can combine multiple paths, choose which fields appear on nodes, and contract intermediate objects into derived edges.
 
 ```sh
-mbase -C /path/to/vault graph view validate
-mbase -C /path/to/vault graph query \
+mmx -C /path/to/vault graph view validate
+mmx -C /path/to/vault graph query \
   --view portfolio \
   --center investor.example \
   --json nodes,edges,stats
@@ -157,11 +157,11 @@ The file is suitable for Git, review, reuse, and agent-generated changes. It rem
 
 ## Quick Start
 
-Build the current CLI:
+Build the CLI:
 
 ```sh
-cd /path/to/mbase
-go build -o mbase ./cmd/mbase
+cd /path/to/memex
+go build -o mmx ./cmd/mmx
 ```
 
 Create a vault and its first linked objects:
@@ -169,23 +169,23 @@ Create a vault and its first linked objects:
 ```sh
 VAULT=/tmp/memex-demo
 
-./mbase -C "$VAULT" init
-./mbase -C "$VAULT" type create concept
-./mbase -C "$VAULT" field add concept title --kind text --required
-./mbase -C "$VAULT" field add concept related --kind ref_list --target concept
+./mmx -C "$VAULT" init
+./mmx -C "$VAULT" type create concept
+./mmx -C "$VAULT" field add concept title --kind text --required
+./mmx -C "$VAULT" field add concept related --kind ref_list --target concept
 
-./mbase -C "$VAULT" create concept concept.rag title="Retrieval-augmented generation"
+./mmx -C "$VAULT" create concept concept.rag title="Retrieval-augmented generation"
 printf '# Memex\n\nDifferent from [[concept.rag]].\n' | \
-  ./mbase -C "$VAULT" create concept concept.memex title="Memex" --body-stdin
-./mbase -C "$VAULT" link concept.memex related concept.rag
-./mbase -C "$VAULT" body refresh concept.memex
-./mbase -C "$VAULT" issues
+  ./mmx -C "$VAULT" create concept concept.memex title="Memex" --body-stdin
+./mmx -C "$VAULT" link concept.memex related concept.rag
+./mmx -C "$VAULT" body refresh concept.memex
+./mmx -C "$VAULT" issues
 ```
 
 Start the local Web UI:
 
 ```sh
-./mbase serve --addr 127.0.0.1:8766
+./mmx serve --addr 127.0.0.1:8766
 ```
 
 Open <http://127.0.0.1:8766> and select `/tmp/memex-demo` as the current vault.
@@ -195,8 +195,8 @@ Open <http://127.0.0.1:8766> and select `/tmp/memex-demo` as the current vault.
 Human-readable output is the CLI default. Agents and scripts can request the full result envelope, select fields, and apply a `jq`-style expression without depending on a system `jq` binary:
 
 ```sh
-mbase -C /path/to/vault get company.example --json
-mbase -C /path/to/vault get company.example \
+mmx -C /path/to/vault get company.example --json
+mmx -C /path/to/vault get company.example \
   --json object,body_abs_path,links,backlinks \
   --jq '.body_abs_path'
 ```
@@ -218,7 +218,7 @@ curl -F 'vault=/path/to/vault' \
   http://127.0.0.1:8766/api/assets
 ```
 
-For browser automation and UI development, `window.mbase` exposes navigation, state inspection, graph operations, editing, and other high-level actions without requiring an agent to reproduce low-level click sequences.
+For browser automation and UI development, `window.mmx` exposes navigation, state inspection, graph operations, editing, and other high-level actions without requiring an agent to reproduce low-level click sequences.
 
 ## Product Boundary
 
@@ -231,9 +231,9 @@ Memex also does not replace a general Markdown editor or attempt to infer every 
 - **Core:** Go, Cobra, `database/sql`, and `modernc.org/sqlite`
 - **Web:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui primitives, TanStack, and React Flow
 - **Storage:** SQLite object model plus Markdown bodies and local assets
-- **Interfaces:** CLI, local JSON API, Web UI, and `window.mbase` browser automation
+- **Interfaces:** CLI, local JSON API, Web UI, and `window.mmx` browser automation
 
-The Web UI and CLI share the same internal command runner. `POST /_mbase/run` remains a compatibility alias for `POST /api/run`.
+The Web UI and CLI share the same internal command runner through `POST /api/run`.
 
 ## Development
 
@@ -260,4 +260,4 @@ go build ./...
 
 ## Project Status
 
-Memex is under active development. The object model, Markdown body workflow, CLI/API runner, table and object views, configurable Graph Views, and local Web UI are usable today. Naming is being migrated from `mbase` to Memex with `mmx` as the future canonical CLI; vault storage paths and compatibility behavior will be migrated separately and explicitly.
+Memex is under active development. The object model, Markdown body workflow, CLI/API runner, table and object views, configurable Graph Views, and local Web UI are usable today.
