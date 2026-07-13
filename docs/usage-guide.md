@@ -603,6 +603,8 @@ window.mbase.graphWorkspace.queryView("investor-portfolio", "investor.lightspeed
 window.mbase.graphWorkspace.previewNode("company.lightsprint")
 window.mbase.graphWorkspace.newView()       // 打开新建视图
 window.mbase.graphWorkspace.configure(true) // 编辑当前视图
+window.mbase.graphWorkspace.setDetailsOpen(true) // 展开画布内视图信息
+window.mbase.graphWorkspace.setCanvasFocus(true) // 进入页内聚焦
 window.mbase.graphWorkspace.setEditor({
   nodes: { company: { variant: "rich", title_field: "name", subtitle_field: "one_liner" } },
   bridges: { investment: { label_fields: ["round", "amount_text"], aggregate: true } }

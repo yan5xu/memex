@@ -23,7 +23,7 @@ import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, get
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
@@ -147,6 +147,8 @@ type GraphWorkspaceAutomationState = {
   derivedEdgesCount: number;
   editorOpen: boolean;
   editorID: string;
+  detailsOpen: boolean;
+  canvasFocus: boolean;
   selectedEdge: { fromID: string; toID: string } | null;
 };
 
@@ -163,6 +165,8 @@ type GraphWorkspaceAutomationController = {
   setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState>;
   saveView: () => Promise<GraphWorkspaceAutomationState>;
   deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState>;
+  setDetailsOpen: (open: boolean) => Promise<GraphWorkspaceAutomationState>;
+  setCanvasFocus: (open: boolean) => Promise<GraphWorkspaceAutomationState>;
   selectEdge: (fromID: string, toID: string) => Promise<GraphWorkspaceAutomationState>;
 };
 
@@ -423,6 +427,8 @@ declare global {
         setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState | null>;
         saveView: () => Promise<GraphWorkspaceAutomationState | null>;
         deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState | null>;
+        setDetailsOpen: (open: boolean) => Promise<GraphWorkspaceAutomationState | null>;
+        setCanvasFocus: (open: boolean) => Promise<GraphWorkspaceAutomationState | null>;
         selectEdge: (fromID: string, toID: string) => Promise<GraphWorkspaceAutomationState | null>;
       };
       openHealth: () => Promise<AutomationSnapshot>;
@@ -1002,6 +1008,8 @@ function App() {
           derivedEdgesCount: 0,
           editorOpen: false,
           editorID: "",
+          detailsOpen: false,
+          canvasFocus: false,
           selectedEdge: null
         }),
         setView: async (id: string) => {
@@ -1042,6 +1050,8 @@ function App() {
         setEditor: (patch) => graphWorkspaceCall((controller) => controller.setEditor(patch)),
         saveView: () => graphWorkspaceCall((controller) => controller.saveView()),
         deleteView: (id?: string) => graphWorkspaceCall((controller) => controller.deleteView(id)),
+        setDetailsOpen: (open: boolean) => graphWorkspaceCall((controller) => controller.setDetailsOpen(open)),
+        setCanvasFocus: (open: boolean) => graphWorkspaceCall((controller) => controller.setCanvasFocus(open)),
         selectEdge: (fromID: string, toID: string) => graphWorkspaceCall((controller) => controller.selectEdge(fromID, toID))
       },
       openHealth: async () => {
@@ -1380,6 +1390,8 @@ function GraphWorkspacePage({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorOriginalID, setEditorOriginalID] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [canvasFocus, setCanvasFocus] = useState(false);
   const [editorID, setEditorID] = useState("");
   const [editorLabel, setEditorLabel] = useState("");
   const [editorRootType, setEditorRootType] = useState("");
@@ -1443,6 +1455,8 @@ function GraphWorkspacePage({
       derivedEdgesCount: projectedResult?.stats.derived_edges ?? 0,
       editorOpen,
       editorID,
+      detailsOpen,
+      canvasFocus,
       selectedEdge: selectedProjectedEdge ? { fromID: selectedProjectedEdge.from_id, toID: selectedProjectedEdge.to_id } : null
     };
   }
@@ -1649,12 +1663,23 @@ function GraphWorkspacePage({
       },
       saveView: saveGraphView,
       deleteView: deleteGraphView,
+      setDetailsOpen: async (open: boolean) => {
+        setDetailsOpen(open);
+        await nextFrame();
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), detailsOpen: open };
+      },
+      setCanvasFocus: async (open: boolean) => {
+        setCanvasFocus(open);
+        await nextFrame();
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), canvasFocus: open };
+      },
       selectEdge: async (fromID: string, toID: string) => {
         const edge = projectedResult?.edges.find((candidate) => candidate.from_id === fromID && candidate.to_id === toID);
         if (!edge) throw new Error(`projected edge not found: ${fromID} -> ${toID}`);
         setSelectedProjectedEdge(edge);
+        setDetailsOpen(true);
         await nextFrame();
-        return automationRef.current?.state() ?? { ...graphWorkspaceState(), selectedEdge: { fromID, toID } };
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), detailsOpen: true, selectedEdge: { fromID, toID } };
       }
     };
     return () => {
@@ -1670,6 +1695,7 @@ function GraphWorkspacePage({
 
   function openEditor(source: GraphViewDefinition | null = activeDefinition) {
     const sourceSteps = source ? graphViewPrimarySteps(source) : [];
+    setCanvasFocus(false);
     setEditorOriginalID(source?.id ?? null);
     setEditorID(source?.id ?? slugifyGraphViewLabel(`${rootTypes[0] || "object"} view`));
     setEditorLabel(source?.label ?? `${rootTypes[0] || "object"} view`);
@@ -1780,8 +1806,8 @@ function GraphWorkspacePage({
   }
 
   return (
-    <section className="graph-workspace-page">
-      <div className="graph-workspace-header">
+    <section className={`graph-workspace-page ${canvasFocus ? "is-canvas-focus" : ""}`}>
+      {(!canvasFocus || editorOpen) && <div className="graph-workspace-header">
         <Header
           eyebrow={t("graph.viewsEyebrow")}
           title={editorOpen ? (editorOriginalID ? t("graph.editViewTitle") : t("graph.newViewTitle")) : t("graph.workspace")}
@@ -1801,9 +1827,9 @@ function GraphWorkspacePage({
             {t("graph.newView")}
           </Button>
         </div>}
-      </div>
+      </div>}
 
-      {!editorOpen && <div className="graph-workspace-viewbar">
+      {!editorOpen && !canvasFocus && <div className="graph-workspace-viewbar">
         <div className="relation-filter-chips">
           {configuredViews.map((view) => (
             <button key={view.id} className={`relation-view-chip ${!showingFullGraph && activeDefinition?.id === view.id ? "is-active" : ""}`} onClick={() => setSelection({ viewID: view.id, centerID: "" })}>
@@ -2047,17 +2073,44 @@ function GraphWorkspacePage({
           </aside>
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4">
+        <div className={`graph-focus-shell ${detailsOpen ? "is-details-open" : ""} ${canvasFocus ? "is-canvas-focus" : ""}`}>
           <div className="graph-lab-canvas">
             {queryLoading ? (
               <div className="graph-query-loading"><Loader2 className="size-4 animate-spin" />{t("graph.runningQuery")}</div>
             ) : queryGraph ? (
-              <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} onEdgeClick={(edge) => setSelectedProjectedEdge(edge as ProjectedGraphEdge)} />
+              <RelationGraphCanvas graph={queryGraph} openObject={openObject} onNodeClick={handleGraphNodeClick} onNodeDoubleClick={handleGraphNodeDoubleClick} onEdgeClick={(edge) => {
+                setSelectedProjectedEdge(edge as ProjectedGraphEdge);
+                if (edge.derived) setDetailsOpen(true);
+              }} />
             ) : (
               <EmptyState title={t("graph.noResultTitle")} description={centerCandidates.length === 0 ? t("graph.noTypeObjects", { type: rootType }) : t("graph.selectCenterDescription")} />
             )}
           </div>
-          <aside className="graph-lab-panel">
+          <div className="graph-canvas-mode-controls">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="relation-canvas-tool" onClick={() => setCanvasFocus((current) => !current)} aria-label={canvasFocus ? t("graph.exitCanvasFocus") : t("graph.enterCanvasFocus")}>
+                  {canvasFocus ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{canvasFocus ? t("graph.exitCanvasFocus") : t("graph.enterCanvasFocus")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="relation-canvas-tool" onClick={() => setDetailsOpen((current) => !current)} aria-label={detailsOpen ? t("graph.collapseDetails") : t("graph.expandDetails")}>
+                  {detailsOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{detailsOpen ? t("graph.collapseDetails") : t("graph.expandDetails")}</TooltipContent>
+            </Tooltip>
+          </div>
+          <aside className="graph-lab-panel graph-canvas-details">
+            <div className="graph-canvas-details-header">
+              <span>{t("graph.viewDetails")}</span>
+              <Button size="icon" variant="ghost" onClick={() => setDetailsOpen(false)} aria-label={t("graph.collapseDetails")}>
+                <PanelRightClose className="size-4" />
+              </Button>
+            </div>
             <Panel title={t("graph.currentView")} icon={<Play className="size-4" />}>
               <div className="space-y-2 text-sm text-muted-foreground">
                 <div><span className="text-foreground/80">{t("graph.view")}:</span> {activeDefinition?.label}</div>
