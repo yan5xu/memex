@@ -1753,10 +1753,12 @@ function GraphWorkspacePage({
       <div className="graph-workspace-header">
         <Header
           eyebrow={t("graph.viewsEyebrow")}
-          title={t("graph.workspace")}
-          description={showingFullGraph ? t("graph.fullGraphDescription") : activeDefinition?.description || t("graph.focusedDescription")}
+          title={editorOpen ? (editorOriginalID ? t("graph.editViewTitle") : t("graph.newViewTitle")) : t("graph.workspace")}
+          description={editorOpen
+            ? (editorOriginalID ? t("graph.editViewDescription") : t("graph.newViewDescription"))
+            : showingFullGraph ? t("graph.fullGraphDescription") : activeDefinition?.description || t("graph.focusedDescription")}
         />
-        <div className="graph-workspace-actions">
+        {!editorOpen && <div className="graph-workspace-actions">
           {!showingFullGraph && activeDefinition && (
             <Button variant="secondary" className="rounded-md" onClick={() => openEditor(activeDefinition)}>
               <Edit3 className="size-4" />
@@ -1767,10 +1769,10 @@ function GraphWorkspacePage({
             <Plus className="size-4" />
             {t("graph.newView")}
           </Button>
-        </div>
+        </div>}
       </div>
 
-      <div className="graph-workspace-viewbar">
+      {!editorOpen && <div className="graph-workspace-viewbar">
         <div className="relation-filter-chips">
           {configuredViews.map((view) => (
             <button key={view.id} className={`relation-view-chip ${!showingFullGraph && activeDefinition?.id === view.id ? "is-active" : ""}`} onClick={() => setSelection({ viewID: view.id, centerID: "" })}>
@@ -1821,7 +1823,7 @@ function GraphWorkspacePage({
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {configError && (
         <div className="graph-config-error">
@@ -1835,33 +1837,57 @@ function GraphWorkspacePage({
           <div className="graph-view-editor">
             <div className="graph-view-editor-heading">
               <div>
-                <div className="graph-view-editor-title">{editorOriginalID ? t("graph.editViewTitle") : t("graph.newViewTitle")}</div>
-                <div className="graph-view-editor-description">{editorOriginalID ? t("graph.editViewDescription") : t("graph.newViewDescription")}</div>
+                <div className="graph-view-editor-title">{editorOriginalID ? editorLabel || editorOriginalID : t("graph.newViewUntitled")}</div>
+                <div className="graph-view-editor-description">{t("graph.configurationStoredInVault")}</div>
               </div>
-              <Button size="icon" variant="ghost" onClick={() => setEditorOpen(false)} aria-label={t("common.cancel")}>
-                <X className="size-4" />
-              </Button>
+              <div className="graph-view-editor-heading-actions">
+                {editorOriginalID && (
+                  <Button size="sm" variant="secondary" onClick={() => void deleteGraphView(editorOriginalID)} disabled={configSaving}>
+                    <X className="size-3.5" />
+                    {t("graph.delete")}
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setEditorOpen(false)} disabled={configSaving}>{t("common.cancel")}</Button>
+                <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
+                  <Save className="size-3.5" />
+                  {t("graph.save")}
+                </Button>
+              </div>
             </div>
-            <label>
-              <span>{t("graph.id")}</span>
-              <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="portfolio" />
-            </label>
-            <label>
-              <span>{t("graph.label")}</span>
-              <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Portfolio" />
-            </label>
-            <label>
-              <span>{t("graph.rootType")}</span>
-              <select value={editorRootType} onChange={(event) => setEditorRootType(event.target.value)}>
-                <option value="">{t("graph.selectType")}</option>
-                {rootTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>{t("graph.steps")}</span>
-              <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
-            </label>
-            <div className="graph-view-editor-help">{t("graph.editorHelp")} <code>in investor investment</code>, <code>out company company</code>.</div>
+            <section className="graph-view-editor-section">
+              <div className="graph-view-editor-section-heading">
+                <span>{t("graph.viewIdentity")}</span>
+                <span>{t("graph.viewIdentityHelp")}</span>
+              </div>
+              <div className="graph-view-basics">
+                <label>
+                  <span>{t("graph.label")}</span>
+                  <Input value={editorLabel} onChange={(event) => setEditorLabel(event.target.value)} placeholder="Portfolio" />
+                </label>
+                <label>
+                  <span>{t("graph.id")}</span>
+                  <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="portfolio" />
+                </label>
+                <label>
+                  <span>{t("graph.rootType")}</span>
+                  <select value={editorRootType} onChange={(event) => setEditorRootType(event.target.value)}>
+                    <option value="">{t("graph.selectType")}</option>
+                    {rootTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </label>
+              </div>
+            </section>
+            <section className="graph-view-editor-section graph-view-path-section">
+              <div className="graph-view-editor-section-heading">
+                <span>{t("graph.relationPath")}</span>
+                <span>{t("graph.editorHelp")}</span>
+              </div>
+              <label>
+                <span>{t("graph.steps")}</span>
+                <textarea value={editorSteps} onChange={(event) => setEditorSteps(event.target.value)} placeholder={"in investor investment\nout company company"} />
+              </label>
+              <div className="graph-view-editor-help"><code>in investor investment</code><span>→</span><code>out company company</code></div>
+            </section>
             <div className="graph-presentation-editor">
               <div className="graph-presentation-heading">
                 <span>{t("graph.nodePresentation")}</span>
@@ -1920,26 +1946,11 @@ function GraphWorkspacePage({
                 );
               })}
             </div>
-            <div className="graph-view-editor-actions">
-              <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
-                <Save className="size-3.5" />
-                {t("graph.save")}
-              </Button>
-              {editorOriginalID && (
-                <Button size="sm" variant="secondary" onClick={() => void deleteGraphView(editorOriginalID)} disabled={configSaving}>
-                  <X className="size-3.5" />
-                  {t("graph.delete")}
-                </Button>
-              )}
-              <Button size="sm" variant="ghost" onClick={() => setEditorOpen(false)} disabled={configSaving}>
-                {t("common.cancel")}
-              </Button>
-            </div>
           </div>
         </div>
       )}
 
-      {showingFullGraph ? (
+      {!editorOpen && (showingFullGraph ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] gap-4">
           <div className="graph-surface relative overflow-hidden">
             <div className="absolute left-5 top-5 z-30 flex max-w-[calc(100%-220px)] flex-wrap gap-2">
@@ -2059,7 +2070,7 @@ function GraphWorkspacePage({
             </Panel>
           </aside>
         </div>
-      )}
+      ))}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="graph-markdown-dialog">
           <DialogHeader>

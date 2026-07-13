@@ -1539,13 +1539,17 @@ body {
 }
 
 .graph-view-editor-heading {
+  position: sticky;
+  top: 0;
+  z-index: 8;
   display: flex;
-  grid-column: 1 / -1;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid hsl(var(--border) / 0.28);
-  padding-bottom: 0.75rem;
+  background: hsl(var(--background) / 0.96);
+  padding: 0.85rem 0.1rem;
+  backdrop-filter: blur(12px);
 }
 
 .graph-view-editor-title {
@@ -1558,6 +1562,13 @@ body {
   margin-top: 0.2rem;
   color: hsl(var(--muted-foreground));
   font-size: 0.76rem;
+}
+
+.graph-view-editor-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .graph-workspace-viewbar {
@@ -1631,26 +1642,67 @@ body {
 }
 
 .graph-workspace-editor {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   border-top: 1px solid hsl(var(--border) / 0.22);
-  border-bottom: 1px solid hsl(var(--border) / 0.2);
-  padding: 0.9rem 0.1rem;
+  padding: 0 0.1rem 1.2rem;
 }
 
 .graph-workspace-editor .graph-view-editor {
-  grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr) minmax(160px, 0.75fr) minmax(280px, 1.6fr);
-  align-items: end;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 0;
 }
 
-.graph-workspace-editor .graph-view-editor-help,
-.graph-workspace-editor .graph-view-editor-actions {
-  grid-column: 1 / -1;
+.graph-view-editor-section {
+  border-bottom: 1px solid hsl(var(--border) / 0.24);
+  padding: 1rem 0.1rem 1.05rem;
+}
+
+.graph-view-editor-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.graph-view-editor-section-heading > span:first-child {
+  color: hsl(var(--foreground) / 0.86);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.graph-view-editor-section-heading > span:last-child {
+  max-width: 720px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.7rem;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.graph-view-basics {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(180px, 1fr) minmax(180px, 0.8fr);
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.graph-view-path-section textarea {
+  min-height: 86px;
+}
+
+.graph-view-path-section .graph-view-editor-help {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
 }
 
 .graph-presentation-editor {
-  grid-column: 1 / -1;
-  border-top: 1px solid hsl(var(--border) / 0.28);
-  padding-top: 0.75rem;
+  padding: 1rem 0.1rem 0;
 }
 
 .graph-presentation-heading {
