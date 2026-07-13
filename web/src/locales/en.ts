@@ -212,7 +212,10 @@ export const en = {
     label: "Vault",
     open: "Open",
     pathPlaceholder: "Vault path",
-    recent: "Recent"
+    recent: "Recent",
+    builtIn: "Built in",
+    showcase: "Memex Showcase",
+    serverDefault: "Server default vault"
   },
   common: {
     cancel: "Cancel",

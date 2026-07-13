@@ -208,7 +208,15 @@ printf '# Memex\n\nDifferent from [[concept.rag]].\n' | \
 ./mmx serve --addr 127.0.0.1:8766
 ```
 
-打开 <http://127.0.0.1:8766>，选择 `/tmp/memex-demo` 作为当前 Vault。
+打开 <http://127.0.0.1:8766>。如果当前目录本身不是 Vault，Memex 会自动创建并打开内置的 **Memex 功能示例**。它是一个正常、可写的 Vault，包含示例 Schema、Object、Field/Body Link、本地图片、富 Markdown 和可配置 Graph View。示例只在操作系统的用户配置目录中首次创建，之后的编辑不会被启动过程覆盖。
+
+需要把指定 Vault 作为服务默认库时，显式传入：
+
+```sh
+./mmx -C /path/to/vault serve --addr 127.0.0.1:8766
+```
+
+Web UI 启动时会读取服务默认 Vault，并始终在 Vault 切换器里保留“Memex 功能示例”入口。打包或隔离环境也可以通过 `MEMEX_SHOWCASE_VAULT=/custom/path` 覆盖示例库位置。
 
 ## Agent 与 API 接口
 

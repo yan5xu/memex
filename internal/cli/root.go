@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,11 +14,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yan5xu/memex/internal/app"
 	"github.com/yan5xu/memex/internal/domain"
+	"github.com/yan5xu/memex/internal/showcase"
 	"github.com/yan5xu/memex/internal/store"
 	"github.com/yan5xu/memex/internal/web"
 )
 
 var rootDir = "."
+var rootDirExplicit bool
 var jsonOut bool
 var jsonFields []string
 var jqExpr string
@@ -55,7 +58,11 @@ func Execute() error {
 						i++
 					}
 				}
-				return web.Server{Root: rootDir, Addr: addr}.ListenAndServe()
+				serveRoot, err := resolveServeRoot(rootDir, rootDirExplicit)
+				if err != nil {
+					return err
+				}
+				return web.Server{Root: serveRoot, Addr: addr}.ListenAndServe()
 			}
 			runner := app.NewRunner(rootDir)
 			runner.Stdin = os.Stdin
@@ -79,6 +86,7 @@ func preprocess(args []string) ([]string, error) {
 		case "-C":
 			if i+1 < len(args) {
 				rootDir = args[i+1]
+				rootDirExplicit = true
 				i++
 			}
 		case "-q", "--jq":
@@ -107,6 +115,22 @@ func preprocess(args []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+func resolveServeRoot(root string, explicit bool) (string, error) {
+	showcaseRoot, _, err := showcase.EnsureDefault()
+	if err != nil {
+		return "", fmt.Errorf("prepare default showcase vault: %w", err)
+	}
+	if explicit {
+		return root, nil
+	}
+	if info, err := os.Stat(filepath.Join(root, store.DBPath)); err == nil && !info.IsDir() {
+		return root, nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	return showcaseRoot, nil
 }
 
 func printJSON(v any) error {

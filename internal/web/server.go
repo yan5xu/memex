@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yan5xu/memex/internal/app"
+	"github.com/yan5xu/memex/internal/showcase"
 	"github.com/yan5xu/memex/internal/store"
 )
 
@@ -40,6 +41,11 @@ func (s Server) ListenAndServe() error {
 	if s.Addr == "" {
 		s.Addr = "127.0.0.1:8765"
 	}
+	root, err := filepath.Abs(s.Root)
+	if err != nil {
+		return err
+	}
+	s.Root = root
 	mux := http.NewServeMux()
 	runner := app.NewRunner(s.Root)
 	locks := &vaultLocks{locks: make(map[string]*sync.Mutex)}
@@ -66,12 +72,38 @@ func (s Server) ListenAndServe() error {
 		writeJSON(w, result)
 	}
 	mux.HandleFunc("/api/run", runHandler)
+	mux.HandleFunc("/api/info", s.infoHandler())
 	mux.HandleFunc("/api/assets", s.assetUploadHandler())
 	mux.HandleFunc("/api/file", s.vaultFileHandler())
 	mux.HandleFunc("/api/plantuml", plantUMLHandler)
 	mux.Handle("/", staticHandler())
-	fmt.Printf("Memex web listening on http://%s\n", s.Addr)
+	fmt.Printf("Memex web listening on http://%s\nDefault vault: %s\n", s.Addr, s.Root)
 	return http.ListenAndServe(s.Addr, mux)
+}
+
+func (s Server) infoHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		root, err := filepath.Abs(s.Root)
+		if err != nil {
+			writeJSON(w, app.Fail("path_failed", err.Error()))
+			return
+		}
+		info, statErr := os.Stat(filepath.Join(root, store.DBPath))
+		showcaseRoot, showcaseErr := showcase.DefaultRoot()
+		showcaseInfo, showcaseStatErr := os.Stat(filepath.Join(showcaseRoot, store.DBPath))
+		writeJSON(w, app.OK(map[string]any{
+			"product":               "Memex",
+			"default_vault":         root,
+			"vault_exists":          statErr == nil && !info.IsDir(),
+			"showcase_vault":        showcaseRoot,
+			"showcase_exists":       showcaseErr == nil && showcaseStatErr == nil && !showcaseInfo.IsDir(),
+			"showcase_start_object": "workspace.memex",
+		}))
+	}
 }
 
 func plantUMLHandler(w http.ResponseWriter, r *http.Request) {

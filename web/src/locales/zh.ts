@@ -212,7 +212,10 @@ export const zh = {
     label: "Vault",
     open: "打开",
     pathPlaceholder: "Vault 路径",
-    recent: "最近使用"
+    recent: "最近使用",
+    builtIn: "内置",
+    showcase: "Memex 功能示例",
+    serverDefault: "服务默认 Vault"
   },
   common: {
     cancel: "取消",

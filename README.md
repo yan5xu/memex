@@ -208,7 +208,15 @@ Start the local Web UI:
 ./mmx serve --addr 127.0.0.1:8766
 ```
 
-Open <http://127.0.0.1:8766> and select `/tmp/memex-demo` as the current vault.
+Open <http://127.0.0.1:8766>. When the current directory is not already a vault, Memex creates and opens a bundled **Memex Showcase** automatically. It is a normal writable vault with sample schemas, objects, field and body links, local images, rich Markdown, and configurable graph views. The showcase is created once in the operating system's user configuration directory, so later edits are preserved.
+
+To open a specific vault as the server default, pass it explicitly:
+
+```sh
+./mmx -C /path/to/vault serve --addr 127.0.0.1:8766
+```
+
+The Web UI reads the server default on startup and keeps the Showcase available in the vault switcher. `MEMEX_SHOWCASE_VAULT=/custom/path` can override the bundled vault location for packaged or isolated environments.
 
 ## Agent and API Surfaces
 

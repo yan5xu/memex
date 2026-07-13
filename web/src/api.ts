@@ -7,6 +7,20 @@ export type RunResult<T = unknown> = {
   effects?: Array<{ kind: string; object?: string; field?: string }>;
 };
 
+export type ServerInfo = {
+  product: string;
+  default_vault: string;
+  vault_exists: boolean;
+  showcase_vault: string;
+  showcase_exists: boolean;
+  showcase_start_object: string;
+};
+
+export async function getServerInfo(): Promise<RunResult<ServerInfo>> {
+  const res = await fetch("/api/info");
+  return res.json();
+}
+
 export function getCurrentVault() {
   return localStorage.getItem("memex.currentVault") || "";
 }

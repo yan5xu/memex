@@ -25,7 +25,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
-import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
+import { getCurrentVault, getRecentVaults, getServerInfo, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
@@ -481,6 +481,7 @@ function App() {
   const [vault, setVault] = useState(initialVault);
   const [vaultDraft, setVaultDraft] = useState(initialVault);
   const [recentVaults, setRecentVaults] = useState(getRecentVaults());
+  const [showcaseVault, setShowcaseVault] = useState("");
   const [vaultOK, setVaultOK] = useState<boolean | null>(null);
   const [savingObjectImage, setSavingObjectImage] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -585,11 +586,11 @@ function App() {
     });
   }
 
-  async function loadBase(nextActiveType = activeType, where = filter): Promise<BaseLoadResult> {
+  async function loadBase(nextActiveType = activeType, where = filter, vaultOverride = vault): Promise<BaseLoadResult> {
     const [typesRes, issuesRes, vaultRes] = await Promise.all([
-      cachedRun<{ types: TypeDef[] }>(["type", "list"]),
-      cachedRun<{ issues: unknown[] }>(["issues"]),
-      cachedRun<{ exists: boolean }>(["vault", "info"])
+      cachedRun<{ types: TypeDef[] }>(["type", "list"], vaultOverride),
+      cachedRun<{ issues: unknown[] }>(["issues"], vaultOverride),
+      cachedRun<{ exists: boolean }>(["vault", "info"], vaultOverride)
     ]);
     const list = typesRes.data?.types ?? [];
     const nextIssues = issuesRes.data?.issues ?? [];
@@ -609,13 +610,38 @@ function App() {
     setVaultOK(nextVaultOK);
     let nextRows: Record<string, unknown>[] = [];
     if (nextActiveType) {
-      nextRows = await loadRows(nextActiveType, where);
+      nextRows = await loadRows(nextActiveType, where, vaultOverride);
     }
     return { types: list, issues: nextIssues, vaultOK: nextVaultOK, activeType: nextActiveType, rows: nextRows };
   }
 
   useEffect(() => {
-    void loadBase();
+    let cancelled = false;
+    void (async () => {
+      try {
+        const info = await getServerInfo();
+        const defaultVault = info.data?.vault_exists ? info.data.default_vault : "";
+        if (cancelled) return;
+        setShowcaseVault(info.data?.showcase_exists ? info.data.showcase_vault : "");
+        if (initialVault) {
+          const loaded = await loadBase(activeType, filter, initialVault);
+          if (cancelled || loaded.vaultOK || routeSearch.vault) return;
+        }
+        if (defaultVault) {
+          await openVaultPath(defaultVault);
+          if (defaultVault === info.data?.showcase_vault && info.data.showcase_start_object) {
+            await openObject(info.data.showcase_start_object, { vault: defaultVault });
+          }
+          return;
+        }
+        await loadBase();
+      } catch {
+        if (!cancelled) await loadBase();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -628,18 +654,19 @@ function App() {
     void loadRows(activeType, filter);
   }, [activeType, filter]);
 
-  async function loadRows(type: string, where: string): Promise<Record<string, unknown>[]> {
+  async function loadRows(type: string, where: string, vaultOverride = vault): Promise<Record<string, unknown>[]> {
     const argv = ["query", type, "--limit", "200"];
     if (where) argv.push("--where", where);
-    const res = await cachedRun<{ rows: Record<string, unknown>[] }>(argv);
+    const res = await cachedRun<{ rows: Record<string, unknown>[] }>(argv, vaultOverride);
     const nextRows = res.data?.rows ?? [];
     setRows(nextRows);
     return nextRows;
   }
 
-  async function openObject(id: string, options: { syncURL?: boolean; view?: ViewID } = {}): Promise<ObjectLoadResult | null> {
-    const res = await cachedRun<ObjectLoadResult>(["object", "get", id]);
+  async function openObject(id: string, options: { syncURL?: boolean; view?: ViewID; vault?: string } = {}): Promise<ObjectLoadResult | null> {
+    const res = await cachedRun<ObjectLoadResult>(["object", "get", id], options.vault ?? vault);
     if (res.data) {
+      setActiveTypeState(res.data.object.type_id);
       setActiveObject(res.data.object);
       setActiveBody(res.data.body ?? "");
       setLinks(res.data.links ?? []);
@@ -647,15 +674,15 @@ function App() {
       const nextView = options.view ?? "detail";
       setViewState(nextView);
       if (options.syncURL !== false) {
-        updateSearch({ view: nextView, object: id });
+        updateSearch({ view: nextView, type: res.data.object.type_id, object: id });
       }
       return res.data;
     }
     return null;
   }
 
-  async function openGraph(options: { syncURL?: boolean } = {}): Promise<GraphData> {
-    const res = await cachedRun<GraphData>(["graph", "export"]);
+  async function openGraph(options: { syncURL?: boolean; vault?: string } = {}): Promise<GraphData> {
+    const res = await cachedRun<GraphData>(["graph", "export"], options.vault ?? vault);
     const nextGraph = res.data ?? { nodes: [], edges: [] };
     setGraph(nextGraph);
     setViewState("graph");
@@ -842,12 +869,12 @@ function App() {
     setHiddenGraphTypesState(nextHiddenGraphTypes);
     setViewState(nextView === "detail" ? "objects" : nextView);
     updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: nextGraphCenter || undefined, graphView: nextGraphView || undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
-    const loaded = await loadBase(nextType, nextFilter);
+    const loaded = await loadBase(nextType, nextFilter, nextPath);
     if (nextView === "graph") {
-      await openGraph({ syncURL: false });
+      await openGraph({ syncURL: false, vault: nextPath });
     }
     if (nextView === "detail" && saved?.object) {
-      await openObject(saved.object);
+      await openObject(saved.object, { vault: nextPath });
     }
     toast.success(`Opened ${shortPath(nextPath)}`);
     return loaded;
@@ -1131,6 +1158,7 @@ function App() {
                 draft={vaultDraft}
                 setDraft={setVaultDraft}
                 recentVaults={recentVaults}
+                showcaseVault={showcaseVault}
                 vaultOK={vaultOK}
                 openVault={(path) => void openVaultPath(path)}
               />
@@ -3834,11 +3862,12 @@ function NavItem({ icon, label, active, collapsed, onClick }: { icon: React.Reac
   );
 }
 
-function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVault }: { vault: string; draft: string; setDraft: (path: string) => void; recentVaults: string[]; vaultOK: boolean | null; openVault: (path: string) => void }) {
+function VaultSwitcher({ vault, draft, setDraft, recentVaults, showcaseVault, vaultOK, openVault }: { vault: string; draft: string; setDraft: (path: string) => void; recentVaults: string[]; showcaseVault: string; vaultOK: boolean | null; openVault: (path: string) => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [manualPath, setManualPath] = useState(draft || vault);
   const visibleRecent = recentVaults.filter((path) => path !== vault).slice(0, 7);
+  const isShowcase = Boolean(vault && showcaseVault && vault === showcaseVault);
   useEffect(() => {
     setManualPath(draft || vault);
   }, [draft, vault]);
@@ -3860,9 +3889,9 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
           <button className="flex w-full items-center justify-between gap-3 rounded-md border border-border/35 bg-card/35 px-2.5 py-2 text-left transition hover:bg-card/62">
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="min-w-0 truncate font-mono text-xs">{vault ? shortPath(vault) : "default server vault"}</span>
+                <span className={`min-w-0 truncate text-xs ${isShowcase ? "font-medium" : "font-mono"}`}>{isShowcase ? t("vault.showcase") : vault ? shortPath(vault) : t("vault.serverDefault")}</span>
               </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-sm break-all font-mono">{vault || "server default vault"}</TooltipContent>
+              <TooltipContent side="right" className="max-w-sm break-all font-mono">{vault || t("vault.serverDefault")}</TooltipContent>
             </Tooltip>
             <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? t("status.ready") : t("status.missing")}</span>
           </button>
@@ -3875,10 +3904,18 @@ function VaultSwitcher({ vault, draft, setDraft, recentVaults, vaultOK, openVaul
               <CommandGroup heading={t("vault.label")}>
                 <CommandItem value={vault || "default"} onSelect={() => vault && commit(vault)}>
                   <Check className="size-4 opacity-100" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{vault ? shortPath(vault) : "server default"}</span>
+                  <span className={`min-w-0 flex-1 truncate text-xs ${isShowcase ? "font-medium" : "font-mono"}`}>{isShowcase ? t("vault.showcase") : vault ? shortPath(vault) : t("vault.serverDefault")}</span>
                   <span className={`vault-status-chip ${vaultOK ? "vault-status-ready" : "vault-status-missing"}`}>{vaultOK ? t("status.ready") : t("status.missing")}</span>
                 </CommandItem>
               </CommandGroup>
+              {showcaseVault && showcaseVault !== vault && (
+                <CommandGroup heading={t("vault.builtIn")}>
+                  <CommandItem value={`showcase ${showcaseVault}`} onSelect={() => commit(showcaseVault)}>
+                    <Database className="size-4 text-[hsl(var(--earth))]" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">{t("vault.showcase")}</span>
+                  </CommandItem>
+                </CommandGroup>
+              )}
               {visibleRecent.length > 0 && (
                 <CommandGroup heading={t("vault.recent")}>
                   {visibleRecent.map((path) => (

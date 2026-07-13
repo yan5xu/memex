@@ -42,6 +42,16 @@ go build -o /tmp/mmx ./cmd/mmx
 http://127.0.0.1:8766
 ```
 
+未带 `-C` 启动时，如果当前目录不是 Vault，服务会首次生成并打开内置的 **Memex 功能示例**。这个可写 Vault 覆盖动态 Schema、对象字段、强/弱 Link、本地图片、富 Markdown 和 Graph View，适合先体验再建立自己的库。它只创建一次，不会在后续启动时覆盖你的修改。
+
+显式指定服务默认 Vault：
+
+```bash
+/tmp/mmx -C /path/to/vault serve --addr 127.0.0.1:8766
+```
+
+Web UI 会从 `/api/info` 获取服务默认 Vault；没有 URL `vault=` 参数，也没有有效的最近 Vault 时，会自动进入它。Vault 切换器中始终可以回到“Memex 功能示例”。
+
 Web UI 可以用 URL 参数指定 vault：
 
 ```text
