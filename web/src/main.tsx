@@ -23,7 +23,7 @@ import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, get
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, RotateCcw, Save, Search, SplitSquareHorizontal, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
@@ -159,6 +159,7 @@ type GraphWorkspaceAutomationController = {
   reloadViews: () => Promise<GraphWorkspaceAutomationState>;
   queryView: (viewID: string, centerID: string) => Promise<GraphWorkspaceAutomationState>;
   configure: (open?: boolean) => Promise<GraphWorkspaceAutomationState>;
+  newView: () => Promise<GraphWorkspaceAutomationState>;
   setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState>;
   saveView: () => Promise<GraphWorkspaceAutomationState>;
   deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState>;
@@ -418,6 +419,7 @@ declare global {
         reloadViews: () => Promise<GraphWorkspaceAutomationState | null>;
         queryView: (viewID: string, centerID: string) => Promise<GraphWorkspaceAutomationState | null>;
         configure: (open?: boolean) => Promise<GraphWorkspaceAutomationState | null>;
+        newView: () => Promise<GraphWorkspaceAutomationState | null>;
         setEditor: (patch: { id?: string; label?: string; rootType?: string; steps?: string; nodes?: Record<string, GraphNodeTemplate>; bridges?: Record<string, GraphBridgeConfig> }) => Promise<GraphWorkspaceAutomationState | null>;
         saveView: () => Promise<GraphWorkspaceAutomationState | null>;
         deleteView: (id?: string) => Promise<GraphWorkspaceAutomationState | null>;
@@ -1036,6 +1038,7 @@ function App() {
         reloadViews: () => graphWorkspaceCall((controller) => controller.reloadViews()),
         queryView: (viewID: string, centerID: string) => graphWorkspaceCall((controller) => controller.queryView(viewID, centerID)),
         configure: (open?: boolean) => graphWorkspaceCall((controller) => controller.configure(open)),
+        newView: () => graphWorkspaceCall((controller) => controller.newView()),
         setEditor: (patch) => graphWorkspaceCall((controller) => controller.setEditor(patch)),
         saveView: () => graphWorkspaceCall((controller) => controller.saveView()),
         deleteView: (id?: string) => graphWorkspaceCall((controller) => controller.deleteView(id)),
@@ -1375,6 +1378,7 @@ function GraphWorkspacePage({
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorOriginalID, setEditorOriginalID] = useState<string | null>(null);
   const [editorID, setEditorID] = useState("");
   const [editorLabel, setEditorLabel] = useState("");
   const [editorRootType, setEditorRootType] = useState("");
@@ -1627,6 +1631,11 @@ function GraphWorkspacePage({
         await nextFrame();
         return automationRef.current?.state() ?? { ...graphWorkspaceState(), editorOpen: open };
       },
+      newView: async () => {
+        openEditor(null);
+        await nextFrame();
+        return automationRef.current?.state() ?? { ...graphWorkspaceState(), editorOpen: true };
+      },
       setEditor: async (patch) => {
         if (patch.id !== undefined) setEditorID(patch.id);
         if (patch.label !== undefined) setEditorLabel(patch.label);
@@ -1658,8 +1667,9 @@ function GraphWorkspacePage({
     };
   }, []);
 
-  function openEditor(source = activeDefinition) {
+  function openEditor(source: GraphViewDefinition | null = activeDefinition) {
     const sourceSteps = source ? graphViewPrimarySteps(source) : [];
+    setEditorOriginalID(source?.id ?? null);
     setEditorID(source?.id ?? slugifyGraphViewLabel(`${rootTypes[0] || "object"} view`));
     setEditorLabel(source?.label ?? `${rootTypes[0] || "object"} view`);
     setEditorRootType(source?.root_type ?? rootTypes[0] ?? "");
@@ -1700,7 +1710,7 @@ function GraphWorkspacePage({
       nodes: cleanGraphNodeTemplates(editorNodes),
       bridges: cleanGraphBridgeConfigs(editorBridges)
     };
-    const nextConfig = { version: 2, views: [...viewConfig.views.filter((view) => view.id !== id), nextView] };
+    const nextConfig = { version: 2, views: [...viewConfig.views.filter((view) => view.id !== id && view.id !== editorOriginalID), nextView] };
     setConfigSaving(true);
     const result = await run<GraphViewConfig>(["graph", "view", "apply", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
     setConfigSaving(false);
@@ -1747,9 +1757,15 @@ function GraphWorkspacePage({
           description={showingFullGraph ? t("graph.fullGraphDescription") : activeDefinition?.description || t("graph.focusedDescription")}
         />
         <div className="graph-workspace-actions">
-          <Button variant="secondary" className="rounded-md" onClick={() => openEditor()}>
-            <Edit3 className="size-4" />
-            {t("graph.configure")}
+          {!showingFullGraph && activeDefinition && (
+            <Button variant="secondary" className="rounded-md" onClick={() => openEditor(activeDefinition)}>
+              <Edit3 className="size-4" />
+              {t("graph.editCurrentView")}
+            </Button>
+          )}
+          <Button className="rounded-md" onClick={() => openEditor(null)}>
+            <Plus className="size-4" />
+            {t("graph.newView")}
           </Button>
         </div>
       </div>
@@ -1817,6 +1833,15 @@ function GraphWorkspacePage({
       {editorOpen && (
         <div className="graph-workspace-editor">
           <div className="graph-view-editor">
+            <div className="graph-view-editor-heading">
+              <div>
+                <div className="graph-view-editor-title">{editorOriginalID ? t("graph.editViewTitle") : t("graph.newViewTitle")}</div>
+                <div className="graph-view-editor-description">{editorOriginalID ? t("graph.editViewDescription") : t("graph.newViewDescription")}</div>
+              </div>
+              <Button size="icon" variant="ghost" onClick={() => setEditorOpen(false)} aria-label={t("common.cancel")}>
+                <X className="size-4" />
+              </Button>
+            </div>
             <label>
               <span>{t("graph.id")}</span>
               <Input value={editorID} onChange={(event) => setEditorID(event.target.value)} placeholder="portfolio" />
@@ -1900,9 +1925,14 @@ function GraphWorkspacePage({
                 <Save className="size-3.5" />
                 {t("graph.save")}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => void deleteGraphView()} disabled={configSaving || !activeDefinition}>
-                <X className="size-3.5" />
-                {t("graph.delete")}
+              {editorOriginalID && (
+                <Button size="sm" variant="secondary" onClick={() => void deleteGraphView(editorOriginalID)} disabled={configSaving}>
+                  <X className="size-3.5" />
+                  {t("graph.delete")}
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setEditorOpen(false)} disabled={configSaving}>
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
