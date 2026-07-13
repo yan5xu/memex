@@ -23,14 +23,14 @@ import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, get
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Activity, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, run, setCurrentVault, uploadAsset } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -1379,6 +1379,7 @@ function GraphWorkspacePage({
   const [configSaving, setConfigSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorOriginalID, setEditorOriginalID] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [editorID, setEditorID] = useState("");
   const [editorLabel, setEditorLabel] = useState("");
   const [editorRootType, setEditorRootType] = useState("");
@@ -1731,6 +1732,7 @@ function GraphWorkspacePage({
   async function deleteGraphView(idOverride?: string) {
     const id = idOverride?.trim() || editorID.trim() || activeDefinition?.id;
     if (!id) return graphWorkspaceState();
+    const deletedView = viewConfig.views.find((view) => view.id === id) ?? null;
     const nextConfig = { version: viewConfig.version, views: viewConfig.views.filter((view) => view.id !== id) };
     setConfigSaving(true);
     const result = await run<GraphViewConfig>(["graph", "view", "apply", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
@@ -1742,10 +1744,39 @@ function GraphWorkspacePage({
     const normalized = normalizeGraphViewConfigForUI(result.data);
     setViewConfig(normalized);
     setSelection({ viewID: normalized.views[0]?.id ?? fullGraphViewID, centerID: "" }, { replace: true });
+    setDeleteConfirmOpen(false);
     setEditorOpen(false);
-    toast.success(t("graph.viewDeleted"));
+    toast.success(t("graph.viewDeleted"), deletedView ? {
+      duration: 10000,
+      action: {
+        label: t("common.undo"),
+        onClick: () => void restoreDeletedGraphView(deletedView)
+      }
+    } : undefined);
     await nextFrame();
     return automationRef?.current?.state() ?? { ...graphWorkspaceState(), editorOpen: false };
+  }
+
+  async function restoreDeletedGraphView(deletedView: GraphViewDefinition) {
+    const latest = await run<GraphViewConfig>(["graph", "views"], vault);
+    if (!latest.ok || !latest.data) {
+      toast.error(latest.error?.message || t("graph.restoreFailed"));
+      return;
+    }
+    const current = normalizeGraphViewConfigForUI(latest.data);
+    const nextConfig = {
+      version: current.version,
+      views: [...current.views.filter((view) => view.id !== deletedView.id), deletedView]
+    };
+    const result = await run<GraphViewConfig>(["graph", "view", "apply", "--stdin"], vault, { stdin: JSON.stringify(nextConfig) });
+    if (!result.ok || !result.data) {
+      toast.error(result.error?.message || t("graph.restoreFailed"));
+      return;
+    }
+    const normalized = normalizeGraphViewConfigForUI(result.data);
+    setViewConfig(normalized);
+    setSelection({ viewID: deletedView.id, centerID: "" }, { replace: true });
+    toast.success(t("graph.viewRestored"));
   }
 
   return (
@@ -1841,17 +1872,24 @@ function GraphWorkspacePage({
                 <div className="graph-view-editor-description">{t("graph.configurationStoredInVault")}</div>
               </div>
               <div className="graph-view-editor-heading-actions">
-                {editorOriginalID && (
-                  <Button size="sm" variant="secondary" onClick={() => void deleteGraphView(editorOriginalID)} disabled={configSaving}>
-                    <X className="size-3.5" />
-                    {t("graph.delete")}
-                  </Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={() => setEditorOpen(false)} disabled={configSaving}>{t("common.cancel")}</Button>
+                <Button size="sm" variant="secondary" onClick={() => setEditorOpen(false)} disabled={configSaving}>
+                  <ArrowLeft className="size-3.5" />
+                  {t("graph.backToGraph")}
+                </Button>
                 <Button size="sm" onClick={() => void saveGraphView()} disabled={configSaving}>
                   <Save className="size-3.5" />
                   {t("graph.save")}
                 </Button>
+                {editorOriginalID && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="icon" variant="ghost" className="graph-delete-view-trigger" onClick={() => setDeleteConfirmOpen(true)} disabled={configSaving} aria-label={t("graph.deleteView")}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t("graph.deleteView")}</TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             </div>
             <section className="graph-view-editor-section">
@@ -2071,6 +2109,21 @@ function GraphWorkspacePage({
           </aside>
         </div>
       ))}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="graph-delete-dialog">
+          <DialogHeader>
+            <DialogTitle>{t("graph.deleteViewTitle", { name: editorLabel || editorOriginalID })}</DialogTitle>
+            <DialogDescription>{t("graph.deleteViewDescription")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setDeleteConfirmOpen(false)} disabled={configSaving}>{t("common.cancel")}</Button>
+            <Button variant="destructive" onClick={() => void deleteGraphView(editorOriginalID ?? undefined)} disabled={configSaving}>
+              <Trash2 className="size-4" />
+              {t("graph.confirmDelete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="graph-markdown-dialog">
           <DialogHeader>
