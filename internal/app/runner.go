@@ -322,7 +322,7 @@ func (r *Runner) runType(args []string) Result {
 func (r *Runner) runField(args []string) Result {
 	return r.withStore(func(s *store.Store) Result {
 		if len(args) < 1 {
-			return Fail("usage", "usage: field list <type>|field add <type> <field> --kind <kind>")
+			return Fail("usage", "usage: field list <type>|field add <type> <field> --kind <kind>|field enum add <type> <field> <value...>")
 		}
 		switch args[0] {
 		case "list":
@@ -350,6 +350,28 @@ func (r *Runner) runField(args []string) Result {
 				return fromErr(err)
 			}
 			return OK(fd, Effect{Kind: "field.add", Field: name})
+		case "enum":
+			if len(args) < 2 || args[1] != "add" || len(args) < 5 {
+				return Fail("usage", "usage: field enum add <type> <field> <value...>")
+			}
+			typeID, name := args[2], args[3]
+			values := make([]string, 0, len(args)-4)
+			for _, value := range args[4:] {
+				values = append(values, splitList(value)...)
+			}
+			if len(values) == 0 {
+				return Fail("usage", "usage: field enum add <type> <field> <value...>")
+			}
+			fd, added, err := s.AddEnumValues(typeID, name, values)
+			if err != nil {
+				return fromErr(err)
+			}
+			return OK(map[string]any{
+				"type":   typeID,
+				"field":  name,
+				"added":  added,
+				"values": fd.EnumValues,
+			}, Effect{Kind: "field.enum.add", Field: name})
 		default:
 			return Fail("unknown_command", "unknown field command: "+args[0])
 		}
@@ -1201,6 +1223,7 @@ func usage() string {
   type list|show|create
   field list <type>
   field add <type> <field> --kind <kind>
+  field enum add <type> <field> <value...>
   object create|get|list|set|link|unlink
   query <type>
   links <id> [--type <type>] [--kind <kind>] [--relation <field>] [--filter <text>]

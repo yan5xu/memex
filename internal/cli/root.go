@@ -190,6 +190,9 @@ func printHuman(argv []string, result app.Result) error {
 		if len(argv) > 1 && argv[1] == "list" && printFieldList(result.Data) {
 			return nil
 		}
+		if len(argv) > 2 && argv[1] == "enum" && argv[2] == "add" && printEnumValuesAdded(result.Data) {
+			return nil
+		}
 	case "query":
 		if q, ok := result.Data.(*store.QueryResult); ok {
 			printQuery(q)
@@ -692,6 +695,28 @@ func printFieldList(data any) bool {
 		}
 		fmt.Println()
 	}
+	return true
+}
+
+func printEnumValuesAdded(data any) bool {
+	payload, ok := data.(map[string]any)
+	if !ok {
+		return false
+	}
+	typeID, typeOK := payload["type"].(string)
+	field, fieldOK := payload["field"].(string)
+	added, addedOK := payload["added"].([]string)
+	values, valuesOK := payload["values"].([]string)
+	if !typeOK || !fieldOK || !addedOK || !valuesOK {
+		return false
+	}
+	fmt.Printf("Updated %s.%s\n", typeID, field)
+	if len(added) == 0 {
+		fmt.Println("  No new values; requested values already exist")
+	} else {
+		fmt.Printf("  Added: %s\n", strings.Join(added, ", "))
+	}
+	fmt.Printf("  Values: %s\n", strings.Join(values, ", "))
 	return true
 }
 

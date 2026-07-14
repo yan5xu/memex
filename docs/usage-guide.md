@@ -116,6 +116,15 @@ VAULT=/path/to/my-vault
 /tmp/mmx -C "$VAULT" field add source.item about_company --kind ref --target company
 ```
 
+已有 enum 字段需要增加允许值时，不要删除或重建字段。使用幂等的追加命令：
+
+```bash
+/tmp/mmx -C "$VAULT" field enum add source.item platform WeChat Zhihu Xiaohongshu
+/tmp/mmx -C "$VAULT" field enum add touchpoint platform WeChat Zhihu Xiaohongshu
+```
+
+命令保留原有顺序，只追加尚不存在的值；重复执行不会产生重复项。它只接受 enum 字段，避免误改 text/ref 等其他字段。值区分大小写，写对象时应使用 `field list <type> --json` 返回的准确拼写。
+
 字段类型：
 
 | kind | 用途 | 输入 |

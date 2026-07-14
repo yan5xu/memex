@@ -99,6 +99,67 @@ func (s *Store) AddField(typeID, name string, kind domain.FieldKind, required, u
 	return fd, nil
 }
 
+func (s *Store) AddEnumValues(typeID, name string, values []string) (*domain.FieldDef, []string, error) {
+	const maxAttempts = 8
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		var kind, previousJSON string
+		err := s.DB.QueryRow(`SELECT kind, enum_json FROM fields WHERE type_id = ? AND name = ?`, typeID, name).Scan(&kind, &previousJSON)
+		if err == sql.ErrNoRows {
+			return nil, nil, fmt.Errorf("field %q not found on type %q", name, typeID)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		if domain.FieldKind(kind) != domain.FieldEnum {
+			return nil, nil, fmt.Errorf("field %q on type %q is %s, not enum", name, typeID, kind)
+		}
+
+		var current []string
+		if err := json.Unmarshal([]byte(previousJSON), &current); err != nil {
+			return nil, nil, fmt.Errorf("decode enum values for %s.%s: %w", typeID, name, err)
+		}
+		seen := make(map[string]struct{}, len(current)+len(values))
+		for _, value := range current {
+			seen[value] = struct{}{}
+		}
+		added := make([]string, 0, len(values))
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			current = append(current, value)
+			added = append(added, value)
+		}
+		if len(added) == 0 {
+			fd, getErr := s.GetField(typeID, name)
+			return fd, added, getErr
+		}
+
+		nextJSON, err := json.Marshal(current)
+		if err != nil {
+			return nil, nil, err
+		}
+		result, err := s.DB.Exec(`UPDATE fields SET enum_json = ? WHERE type_id = ? AND name = ? AND enum_json = ?`, string(nextJSON), typeID, name, previousJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		updated, err := result.RowsAffected()
+		if err != nil {
+			return nil, nil, err
+		}
+		if updated == 1 {
+			fd, getErr := s.GetField(typeID, name)
+			return fd, added, getErr
+		}
+	}
+	return nil, nil, fmt.Errorf("field %s.%s changed concurrently; retry the command", typeID, name)
+}
+
 func (s *Store) ListFields(typeID string) ([]domain.FieldDef, error) {
 	rows, err := s.DB.Query(`SELECT id, type_id, name, kind, required, unique_value, enum_json, target_type, position, description FROM fields WHERE type_id = ? ORDER BY position, name`, typeID)
 	if err != nil {

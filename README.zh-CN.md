@@ -193,6 +193,8 @@ VAULT=/tmp/memex-demo
 ./mmx -C "$VAULT" type create concept
 ./mmx -C "$VAULT" field add concept title --kind text --required
 ./mmx -C "$VAULT" field add concept related --kind ref_list --target concept
+./mmx -C "$VAULT" field add concept status --kind enum --values draft
+./mmx -C "$VAULT" field enum add concept status published
 
 ./mmx -C "$VAULT" create concept concept.rag title="Retrieval-augmented generation"
 printf '# Memex\n\nDifferent from [[concept.rag]].\n' | \
