@@ -8,6 +8,8 @@
 
 Memex gives people and agents one place to build durable knowledge together.
 
+Deployed knowledge products can provide their own TSX homepage through a build-time [site extension](docs/site-extensions.md) while reusing Memex object pages, tables, graph views, Markdown rendering, and UI foundations.
+
 People can read and write rich Markdown in the Web UI or their editor. Agents can create, query, link, and validate the same knowledge through a deterministic CLI and JSON API. Schema makes the knowledge queryable; links make it reusable; Markdown keeps it expressive and open.
 
 > **Schema says what a thing is. Links place it in the model. Markdown explains why it matters.**

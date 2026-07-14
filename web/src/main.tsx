@@ -23,8 +23,9 @@ import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, get
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Menu, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, House, ImagePlus, Link2, Loader2, Maximize2, Menu, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
+import siteExtension from "@memex/site-extension";
 import { getCurrentVault, getRecentVaults, getServerInfo, run, setCurrentVault, uploadAsset, type ServerInfo } from "./api";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -41,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Toaster } from "./components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip";
 import i18n, { languageOptions } from "./i18n";
+import type { SiteAutomationController, SiteLanguage } from "./site-extension-contract";
 
 type TypeDef = { id: string; fields?: FieldDef[] };
 type FieldDef = { name: string; kind: string; required?: boolean; unique?: boolean; target_type?: string; enum_values?: string[] };
@@ -499,6 +501,7 @@ declare global {
       setSidebarCollapsed: (collapsed: boolean) => AutomationSnapshot;
       setMobileSidebarOpen: (open: boolean) => AutomationUISnapshot;
       setInspectorOpen: (open: boolean) => AutomationSnapshot;
+      openHome: () => Promise<AutomationSnapshot>;
       switchVault: (path: string) => Promise<AutomationSnapshot>;
       openVault: (path: string) => Promise<AutomationSnapshot>;
       reload: () => Promise<AutomationSnapshot>;
@@ -538,6 +541,11 @@ declare global {
         saveView: (patch?: { id?: string; label?: string; steps?: string }) => Promise<RelationGraphAutomationState | null>;
         deleteView: (id?: string) => Promise<RelationGraphAutomationState | null>;
       };
+      site: {
+        id: string;
+        state: () => unknown;
+        invoke: (action: string, payload?: unknown) => Promise<unknown>;
+      };
       saveObjectImage: () => Promise<{ filename: string }>;
       state: () => AutomationSnapshot;
     };
@@ -555,6 +563,9 @@ function App() {
   const objectExportRef = useRef<HTMLDivElement | null>(null);
   const relationGraphAutomationRef = useRef<RelationGraphAutomationController | null>(null);
   const graphWorkspaceAutomationRef = useRef<GraphWorkspaceAutomationController | null>(null);
+  const siteAutomationRef = useRef<SiteAutomationController | null>(null);
+  const SiteHomePage = siteExtension.HomePage;
+  const homeMode = Boolean(SiteHomePage && window.location.pathname === "/" && !window.location.search);
   const initialVault = pathState ? "" : routeSearch.vault?.trim() || getCurrentVault();
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
@@ -660,6 +671,12 @@ function App() {
     setMobileSidebarOpen(false);
     setViewState(next);
     updateSearch({ view: next, object: next === "detail" ? activeObject?.id ?? routeSearch.object : undefined }, options);
+  }
+
+  async function openSiteHome() {
+    setMobileSidebarOpen(false);
+    await navigate({ to: "/", search: {} as RouteSearch });
+    await nextFrame();
   }
 
   function setActiveType(next: string, options: { replace?: boolean } = {}) {
@@ -1051,7 +1068,7 @@ function App() {
 
   useEffect(() => {
     const currentState = (overrides: Partial<AppState> = {}) => automationState({
-      view,
+      view: homeMode ? "home" : view,
       vault,
       vaultOK,
       activeType,
@@ -1117,6 +1134,10 @@ function App() {
       setInspectorOpen: (open: boolean) => {
         setInspectorOpen(open);
         return currentState();
+      },
+      openHome: async () => {
+        await openSiteHome();
+        return currentState({ view: "home" });
       },
       switchVault: async (path: string) => {
         const loaded = await openVaultPath(path);
@@ -1264,18 +1285,49 @@ function App() {
         saveView: (patch) => relationGraphCall((controller) => controller.saveView(patch)),
         deleteView: (id) => relationGraphCall((controller) => controller.deleteView(id))
       },
+      site: {
+        id: siteExtension.id,
+        state: () => siteAutomationRef.current?.state() ?? {
+          available: Boolean(SiteHomePage),
+          active: homeMode
+        },
+        invoke: async (action: string, payload?: unknown) => {
+          const controller = siteAutomationRef.current;
+          if (!controller) throw new Error("Site automation is unavailable");
+          return controller.invoke(action, payload);
+        }
+      },
       saveObjectImage,
       state: () => currentState()
     };
     return () => {
       delete window.memex;
     };
-  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, mobile, mobileSidebarOpen, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
+  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, mobile, mobileSidebarOpen, inspectorOpen, activeGraphViewID, activeGraphCenterID, homeMode]);
 
   const viMode = view === "vi";
   const graphLabMode = view === "graph-lab";
   const standaloneMode = viMode || graphLabMode;
   const shotMode = viMode && viShot;
+
+  if (homeMode && SiteHomePage) {
+    const language: SiteLanguage = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+    return (
+      <div className="site-home-shell min-h-screen bg-background text-foreground">
+        <SiteHomePage
+          brandName={brandName}
+          brandMark={brandMark}
+          brandTagline={brandTagline}
+          language={language}
+          setLanguage={async (nextLanguage) => {
+            await i18n.changeLanguage(nextLanguage);
+            await nextFrame();
+          }}
+          automationRef={siteAutomationRef}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${standaloneMode ? "vi-standalone-shell" : ""}`}>
@@ -1293,6 +1345,7 @@ function App() {
         </div>
 
         <nav className="space-y-0.5">
+          {SiteHomePage && <NavItem collapsed={effectiveSidebarCollapsed} icon={<House className="size-3.5" />} label="Home" active={false} onClick={() => void openSiteHome()} />}
           <NavItem collapsed={effectiveSidebarCollapsed} icon={<Database className="size-3.5" />} label={t("nav.objects")} active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
           <NavItem collapsed={effectiveSidebarCollapsed} icon={<Braces className="size-3.5" />} label={t("nav.schema")} active={view === "types"} onClick={() => setView("types")} />
           <NavItem collapsed={effectiveSidebarCollapsed} icon={<Network className="size-3.5" />} label={t("nav.graph")} active={view === "graph"} onClick={() => { setMobileSidebarOpen(false); void openGraph(); }} />

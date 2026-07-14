@@ -8,6 +8,8 @@
 
 Memex 让人和 Agent 在同一个地方共同建设可以长期维护的知识。
 
+部署在 Memex 之上的知识产品可以通过构建时的 [站点扩展协议](docs/site-extensions.md) 提供自己的 TSX 主页，同时继续复用对象页、表格、Graph View、Markdown 渲染和 UI 基础。
+
 人可以在 Web UI 或自己的编辑器中阅读、编写完整的 Markdown；Agent 可以通过确定性的 CLI 和 JSON API 创建、查询、连接并检查同一套知识。Schema 让知识可以被查询，Link 让概念可以被复用，Markdown 则保留了表达的完整性与开放性。
 
 > **Schema 说明一个事物是什么，Link 把它放进模型，Markdown 解释它为什么重要。**

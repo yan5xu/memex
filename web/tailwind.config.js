@@ -1,7 +1,9 @@
 /** @type {import('tailwindcss').Config} */
+const siteContent = process.env.MEMEX_SITE_CONTENT;
+
 export default {
   darkMode: ["class"],
-  content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  content: ["./index.html", "./src/**/*.{ts,tsx}", ...(siteContent ? [siteContent] : [])],
   theme: {
     extend: {
       colors: {

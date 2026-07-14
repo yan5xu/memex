@@ -13,7 +13,9 @@
     "moduleResolution": "Node",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@memex/site": ["./src/site-api.ts"],
+      "@memex/site-extension": ["./src/default-site-extension.ts"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
