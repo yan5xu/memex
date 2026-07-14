@@ -2365,13 +2365,20 @@ body {
   width: clamp(720px, calc(100vw - 44px), 1380px);
   height: clamp(560px, calc(100vh - 44px), 880px);
   max-width: none;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 0.75rem;
   border-color: hsl(var(--border) / 0.32);
   border-radius: 14px;
   background: hsl(var(--card) / 0.98);
   padding: 1.1rem;
   overflow: hidden;
+}
+
+.relation-graph-dialog-editable {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.relation-graph-dialog-readonly {
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .relation-graph-header {

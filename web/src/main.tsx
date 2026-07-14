@@ -5083,7 +5083,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
           {t("graph.openCanvas")}
         </Button>
       </div>
-      <DialogContent className="relation-graph-dialog" style={{ width: "clamp(720px, calc(100vw - 44px), 1380px)", height: "clamp(560px, calc(100vh - 44px), 880px)", maxWidth: "none" }}>
+      <DialogContent className={`relation-graph-dialog ${readOnly ? "relation-graph-dialog-readonly" : "relation-graph-dialog-editable"}`}>
         <DialogHeader className="relation-graph-header">
           <div>
             <DialogTitle className="font-serif text-2xl font-medium">{object.title || object.id}</DialogTitle>
