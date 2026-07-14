@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
-import html2canvas from "html2canvas";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -897,6 +896,7 @@ function App() {
     const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
     setSavingObjectImage(true);
     try {
+      const { default: html2canvas } = await import("html2canvas");
       await withTimeout(waitForImages(node), 8000, "Image loading");
       const width = Math.ceil(Math.max(node.scrollWidth, node.getBoundingClientRect().width));
       const height = Math.ceil(node.scrollHeight);
