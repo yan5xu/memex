@@ -18,7 +18,7 @@ import sql from "highlight.js/lib/languages/sql";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useNavigate } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, RouterProvider, stripSearchParams, useNavigate, useParams } from "@tanstack/react-router";
 import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, type SortingState, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
@@ -52,6 +52,8 @@ type Point = { x: number; y: number };
 type ObjectLinkCandidate = { id: string; title: string; type_id: string };
 type ViewID = "objects" | "detail" | "types" | "graph" | "health" | "vi" | "graph-lab";
 type RouteSearch = { view: ViewID; vault?: string; type?: string; filter?: string; object?: string; graphView?: string; graphMode?: string; graphHiddenTypes?: string; section?: string; frame?: string; shot?: string };
+type PublicPathState = { view: ViewID; type?: string; object?: string };
+type PublicRouteDef = { collection: string; type: string; idPrefix: string };
 type VaultUIState = { view: ViewID; type?: string; filter?: string; object?: string; graphView?: string; graphMode?: string; graphHiddenTypes?: string };
 type AppState = {
   view: string;
@@ -244,6 +246,23 @@ const viSections = [
 
 const fullGraphViewID = "__full_graph__";
 
+const publicRouteDefs: PublicRouteDef[] = [
+  { collection: "batches", type: "batch", idPrefix: "batch" },
+  { collection: "companies", type: "company", idPrefix: "company" },
+  { collection: "concepts", type: "concept", idPrefix: "concept" },
+  { collection: "investments", type: "investment", idPrefix: "investment" },
+  { collection: "investors", type: "investor", idPrefix: "investor" },
+  { collection: "methods", type: "method", idPrefix: "method" },
+  { collection: "notes", type: "note", idPrefix: "note" },
+  { collection: "people", type: "person", idPrefix: "person" },
+  { collection: "sources", type: "source.item", idPrefix: "source" },
+  { collection: "touchpoints", type: "touchpoint", idPrefix: "touchpoint" },
+  { collection: "traffic", type: "traffic.snapshot", idPrefix: "traffic" }
+];
+
+const publicRouteByCollection = new Map(publicRouteDefs.map((route) => [route.collection, route]));
+const publicRouteByType = new Map(publicRouteDefs.map((route) => [route.type, route]));
+
 type VISectionID = typeof viSections[number];
 
 function normalizeVISection(section: unknown): VISectionID {
@@ -254,14 +273,8 @@ function viewIsShot(search: RouteSearch) {
   return search.frame === "shot" || search.shot === "1" || search.shot === "true";
 }
 
-const rootRoute = createRootRoute({
-  component: RootRoute
-});
-
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  validateSearch: (search: Record<string, unknown>): RouteSearch => ({
+function normalizeRouteSearch(search: Record<string, unknown>): RouteSearch {
+  return {
     view: normalizeView(search.view),
     vault: typeof search.vault === "string" ? search.vault : undefined,
     type: typeof search.type === "string" ? search.type : undefined,
@@ -273,11 +286,76 @@ const indexRoute = createRoute({
     section: typeof search.section === "string" ? search.section : undefined,
     frame: typeof search.frame === "string" ? search.frame : undefined,
     shot: typeof search.shot === "string" ? search.shot : undefined
-  }),
-  component: App
+  };
+}
+
+function publicPathState(params: Record<string, unknown>): PublicPathState | null {
+  const collection = typeof params.collection === "string" ? params.collection : "";
+  const slug = typeof params.slug === "string" ? params.slug : "";
+  if (!collection) return null;
+  if (!slug) {
+    if (collection === "graph") return { view: "graph" };
+    if (collection === "schema") return { view: "types" };
+    if (collection === "health") return { view: "health" };
+    const route = publicRouteByCollection.get(collection);
+    return route ? { view: "objects", type: route.type } : null;
+  }
+  if (collection === "objects") {
+    return { view: "detail", object: slug };
+  }
+  const route = publicRouteByCollection.get(collection);
+  return route ? { view: "detail", type: route.type, object: `${route.idPrefix}.${slug}` } : null;
+}
+
+function publicObjectPath(type: string, id: string) {
+  const route = publicRouteByType.get(type);
+  if (!route) return { collection: "objects", slug: id };
+  const prefix = `${route.idPrefix}.`;
+  return { collection: route.collection, slug: id.startsWith(prefix) ? id.slice(prefix.length) : id };
+}
+
+function publicSearch(search: RouteSearch): Partial<RouteSearch> {
+  if (search.view === "objects") {
+    return { filter: search.filter };
+  }
+  if (search.view === "graph") {
+    return {
+      object: search.object,
+      graphView: search.graphView,
+      graphMode: search.graphMode,
+      graphHiddenTypes: search.graphHiddenTypes
+    };
+  }
+  return search.view === "vi" || search.view === "graph-lab" ? { view: search.view } : {};
+}
+
+const rootRoute = createRootRoute({
+  validateSearch: normalizeRouteSearch,
+  search: {
+    middlewares: [stripSearchParams({ view: "objects" })]
+  },
+  component: RootRoute
 });
 
-const router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) });
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: () => null
+});
+
+const publicCollectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/$collection",
+  component: () => null
+});
+
+const publicObjectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/$collection/$slug",
+  component: () => null
+});
+
+const router = createRouter({ routeTree: rootRoute.addChildren([indexRoute, publicCollectionRoute, publicObjectRoute]) });
 
 declare module "@tanstack/react-router" {
   interface Register {
@@ -289,7 +367,7 @@ function RootRoute() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={250}>
-        <Outlet />
+        <App />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
@@ -467,14 +545,17 @@ declare global {
 }
 
 function App() {
-  const routeSearch = indexRoute.useSearch();
-  const navigate = useNavigate({ from: "/" });
+  const rawRouteSearch = rootRoute.useSearch();
+  const routeParams = useParams({ strict: false }) as Record<string, unknown>;
+  const pathState = publicPathState(routeParams);
+  const routeSearch: RouteSearch = pathState ? { ...rawRouteSearch, ...pathState } : rawRouteSearch;
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
   const objectExportRef = useRef<HTMLDivElement | null>(null);
   const relationGraphAutomationRef = useRef<RelationGraphAutomationController | null>(null);
   const graphWorkspaceAutomationRef = useRef<GraphWorkspaceAutomationController | null>(null);
-  const initialVault = routeSearch.vault?.trim() || getCurrentVault();
+  const initialVault = pathState ? "" : routeSearch.vault?.trim() || getCurrentVault();
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
@@ -513,37 +594,66 @@ function App() {
   const effectiveSidebarCollapsed = mobile ? false : sidebarCollapsed;
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
-    void navigate({
-      search: (prev) => {
-        const current = prev as Partial<RouteSearch>;
-        const nextView = next.view ?? current.view ?? routeSearch.view ?? view;
-        if (nextView === "vi") {
-          const hasSection = Object.prototype.hasOwnProperty.call(next, "section");
-          const hasFrame = Object.prototype.hasOwnProperty.call(next, "frame");
-          const hasShot = Object.prototype.hasOwnProperty.call(next, "shot");
-          return {
-            view: "vi",
-            section: hasSection ? next.section : current.section ?? routeSearch.section,
-            frame: hasFrame ? next.frame : current.frame ?? routeSearch.frame,
-            shot: hasShot ? next.shot : current.shot ?? routeSearch.shot
-          };
-        }
-        const merged = {
-          ...current,
-          ...next
-        };
-        if (!merged.vault && vault) {
-          merged.vault = vault;
-        }
-        delete merged.section;
-        delete merged.frame;
-        delete merged.shot;
-        return {
-          ...merged
-        };
-      },
-      replace: options.replace ?? false
-    });
+    const nextView = next.view ?? routeSearch.view ?? view;
+    let merged: RouteSearch;
+    if (nextView === "vi") {
+      const hasSection = Object.prototype.hasOwnProperty.call(next, "section");
+      const hasFrame = Object.prototype.hasOwnProperty.call(next, "frame");
+      const hasShot = Object.prototype.hasOwnProperty.call(next, "shot");
+      merged = {
+        view: "vi",
+        section: hasSection ? next.section : routeSearch.section,
+        frame: hasFrame ? next.frame : routeSearch.frame,
+        shot: hasShot ? next.shot : routeSearch.shot
+      };
+    } else {
+      merged = { ...routeSearch, ...next, view: nextView };
+      if (!merged.vault && vault) merged.vault = vault;
+      delete merged.section;
+      delete merged.frame;
+      delete merged.shot;
+    }
+
+    const usePublicPaths = readOnly || pathState !== null;
+    if (!usePublicPaths) {
+      void navigate({ to: "/", search: merged, replace: options.replace ?? false });
+      return;
+    }
+
+    const search = publicSearch(merged);
+    if (merged.view === "detail" && merged.object) {
+      const destination = publicObjectPath(merged.type ?? activeObject?.type_id ?? "", merged.object);
+      void navigate({
+        to: "/$collection/$slug",
+        params: destination,
+        search: {} as RouteSearch,
+        replace: options.replace ?? false
+      });
+      return;
+    }
+    if (merged.view === "objects" && merged.type) {
+      const collection = publicRouteByType.get(merged.type)?.collection;
+      if (collection) {
+        void navigate({
+          to: "/$collection",
+          params: { collection },
+          search: search as RouteSearch,
+          replace: options.replace ?? false
+        });
+        return;
+      }
+    }
+    const collection = merged.view === "graph" ? "graph" : merged.view === "types" ? "schema" : merged.view === "health" ? "health" : "";
+    if (collection) {
+      void navigate({
+        to: "/$collection",
+        params: { collection },
+        search: search as RouteSearch,
+        replace: options.replace ?? false
+      });
+      return;
+    }
+    void navigate({ to: "/", search: search as RouteSearch, replace: options.replace ?? false });
   }
 
   function setView(next: ViewID, options: { replace?: boolean } = {}) {
@@ -652,7 +762,7 @@ function App() {
         if (cancelled) return;
         setShowcaseVault(info.data?.showcase_exists ? info.data.showcase_vault : "");
         if (info.data?.read_only && defaultVault) {
-          await openVaultPath(defaultVault, { silent: true, remember: false });
+          await openVaultPath(defaultVault, { silent: true, remember: false, preserveRoute: true });
           return;
         }
         if (initialVault) {
@@ -660,7 +770,7 @@ function App() {
           if (cancelled || loaded.vaultOK || routeSearch.vault) return;
         }
         if (defaultVault) {
-          await openVaultPath(defaultVault);
+          await openVaultPath(defaultVault, { preserveRoute: pathState !== null });
           if (defaultVault === info.data?.showcase_vault && info.data.showcase_start_object) {
             await openObject(info.data.showcase_start_object, { vault: defaultVault });
           }
@@ -679,6 +789,19 @@ function App() {
   useEffect(() => {
     document.title = brandName;
   }, [brandName]);
+
+  useEffect(() => {
+    if (!readOnly || view !== "detail" || !activeObject) return;
+    const destination = publicObjectPath(activeObject.type_id, activeObject.id);
+    const pathname = `/${destination.collection}/${destination.slug.split("/").map(encodeURIComponent).join("/")}`;
+    if (window.location.pathname === pathname && !window.location.search) return;
+    void navigate({
+      to: "/$collection/$slug",
+      params: destination,
+      search: {} as RouteSearch,
+      replace: true
+    });
+  }, [readOnly, view, activeObject?.id, activeObject?.type_id]);
 
   useEffect(() => {
     if (view === "vi" || routeSearch.vault || !vault) return;
@@ -867,7 +990,7 @@ function App() {
     });
   }
 
-  async function openVaultPath(path: string, options: { silent?: boolean; remember?: boolean } = {}): Promise<BaseLoadResult | null> {
+  async function openVaultPath(path: string, options: { silent?: boolean; remember?: boolean; preserveRoute?: boolean } = {}): Promise<BaseLoadResult | null> {
     const nextPath = path.trim();
     if (!nextPath) {
       toast.error("Vault path is required");
@@ -880,7 +1003,7 @@ function App() {
       setVaultDraft(nextPath);
       return null;
     }
-    const saved = getVaultUIState(nextPath);
+    const saved = options.preserveRoute ? routeSearch : getVaultUIState(nextPath);
     const nextView = saved?.view ?? "objects";
     const nextType = saved?.type ?? "";
     const nextFilter = saved?.filter ?? "";
@@ -906,13 +1029,15 @@ function App() {
     setGraphModeState(nextGraphMode);
     setHiddenGraphTypesState(nextHiddenGraphTypes);
     setViewState(nextView === "detail" ? "objects" : nextView);
-    updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: nextGraphCenter || undefined, graphView: nextGraphView || undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
+    if (!options.preserveRoute) {
+      updateSearch({ vault: nextPath, view: nextView === "detail" ? "objects" : nextView, type: nextType || undefined, filter: nextFilter || undefined, object: nextGraphCenter || undefined, graphView: nextGraphView || undefined, graphMode: nextGraphMode, graphHiddenTypes: serializeGraphHiddenTypes(nextHiddenGraphTypes) || undefined }, { replace: true });
+    }
     const loaded = await loadBase(nextType, nextFilter, nextPath);
     if (nextView === "graph") {
       await openGraph({ syncURL: false, vault: nextPath });
     }
     if (nextView === "detail" && saved?.object) {
-      await openObject(saved.object, { vault: nextPath });
+      await openObject(saved.object, { vault: nextPath, syncURL: !options.preserveRoute });
     }
     if (!options.silent) toast.success(`Opened ${shortPath(nextPath)}`);
     return loaded;

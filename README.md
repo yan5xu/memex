@@ -218,6 +218,8 @@ To open a specific vault as the server default, pass it explicitly:
 
 The Web UI reads the server default on startup and keeps the Showcase available in the vault switcher. `MEMEX_SHOWCASE_VAULT=/custom/path` can override the bundled vault location for packaged or isolated environments.
 
+Read-only public deployments use stable content routes instead of exposing internal UI state in query parameters. For example, `company.kernel` is available at `/companies/kernel` and `investor.accel` at `/investors/accel`. Existing query-string detail links remain readable and are replaced with their canonical content route after loading.
+
 ## Agent and API Surfaces
 
 Human-readable output is the CLI default. Agents and scripts can request the full result envelope, select fields, and apply a `jq`-style expression without depending on a system `jq` binary:

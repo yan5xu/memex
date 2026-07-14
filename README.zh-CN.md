@@ -218,6 +218,8 @@ printf '# Memex\n\nDifferent from [[concept.rag]].\n' | \
 
 Web UI 启动时会读取服务默认 Vault，并始终在 Vault 切换器里保留“Memex 功能示例”入口。打包或隔离环境也可以通过 `MEMEX_SHOWCASE_VAULT=/custom/path` 覆盖示例库位置。
 
+只读公开部署使用稳定的内容路由，不再把内部 UI 状态暴露在查询参数中。例如，`company.kernel` 对应 `/companies/kernel`，`investor.accel` 对应 `/investors/accel`。已有的 query-string 详情链接仍然可以打开，并会在加载后自动替换为规范内容地址。
+
 ## Agent 与 API 接口
 
 CLI 默认输出适合人阅读的结果。Agent 与脚本可以请求完整结果 Envelope、选择字段，并使用内置的 `jq` 风格表达式过滤结果，不依赖系统安装的 `jq`：
