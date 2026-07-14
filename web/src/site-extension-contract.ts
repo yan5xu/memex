@@ -16,7 +16,19 @@ export type SiteHomeProps = {
   automationRef: MutableRefObject<SiteAutomationController | null>;
 };
 
+export type SiteDocumentTitleContext = {
+  brandName: string;
+  view: string;
+  activeType: string;
+  object: {
+    id: string;
+    type_id: string;
+    title: string;
+  } | null;
+};
+
 export type MemexSiteExtension = {
   id: string;
   HomePage?: ComponentType<SiteHomeProps>;
+  documentTitle?: (context: SiteDocumentTitleContext) => string;
 };

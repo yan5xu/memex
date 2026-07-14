@@ -805,6 +805,16 @@ function App() {
 
   useEffect(() => {
     if (homeMode) return;
+    const customTitle = siteExtension.documentTitle?.({
+      brandName,
+      view,
+      activeType,
+      object: activeObject
+    });
+    if (customTitle) {
+      document.title = customTitle;
+      return;
+    }
     if (readOnly && view === "detail" && activeObject) {
       document.title = `${activeObject.title || activeObject.id} | ${brandName}`;
       return;

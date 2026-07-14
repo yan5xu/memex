@@ -23,6 +23,7 @@ export { cn } from "./lib/utils";
 export type {
   MemexSiteExtension,
   SiteAutomationController,
+  SiteDocumentTitleContext,
   SiteHomeProps,
   SiteLanguage
 } from "./site-extension-contract";
