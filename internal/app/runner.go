@@ -783,12 +783,12 @@ func (r *Runner) runBody(args []string) Result {
 
 func (r *Runner) runAsset(args []string) Result {
 	if len(args) < 1 {
-		return Fail("usage", "usage: asset import <file> [--name <filename>]")
+		return Fail("usage", "usage: asset import <file> [--name <relative-path>]")
 	}
 	switch args[0] {
 	case "import":
 		if len(args) < 2 {
-			return Fail("usage", "usage: asset import <file> [--name <filename>]")
+			return Fail("usage", "usage: asset import <file> [--name <relative-path>]")
 		}
 		flags := parseFlags(args[2:])
 		return r.withStore(func(s *store.Store) Result {
@@ -1233,7 +1233,7 @@ func usage() string {
   graph view list|show|validate|apply
   graph views [list]|write --stdin
   body path|refresh|write|append <id>
-  asset import <file> [--name <filename>]
+  asset import <file> [--name <relative-path>]
   refresh
   issues
   doctor [--fix-titles]`

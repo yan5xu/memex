@@ -372,14 +372,16 @@ Bob --> Alice: Done
 导入本地图片到 vault：
 
 ```bash
-/tmp/mmx -C "$VAULT" asset import ./screenshot.png --name company-demo.png
+/tmp/mmx -C "$VAULT" asset import ./screenshot.png --name company/demo.png
 ```
 
 输出会包含可直接粘进 Markdown 的图片语法：
 
 ```text
-![company-demo](assets/company-demo.png)
+![demo](assets/company/demo.png)
 ```
+
+`--name` 接受 `assets/` 下的相对路径；Memex 会创建所需子目录，并拒绝绝对路径或 `..` 路径逃逸。
 
 Web UI 也有专门的资产上传 API：
 
