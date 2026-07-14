@@ -5,11 +5,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/yan5xu/memex/internal/domain"
 	"github.com/yan5xu/memex/internal/markdown"
 )
+
+type bodyLinkState struct {
+	Target   string
+	Line     int
+	Text     string
+	Resolved bool
+}
 
 func (s *Store) RefreshBody(id string) error {
 	obj, err := s.GetObject(id)
@@ -22,22 +31,37 @@ func (s *Store) RefreshBody(id string) error {
 		return err
 	}
 	hash, _ := fileHash(abs)
+	var oldHash string
+	if err := s.DB.QueryRow(`SELECT body_hash FROM objects WHERE id = ?`, id).Scan(&oldHash); err != nil {
+		return err
+	}
+	desiredLinks, err := s.extractBodyLinkState(string(data))
+	if err != nil {
+		return err
+	}
+	existingLinks, err := s.bodyLinkState(id)
+	if err != nil {
+		return err
+	}
+	bodyChanged := hash != oldHash
+	linksChanged := !slices.Equal(existingLinks, desiredLinks)
+	if !bodyChanged && !linksChanged {
+		return nil
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM links WHERE from_object_id = ? AND kind = 'body'`, id); err != nil {
-		return err
-	}
-	for _, link := range markdown.ExtractWikiLinks(string(data)) {
-		resolved := 1
-		if _, err := s.GetObject(link.Target); err != nil {
-			resolved = 0
-		}
-		if _, err := tx.Exec(`INSERT INTO links(from_object_id, to_object_id, kind, relation, line, text, resolved) VALUES(?, ?, 'body', 'mentions', ?, ?, ?)`,
-			id, link.Target, link.Line, link.Text, resolved); err != nil {
+	if linksChanged {
+		if _, err := tx.Exec(`DELETE FROM links WHERE from_object_id = ? AND kind = 'body'`, id); err != nil {
 			return err
+		}
+		for _, link := range desiredLinks {
+			if _, err := tx.Exec(`INSERT INTO links(from_object_id, to_object_id, kind, relation, line, text, resolved) VALUES(?, ?, 'body', 'mentions', ?, ?, ?)`,
+				id, link.Target, link.Line, link.Text, link.Resolved); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := tx.Exec(`UPDATE objects SET body_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, hash, id); err != nil {
@@ -50,6 +74,56 @@ func (s *Store) RefreshBody(id string) error {
 		return err
 	}
 	return s.RevalidateObject(id)
+}
+
+func (s *Store) extractBodyLinkState(body string) ([]bodyLinkState, error) {
+	links := markdown.ExtractWikiLinks(body)
+	state := make([]bodyLinkState, 0, len(links))
+	for _, link := range links {
+		var resolved bool
+		if err := s.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM objects WHERE id = ?)`, link.Target).Scan(&resolved); err != nil {
+			return nil, err
+		}
+		state = append(state, bodyLinkState{Target: link.Target, Line: link.Line, Text: link.Text, Resolved: resolved})
+	}
+	sortBodyLinkState(state)
+	return state, nil
+}
+
+func (s *Store) bodyLinkState(id string) ([]bodyLinkState, error) {
+	rows, err := s.DB.Query(`SELECT to_object_id, line, text, resolved FROM links WHERE from_object_id = ? AND kind = 'body'`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var state []bodyLinkState
+	for rows.Next() {
+		var link bodyLinkState
+		if err := rows.Scan(&link.Target, &link.Line, &link.Text, &link.Resolved); err != nil {
+			return nil, err
+		}
+		state = append(state, link)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sortBodyLinkState(state)
+	return state, nil
+}
+
+func sortBodyLinkState(links []bodyLinkState) {
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Target != links[j].Target {
+			return links[i].Target < links[j].Target
+		}
+		if links[i].Line != links[j].Line {
+			return links[i].Line < links[j].Line
+		}
+		if links[i].Text != links[j].Text {
+			return links[i].Text < links[j].Text
+		}
+		return !links[i].Resolved && links[j].Resolved
+	})
 }
 
 func (s *Store) BodyPath(id string) (string, error) {
