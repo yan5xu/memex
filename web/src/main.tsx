@@ -5279,8 +5279,13 @@ function RelationGraphCanvas({
   const panRef = useRef<{ startX: number; startY: number; origin: Point } | null>(null);
   const nodeDragRef = useRef<{ id: string; startX: number; startY: number; origin: Point; moved: boolean } | null>(null);
   const suppressClickRef = useRef<string | null>(null);
-  const centeredRef = useRef(false);
+  const userAdjustedViewRef = useRef(false);
   const baseNodes = useMemo(() => [graph.focus, ...graph.incoming, ...graph.outgoing], [graph]);
+  const graphLayoutKey = useMemo(() => [
+    graph.fitMode,
+    ...graph.columns.map((column) => `${column.id}:${column.x}`),
+    ...baseNodes.map((node) => `${node.id}:${node.x}:${node.y}:${node.display?.variant ?? "standard"}`)
+  ].join("|"), [baseNodes, graph.columns, graph.fitMode]);
   const nodes = baseNodes.map((node) => ({ ...node, ...(draggedPositions[node.id] ?? {}) }));
   const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const connectedToHovered = useMemo(() => {
@@ -5293,18 +5298,17 @@ function RelationGraphCanvas({
     return connected;
   }, [graph.edges, hoveredID]);
   useEffect(() => {
-    centeredRef.current = false;
+    userAdjustedViewRef.current = false;
     setDraggedPositions({});
     setZoom(0.86);
     const centerView = (fit = false) => {
       const rect = viewportRef.current?.getBoundingClientRect();
       if (!rect || rect.width <= 0 || rect.height <= 0) return false;
       const nextView = fit || graph.fitMode === "bounds"
-        ? relationGraphFitView(graph, nodes, rect)
+        ? relationGraphFitView(graph, baseNodes, rect)
         : { zoom: 0.86, pan: { x: rect.width / 2 - graph.focus.x * 0.86, y: rect.height / 2 - graph.focus.y * 0.86 } };
       setZoom(nextView.zoom);
       setPan(nextView.pan);
-      centeredRef.current = true;
       return true;
     };
     centerView();
@@ -5314,7 +5318,7 @@ function RelationGraphCanvas({
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined" && viewport) {
       observer = new ResizeObserver(() => {
-        if (!centeredRef.current) centerView();
+        if (!userAdjustedViewRef.current) centerView();
       });
       observer.observe(viewport);
     }
@@ -5323,9 +5327,10 @@ function RelationGraphCanvas({
       window.clearTimeout(longDelay);
       observer?.disconnect();
     };
-  }, [graph.focus.id, graph.focus.x, graph.focus.y, graph.fitMode]);
+  }, [graphLayoutKey]);
 
   function zoomAt(nextZoom: number, clientX?: number, clientY?: number) {
+    userAdjustedViewRef.current = true;
     const rect = viewportRef.current?.getBoundingClientRect();
     const clamped = clampZoom(nextZoom);
     if (!rect || clientX === undefined || clientY === undefined) {
@@ -5341,6 +5346,7 @@ function RelationGraphCanvas({
   }
 
   function resetView() {
+    userAdjustedViewRef.current = false;
     const rect = viewportRef.current?.getBoundingClientRect();
     setDraggedPositions({});
     if (rect) {
@@ -5361,6 +5367,7 @@ function RelationGraphCanvas({
   function beginPan(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest(".relation-canvas-node")) return;
+    userAdjustedViewRef.current = true;
     panRef.current = { startX: event.clientX, startY: event.clientY, origin: pan };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -5368,6 +5375,7 @@ function RelationGraphCanvas({
   function beginNodeDrag(event: React.PointerEvent<HTMLButtonElement>, node: InspectorGraphNode) {
     if (event.button !== 0) return;
     event.stopPropagation();
+    userAdjustedViewRef.current = true;
     nodeDragRef.current = { id: node.id, startX: event.clientX, startY: event.clientY, origin: { x: node.x, y: node.y }, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
