@@ -805,8 +805,17 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!homeMode) document.title = brandName;
-  }, [brandName, homeMode]);
+    if (homeMode) return;
+    if (readOnly && view === "detail" && activeObject) {
+      document.title = `${activeObject.title || activeObject.id} | ${brandName}`;
+      return;
+    }
+    if (readOnly && view === "objects" && activeType) {
+      document.title = `${activeType} | ${brandName}`;
+      return;
+    }
+    document.title = brandName;
+  }, [brandName, homeMode, readOnly, view, activeObject?.id, activeObject?.title, activeType]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("site-home-active", homeMode);
