@@ -3506,3 +3506,17 @@ body {
     max-height: calc(100dvh - 4.5rem);
   }
 }
+
+html.site-home-active,
+html.site-home-active body {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+html.site-home-active #root {
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
+}

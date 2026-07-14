@@ -809,6 +809,11 @@ function App() {
   }, [brandName, homeMode]);
 
   useEffect(() => {
+    document.documentElement.classList.toggle("site-home-active", homeMode);
+    return () => document.documentElement.classList.remove("site-home-active");
+  }, [homeMode]);
+
+  useEffect(() => {
     if (!readOnly || view !== "detail" || !activeObject) return;
     const destination = publicObjectPath(activeObject.type_id, activeObject.id);
     const pathname = `/${destination.collection}/${destination.slug.split("/").map(encodeURIComponent).join("/")}`;
