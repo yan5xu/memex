@@ -23,7 +23,7 @@ import { type ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, get
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUpDown, Braces, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Database, Download, Edit3, Eye, FileImage, FileText, FolderOpen, GitBranch, HeartPulse, History, ImagePlus, Link2, Loader2, Maximize2, Menu, Minimize2, Move, Network, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, RotateCcw, Save, Search, SplitSquareHorizontal, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./styles.css";
 import { getCurrentVault, getRecentVaults, getServerInfo, run, setCurrentVault, uploadAsset, type ServerInfo } from "./api";
 import { Badge } from "./components/ui/badge";
@@ -77,6 +77,21 @@ type BaseLoadResult = {
   rows: Record<string, unknown>[];
 };
 type ObjectLoadResult = { object: Obj; body: string; links: Link[]; backlinks: Link[] };
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    const update = () => setMatches(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, [query]);
+
+  return matches;
+}
+
 type AutomationSnapshot = {
   version: 1;
   view: string;
@@ -116,6 +131,8 @@ type RelationGraphAutomationState = {
 
 type AutomationUISnapshot = {
   sidebarCollapsed: boolean;
+  mobile: boolean;
+  mobileSidebarOpen: boolean;
   inspectorOpen: boolean;
   relationGraph: RelationGraphAutomationState | null;
   graphWorkspace: GraphWorkspaceAutomationState | null;
@@ -402,6 +419,7 @@ declare global {
       uiState: () => AutomationUISnapshot;
       setLanguage: (language: "en" | "zh") => Promise<AutomationSnapshot>;
       setSidebarCollapsed: (collapsed: boolean) => AutomationSnapshot;
+      setMobileSidebarOpen: (open: boolean) => AutomationUISnapshot;
       setInspectorOpen: (open: boolean) => AutomationSnapshot;
       switchVault: (path: string) => Promise<AutomationSnapshot>;
       openVault: (path: string) => Promise<AutomationSnapshot>;
@@ -460,7 +478,9 @@ function App() {
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
+  const mobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (max-width: 900px)");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("memex.sidebarCollapsed") === "true");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [types, setTypes] = useState<TypeDef[]>([]);
   const [activeType, setActiveTypeState] = useState(routeSearch.type ?? "");
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
@@ -490,6 +510,7 @@ function App() {
   const brandName = serverInfo?.brand_name || "Memex";
   const brandMark = serverInfo?.brand_mark || "M";
   const brandTagline = serverInfo?.brand_tagline || t("app.tagline");
+  const effectiveSidebarCollapsed = mobile ? false : sidebarCollapsed;
 
   function updateSearch(next: Partial<RouteSearch>, options: { replace?: boolean } = {}) {
     void navigate({
@@ -526,6 +547,7 @@ function App() {
   }
 
   function setView(next: ViewID, options: { replace?: boolean } = {}) {
+    setMobileSidebarOpen(false);
     setViewState(next);
     updateSearch({ view: next, object: next === "detail" ? activeObject?.id ?? routeSearch.object : undefined }, options);
   }
@@ -922,6 +944,8 @@ function App() {
     });
     const uiState = (): AutomationUISnapshot => ({
       sidebarCollapsed,
+      mobile,
+      mobileSidebarOpen,
       inspectorOpen,
       relationGraph: relationGraphAutomationRef.current?.state() ?? null,
       graphWorkspace: graphWorkspaceAutomationRef.current?.state() ?? null
@@ -960,6 +984,10 @@ function App() {
       setSidebarCollapsed: (collapsed: boolean) => {
         setSidebarCollapsed(collapsed);
         return currentState();
+      },
+      setMobileSidebarOpen: (open: boolean) => {
+        setMobileSidebarOpen(open);
+        return { ...uiState(), mobileSidebarOpen: open };
       },
       setInspectorOpen: (open: boolean) => {
         setInspectorOpen(open);
@@ -1117,7 +1145,7 @@ function App() {
     return () => {
       delete window.memex;
     };
-  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
+  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, mobile, mobileSidebarOpen, inspectorOpen, activeGraphViewID, activeGraphCenterID]);
 
   const viMode = view === "vi";
   const graphLabMode = view === "graph-lab";
@@ -1126,25 +1154,27 @@ function App() {
 
   return (
     <div className={`app-shell flex h-screen w-screen overflow-hidden text-foreground ${standaloneMode ? "vi-standalone-shell" : ""}`}>
-      {!standaloneMode && <aside className={`${sidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
-        <div className={`mb-5 flex items-center px-1 ${sidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
+      {!standaloneMode && <button className={`mobile-sidebar-backdrop ${mobileSidebarOpen ? "is-open" : ""}`} onClick={() => setMobileSidebarOpen(false)} aria-label={t("nav.collapseSidebar")} />}
+      {!standaloneMode && <aside className={`app-sidebar ${mobileSidebarOpen ? "is-mobile-open" : ""} ${effectiveSidebarCollapsed ? "w-12 px-2" : "w-60 px-3"} flex h-screen shrink-0 flex-col overflow-hidden py-4 transition-[width,padding] duration-200`}>
+        <div className={`mb-5 flex items-center px-1 ${effectiveSidebarCollapsed ? "justify-center" : "gap-2.5"}`}>
           <div className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-foreground font-serif text-[13px] font-medium italic text-background">{brandMark}</div>
-          {!sidebarCollapsed && (
+          {!effectiveSidebarCollapsed && (
             <div className="min-w-0">
               <div className="truncate text-[13px] font-medium tracking-tight text-foreground/90">{brandName}</div>
               <div className="truncate text-[10.5px] text-muted-foreground">{brandTagline}</div>
             </div>
           )}
+          <button className="mobile-sidebar-close" onClick={() => setMobileSidebarOpen(false)} aria-label={t("nav.collapseSidebar")}><X className="size-4" /></button>
         </div>
 
         <nav className="space-y-0.5">
-          <NavItem collapsed={sidebarCollapsed} icon={<Database className="size-3.5" />} label={t("nav.objects")} active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Braces className="size-3.5" />} label={t("nav.schema")} active={view === "types"} onClick={() => setView("types")} />
-          <NavItem collapsed={sidebarCollapsed} icon={<Network className="size-3.5" />} label={t("nav.graph")} active={view === "graph"} onClick={() => void openGraph()} />
-          {!readOnly && <NavItem collapsed={sidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label={t("nav.health")} active={view === "health"} onClick={() => setView("health")} />}
+          <NavItem collapsed={effectiveSidebarCollapsed} icon={<Database className="size-3.5" />} label={t("nav.objects")} active={view === "objects" || view === "detail"} onClick={() => setView("objects")} />
+          <NavItem collapsed={effectiveSidebarCollapsed} icon={<Braces className="size-3.5" />} label={t("nav.schema")} active={view === "types"} onClick={() => setView("types")} />
+          <NavItem collapsed={effectiveSidebarCollapsed} icon={<Network className="size-3.5" />} label={t("nav.graph")} active={view === "graph"} onClick={() => { setMobileSidebarOpen(false); void openGraph(); }} />
+          {!readOnly && <NavItem collapsed={effectiveSidebarCollapsed} icon={<HeartPulse className="size-3.5" />} label={t("nav.health")} active={view === "health"} onClick={() => setView("health")} />}
         </nav>
 
-        {!sidebarCollapsed && (
+        {!effectiveSidebarCollapsed && (
           <div className="mt-5 flex min-h-0 flex-1 flex-col">
             <Separator className="mb-3 bg-border/45" />
             <div className="flex items-center justify-between px-1.5">
@@ -1153,7 +1183,7 @@ function App() {
             <ScrollArea className="mt-2 min-h-0 flex-1 pr-1.5">
               <div className="space-y-0.5">
                 {types.map((t) => (
-                  <button key={t.id} onClick={() => setActiveType(t.id)} className={`sidebar-type-row ${activeType === t.id ? "sidebar-type-row-active" : ""}`}>
+                  <button key={t.id} onClick={() => { setMobileSidebarOpen(false); setActiveType(t.id); }} className={`sidebar-type-row ${activeType === t.id ? "sidebar-type-row-active" : ""}`}>
                     <span className="truncate">{t.id}</span>
                   </button>
                 ))}
@@ -1163,7 +1193,7 @@ function App() {
         )}
 
         <div className="mt-auto space-y-2.5 pt-3">
-          {!sidebarCollapsed && !readOnly && (
+          {!effectiveSidebarCollapsed && !readOnly && (
             <>
               <div className="sidebar-tool-card text-[11px] text-muted-foreground">
                 <div className="mb-1 flex items-center gap-2 font-medium text-foreground/70"><Play className="size-3 text-[hsl(var(--earth))]" /> {t("nav.agentApi")}</div>
@@ -1180,40 +1210,43 @@ function App() {
               />
             </>
           )}
-          {!sidebarCollapsed && readOnly && serverInfo?.source_url && (
+          {!effectiveSidebarCollapsed && readOnly && serverInfo?.source_url && (
             <a className="sidebar-tool-card flex items-center gap-2 text-[11px] text-muted-foreground transition hover:text-foreground" href={serverInfo.source_url} target="_blank" rel="noreferrer">
               <GitBranch className="size-3 text-[hsl(var(--earth))]" />
               <span className="truncate">Open-source repository</span>
             </a>
           )}
-          <button className={`sidebar-collapse ${sidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}>
-            {sidebarCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
-            {!sidebarCollapsed && <span>{t("nav.collapseSidebar")}</span>}
+          <button className={`sidebar-collapse ${effectiveSidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"}`} onClick={toggleSidebar} title={effectiveSidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}>
+            {effectiveSidebarCollapsed ? <PanelLeftOpen className="size-3.5" /> : <PanelLeftClose className="size-3.5" />}
+            {!effectiveSidebarCollapsed && <span>{t("nav.collapseSidebar")}</span>}
           </button>
         </div>
       </aside>}
 
-      <main className={`${standaloneMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
+      <main className={`app-main ${standaloneMode ? "vi-standalone-main" : "console-inset my-3 mr-3"} min-w-0 flex-1 overflow-hidden`}>
         {!standaloneMode && <div className="console-topbar">
-          <BreadcrumbTrail product={brandName} view={view} activeType={activeType} activeObject={activeObject} />
+          <div className="console-topbar-leading">
+            <button className="mobile-menu-button" onClick={() => setMobileSidebarOpen(true)} aria-label={t("nav.expandSidebar")}><Menu className="size-4" /></button>
+            <BreadcrumbTrail product={brandName} view={view} activeType={activeType} activeObject={activeObject} />
+          </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
-            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
+            <span className={`vault-topbar-status inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${vaultOK ? "text-[hsl(var(--moss))]" : "text-[hsl(var(--clay))]"}`}>
               <span className={`size-1.5 rounded-full ${vaultOK ? "bg-[hsl(var(--moss))]" : "bg-[hsl(var(--clay))]"}`} />
-              {readOnly && serverInfo?.status_label ? serverInfo.status_label : vaultOK ? t("status.vaultReady") : t("status.vaultMissing")}
+              <span className="vault-topbar-status-label">{readOnly && serverInfo?.status_label ? serverInfo.status_label : vaultOK ? t("status.vaultReady") : t("status.vaultMissing")}</span>
             </span>
           </div>
         </div>}
         <div className="mb-scroll min-h-0 flex-1 overflow-auto">
         {view === "objects" && (
-          <section className="flex h-full w-full flex-col px-7 py-6">
-            <div className="mb-5 flex items-baseline gap-3">
+          <section className="objects-page flex h-full w-full flex-col px-7 py-6">
+            <div className="objects-page-heading mb-5 flex items-baseline gap-3">
               <h1 className="font-serif text-3xl font-medium leading-none tracking-tight">{activeType || t("objects.title")}</h1>
               <span className="font-mono text-xs text-muted-foreground">{t("objects.count", { count: rows.length })}</span>
             </div>
             <div className="objects-workspace">
               <Tabs defaultValue="table" className="flex h-full min-h-0 flex-col">
-                <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+                <div className="objects-page-toolbar mb-5 flex flex-wrap items-start justify-between gap-4">
                   <TabsList className="rounded-lg bg-muted/35">
                     <TabsTrigger value="table" className="rounded-md">{t("objects.table")}</TabsTrigger>
                     <TabsTrigger value="api" className="rounded-md">API</TabsTrigger>
@@ -1260,6 +1293,8 @@ function App() {
                     </button>
                   }
                   inspectorPanel={
+                    <>
+                    <button className={`inspector-backdrop ${inspectorOpen ? "is-open" : ""}`} onClick={() => setInspectorOpen(false)} aria-label={t("detail.collapseInspector")} />
                     <aside className={`object-inspector mb-scroll ${inspectorOpen ? "object-inspector-open" : "object-inspector-closed"}`}>
                       <div className="inspector-header">
                         <div className="min-w-0">
@@ -1285,6 +1320,7 @@ function App() {
                       <Panel title={t("detail.bodyLinks")} icon={<GitBranch className="size-4" />}>{links.filter((l) => l.kind === "body").map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} />)}</Panel>
                       <Panel title={t("detail.backlinks")} icon={<Network className="size-4" />}>{backlinks.map((l, i) => <LinkRow key={i} link={l} open={(id) => void openObject(id)} reverse />)}</Panel>
                     </aside>
+                    </>
                   }
                 />
               </div>
@@ -1299,7 +1335,7 @@ function App() {
         )}
 
         {view === "types" && (
-          <section className="w-full px-7 py-6">
+          <section className="schema-page w-full px-7 py-6">
             <Header eyebrow={t("schema.eyebrow")} title={t("schema.title")} description={t("schema.description")} />
             <div className="content-panel mb-7 overflow-hidden">
               <div className="flex items-start justify-between gap-4 px-5 py-4">
@@ -1366,7 +1402,7 @@ function App() {
         )}
 
         {view === "health" && (
-          <section className="w-full px-7 py-6">
+          <section className="health-page w-full px-7 py-6">
             <Header eyebrow={t("health.eyebrow")} title={t("health.title")} description={t("health.description")} />
             <div className="content-panel p-4">
               {issues.length === 0 ? <EmptyState title={t("health.noIssuesTitle")} description={t("health.noIssuesDescription")} /> : issues.map((issue, i) => <pre key={i} className="tray mb-3 overflow-x-auto rounded-2xl p-3 font-mono text-xs text-muted-foreground last:mb-0">{JSON.stringify(issue, null, 2)}</pre>)}
@@ -2158,6 +2194,7 @@ function GraphWorkspacePage({
               <TooltipContent side="left">{detailsOpen ? t("graph.collapseDetails") : t("graph.expandDetails")}</TooltipContent>
             </Tooltip>
           </div>
+          <button className={`graph-details-backdrop ${detailsOpen ? "is-open" : ""}`} onClick={() => setDetailsOpen(false)} aria-label={t("graph.collapseDetails")} />
           <aside className="graph-lab-panel graph-canvas-details">
             <div className="graph-canvas-details-header">
               <span>{t("graph.viewDetails")}</span>
@@ -3829,7 +3866,7 @@ function LanguageSwitcher() {
   const current = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
   return (
     <Select value={current} onValueChange={(value) => void i18n.changeLanguage(value)}>
-      <SelectTrigger className="h-8 w-[112px] rounded-md bg-background/60 px-2.5 text-xs" aria-label={t("app.language")}>
+      <SelectTrigger className="language-switcher-trigger h-8 w-[112px] rounded-md bg-background/60 px-2.5 text-xs" aria-label={t("app.language")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent align="end">
@@ -4400,6 +4437,7 @@ function ObjectFilterBar({
 }
 
 function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<string, unknown>[]; fields: FieldDef[]; activeType: string; open: (id: string) => void }) {
+  const mobile = useMediaQuery("(max-width: 767px), (max-height: 500px) and (max-width: 900px)");
   const [sorting, setSorting] = useState<SortingState>([]);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -4440,7 +4478,7 @@ function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<stri
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize: 25 } }
   });
-  const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => sum + objectTableColumnWidth(column.id), 0);
+  const tableMinWidth = table.getVisibleLeafColumns().reduce((sum, column) => sum + objectTableColumnWidth(column.id, mobile), 0);
   const visibleRows = table.getRowModel().rows;
   const rowVirtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -4453,14 +4491,14 @@ function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<stri
   const bottomPadding = virtualRows.length > 0 ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end : 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg">
+    <div className="object-table-shell flex h-full min-h-0 flex-col overflow-hidden rounded-lg">
       <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
         <Table className="table-fixed" style={{ minWidth: tableMinWidth, width: tableMinWidth }}>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className={objectTableCellClass(header.column.id)} style={objectTableColumnStyle(header.column.id)}>
+                  <TableHead key={header.id} className={objectTableCellClass(header.column.id)} style={objectTableColumnStyle(header.column.id, mobile)}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
@@ -4478,7 +4516,7 @@ function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<stri
               return (
               <TableRow key={row.id} onDoubleClick={() => open(String(row.original.id))}>
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className={objectTableCellClass(cell.column.id)} style={objectTableColumnStyle(cell.column.id)}>
+                  <TableCell key={cell.id} className={objectTableCellClass(cell.column.id)} style={objectTableColumnStyle(cell.column.id, mobile)}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
@@ -4493,8 +4531,8 @@ function ObjectDataTable({ rows, fields, activeType, open }: { rows: Record<stri
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between gap-3 border-t border-border/45 px-3 py-2 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
+      <div className="object-table-pagination flex items-center justify-between gap-3 border-t border-border/45 px-3 py-2 text-xs text-muted-foreground">
+        <div className="object-table-page-summary flex items-center gap-2">
           <span>{rows.length} rows</span>
           <span className="text-border">/</span>
           <span>Page {table.getState().pagination.pageIndex + 1} / {table.getPageCount() || 1}</span>
@@ -4559,11 +4597,22 @@ function objectTableCellClass(columnID: string) {
   return `${base} object-table-field-col`;
 }
 
-function objectTableColumnStyle(columnID: string): React.CSSProperties | undefined {
-  return { width: objectTableColumnWidth(columnID) };
+function objectTableColumnStyle(columnID: string, mobile = false): React.CSSProperties | undefined {
+  return { width: objectTableColumnWidth(columnID, mobile) };
 }
 
-function objectTableColumnWidth(columnID: string) {
+function objectTableColumnWidth(columnID: string, mobile = false) {
+  if (mobile) {
+    if (columnID === "id") return 148;
+    if (columnID === "title") return 210;
+    if (columnID === "url") return 240;
+    if (columnID === "platform") return 96;
+    if (columnID === "post_type") return 116;
+    if (columnID === "author") return 120;
+    if (columnID.endsWith("_at") || columnID.endsWith("_date")) return 132;
+    if (columnID === "status" || columnID.endsWith("_status")) return 116;
+    return 132;
+  }
   if (columnID === "id") return 190;
   if (columnID === "title") return 330;
   if (columnID === "url") return 300;
