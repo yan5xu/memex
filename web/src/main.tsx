@@ -770,6 +770,7 @@ function App() {
   }
 
   useEffect(() => {
+    if (homeMode) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -804,8 +805,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.title = brandName;
-  }, [brandName]);
+    if (!homeMode) document.title = brandName;
+  }, [brandName, homeMode]);
 
   useEffect(() => {
     if (!readOnly || view !== "detail" || !activeObject) return;
@@ -821,14 +822,14 @@ function App() {
   }, [readOnly, view, activeObject?.id, activeObject?.type_id]);
 
   useEffect(() => {
-    if (view === "vi" || routeSearch.vault || !vault) return;
+    if (homeMode || view === "vi" || routeSearch.vault || !vault) return;
     updateSearch({ vault }, { replace: true });
-  }, [routeSearch.vault, vault, view]);
+  }, [routeSearch.vault, vault, view, homeMode]);
 
   useEffect(() => {
-    if (!activeType) return;
+    if (homeMode || !activeType) return;
     void loadRows(activeType, filter);
-  }, [activeType, filter]);
+  }, [activeType, filter, homeMode]);
 
   async function loadRows(type: string, where: string, vaultOverride = vault): Promise<Record<string, unknown>[]> {
     const argv = ["query", type, "--limit", "200"];
@@ -951,6 +952,7 @@ function App() {
   }), [view, activeType, filter, activeObject?.id, activeGraphCenterID, activeGraphViewID, graphMode, hiddenGraphTypes]);
 
   useEffect(() => {
+    if (homeMode) return;
     const nextView = routeSearch.view;
     const nextType = routeSearch.type ?? "";
     const nextFilter = routeSearch.filter ?? "";
@@ -978,7 +980,7 @@ function App() {
         if (res.data) setGraph(res.data);
       });
     }
-  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphView, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes]);
+  }, [routeSearch.view, routeSearch.type, routeSearch.filter, routeSearch.object, routeSearch.graphView, routeSearch.graphMode, routeSearch.graphHiddenTypes, hiddenGraphTypes, homeMode]);
 
   useEffect(() => {
     const needsObjectLookup = markdownHasWikiLinks(activeBody) || links.length > 0 || backlinks.length > 0;
