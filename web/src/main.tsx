@@ -5103,6 +5103,9 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
   const [showBodyLinks, setShowBodyLinks] = useState(false);
   const [hiddenTypes, setHiddenTypes] = useState<string[]>([]);
   const [hiddenRelations, setHiddenRelations] = useState<string[]>([]);
+  const [projectedResult, setProjectedResult] = useState<ProjectedGraphResult | null>(null);
+  const [projectionLoading, setProjectionLoading] = useState(false);
+  const [projectionError, setProjectionError] = useState("");
   const relationEdges = graphEdges.length > 0 ? graphEdges : [...links, ...backlinks];
   const activeTemplate = templates.find((template) => template.id === activeTemplateID) ?? templates[0] ?? relationNearbyTemplate();
   const editableTemplate = activeTemplate.configurable ? activeTemplate : templates.find((template) => template.configurable);
@@ -5125,10 +5128,39 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
       setActiveTemplateID(templates[0]?.id ?? "nearby");
     }
   }, [activeTemplateID, templates]);
+  useEffect(() => {
+    if (!dialogOpen || !activeTemplate.configurable) return;
+    let cancelled = false;
+    setProjectionLoading(true);
+    setProjectionError("");
+    run<ProjectedGraphResult>(["graph", "query", "--view", activeTemplate.id, "--center", object.id], vault).then((result) => {
+      if (cancelled) return;
+      if (!result.ok || !result.data) {
+        const message = result.error?.message || t("graph.queryFailed");
+        setProjectionError(message);
+        toast.error(message);
+        return;
+      }
+      setProjectedResult(result.data);
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : t("graph.queryFailed");
+      setProjectionError(message);
+      toast.error(message);
+    }).finally(() => {
+      if (!cancelled) setProjectionLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTemplate.configurable, activeTemplate.id, dialogOpen, object.id, t, vault]);
   const allGraph = useMemo(() => buildInspectorRelationGraph(object, links, backlinks, graphNodes), [object, links, backlinks, graphNodes]);
   const filterMeta = useMemo(() => summarizeInspectorRelationFilters(object.id, links, backlinks, graphNodes, relationEdges), [object.id, links, backlinks, graphNodes, relationEdges]);
   const graph = useMemo(() => {
     if (activeTemplate.id !== "nearby") {
+      if (activeTemplate.configurable && projectedResult?.center === object.id && projectedResult.view.id === activeTemplate.id) {
+        return buildProjectedRelationGraph(filterProjectedGraphResult(projectedResult, hiddenTypes));
+      }
       return buildInspectorQueryGraph(object, graphNodes, relationEdges, activeTemplate, hiddenTypes);
     }
     const visibleKinds = new Set<string>();
@@ -5140,7 +5172,7 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
       backlinks.filter((link) => inspectorLinkVisible(link, "incoming", graphNodes, visibleKinds, hiddenTypes, hiddenRelations)),
       graphNodes
     );
-  }, [activeTemplate, object, graphNodes, relationEdges, links, backlinks, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field]);
+  }, [activeTemplate, object, graphNodes, relationEdges, links, backlinks, showFieldLinks, showBodyLinks, hiddenTypes, hiddenRelations, filterMeta.kindCounts.body, filterMeta.kindCounts.field, projectedResult]);
   const activeKindCount = (showFieldLinks && filterMeta.kindCounts.field > 0 ? 1 : 0) + ((showBodyLinks || filterMeta.kindCounts.field === 0) && filterMeta.kindCounts.body > 0 ? 1 : 0);
   const hasFilter = activeTemplate.id !== templates[0]?.id || activeKindCount < Number(filterMeta.kindCounts.field > 0) + Number(filterMeta.kindCounts.body > 0) || hiddenTypes.length > 0 || hiddenRelations.length > 0;
   function resetFilters() {
@@ -5353,10 +5385,16 @@ function InspectorRelationGraph({ object, links, backlinks, graphNodes, graphEdg
             </div>
           )}
         </div>}
-        <RelationGraphCanvas graph={graph} openObject={(id) => {
-          setDialogOpen(false);
-          open(id);
-        }} />
+        {projectionLoading && activeTemplate.configurable ? (
+          <div className="graph-query-loading"><Loader2 className="size-4 animate-spin" />{t("graph.runningQuery")}</div>
+        ) : projectionError && activeTemplate.configurable ? (
+          <EmptyState title={t("graph.noResultTitle")} description={projectionError} />
+        ) : (
+          <RelationGraphCanvas graph={graph} openObject={(id) => {
+            setDialogOpen(false);
+            open(id);
+          }} />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -5942,6 +5980,24 @@ function buildProjectedRelationGraph(result: ProjectedGraphResult): InspectorRel
     fitMode: "bounds",
     width,
     height
+  };
+}
+
+function filterProjectedGraphResult(result: ProjectedGraphResult, hiddenTypes: string[]): ProjectedGraphResult {
+  if (hiddenTypes.length === 0) return result;
+  const hidden = new Set(hiddenTypes);
+  const nodes = result.nodes.filter((node) => node.id === result.center || !hidden.has(node.type_id));
+  const visibleIDs = new Set(nodes.map((node) => node.id));
+  const edges = result.edges.filter((edge) => visibleIDs.has(edge.from_id) && visibleIDs.has(edge.to_id));
+  return {
+    ...result,
+    nodes,
+    edges,
+    stats: {
+      nodes: nodes.length,
+      edges: edges.length,
+      derived_edges: edges.filter((edge) => edge.derived).length
+    }
   };
 }
 
