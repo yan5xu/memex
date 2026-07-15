@@ -899,13 +899,15 @@ function App() {
   }
 
   async function saveObjectImage(): Promise<{ filename: string }> {
-    if (!activeObject || !objectExportRef.current) {
+    if (!activeObject) {
       throw new Error("No active object page to save");
     }
-    const node = objectExportRef.current;
     const filename = `${safeFileName(activeObject.id || activeObject.title || "object")}.png`;
     setSavingObjectImage(true);
     try {
+      await nextFrame();
+      const node = objectExportRef.current;
+      if (!node) throw new Error("Object export page is not ready");
       const { default: html2canvas } = await import("html2canvas");
       await withTimeout(waitForImages(node), 8000, "Image loading");
       const width = Math.ceil(Math.max(node.scrollWidth, node.getBoundingClientRect().width));
@@ -1530,11 +1532,13 @@ function App() {
               </div>
             </article>
 
-            <div className="object-export-host" aria-hidden="true">
-              <article ref={objectExportRef} className="object-export-page">
-                <ObjectPageContent object={activeObject} body={activeBody} vault={vault} objectTitleByID={objectTitleByID} openObject={() => undefined} imageLoading="eager" />
-              </article>
-            </div>
+            {savingObjectImage && (
+              <div className="object-export-host" aria-hidden="true">
+                <article ref={objectExportRef} className="object-export-page">
+                  <ObjectPageContent object={activeObject} body={activeBody} vault={vault} objectTitleByID={objectTitleByID} openObject={() => undefined} imageLoading="eager" />
+                </article>
+              </div>
+            )}
           </section>
         )}
 
