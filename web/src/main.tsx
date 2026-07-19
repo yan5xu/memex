@@ -3681,6 +3681,7 @@ function ObjectPageContent({
   openObject: (id: string) => void;
   imageLoading?: "lazy" | "eager";
 }) {
+  const displayBody = withoutLeadingH1(objectBodyForDisplay(object, body));
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -3692,10 +3693,19 @@ function ObjectPageContent({
         <div className="mt-4 h-0.5 w-24 rounded-full bg-[hsl(var(--earth)/0.34)]" />
       </div>
       <div className="markdown">
-        <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} imageLoading={imageLoading} />
+        <MarkdownBody body={displayBody} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} imageLoading={imageLoading} />
       </div>
     </>
   );
+}
+
+function withoutLeadingH1(markdown: string) {
+  const lines = markdown.split("\n");
+  const firstContentLine = lines.findIndex((line) => line.trim());
+  if (firstContentLine >= 0 && /^\s{0,3}#(?!#)\s+/.test(lines[firstContentLine])) {
+    lines.splice(firstContentLine, 1);
+  }
+  return lines.join("\n");
 }
 
 function MarkdownBody({
