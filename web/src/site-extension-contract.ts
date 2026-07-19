@@ -7,6 +7,10 @@ export type SiteAutomationController = {
   invoke: (action: string, payload?: unknown) => unknown | Promise<unknown>;
 };
 
+export type SiteGlobalAutomationController = SiteAutomationController & {
+  actions: string[];
+};
+
 export type SiteHomeProps = {
   brandName: string;
   brandMark: string;
@@ -14,6 +18,18 @@ export type SiteHomeProps = {
   language: SiteLanguage;
   setLanguage: (language: SiteLanguage) => Promise<void>;
   automationRef: MutableRefObject<SiteAutomationController | null>;
+};
+
+export type SiteProjectPageProps = SiteHomeProps & {
+  pageID: string;
+  pathname: string;
+};
+
+export type SiteProjectPage = {
+  id: string;
+  path: string;
+  match?: (pathname: string) => boolean;
+  Component: ComponentType<SiteProjectPageProps>;
 };
 
 export type SiteDocumentTitleContext = {
@@ -30,5 +46,8 @@ export type SiteDocumentTitleContext = {
 export type MemexSiteExtension = {
   id: string;
   HomePage?: ComponentType<SiteHomeProps>;
+  pages?: SiteProjectPage[];
+  automationActions?: string[];
+  automation?: SiteGlobalAutomationController;
   documentTitle?: (context: SiteDocumentTitleContext) => string;
 };

@@ -24,6 +24,9 @@ export type {
   MemexSiteExtension,
   SiteAutomationController,
   SiteDocumentTitleContext,
+  SiteGlobalAutomationController,
   SiteHomeProps,
-  SiteLanguage
+  SiteLanguage,
+  SiteProjectPage,
+  SiteProjectPageProps
 } from "./site-extension-contract";

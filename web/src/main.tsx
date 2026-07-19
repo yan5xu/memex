@@ -542,8 +542,11 @@ declare global {
       };
       site: {
         id: string;
+        pages: () => Array<{ id: string; path: string }>;
+        openPage: (path: string) => Promise<{ id: string; path: string }>;
         state: () => unknown;
         invoke: (action: string, payload?: unknown) => Promise<unknown>;
+        [action: string]: unknown;
       };
       saveObjectImage: () => Promise<{ filename: string }>;
       state: () => AutomationSnapshot;
@@ -564,8 +567,12 @@ function App() {
   const graphWorkspaceAutomationRef = useRef<GraphWorkspaceAutomationController | null>(null);
   const siteAutomationRef = useRef<SiteAutomationController | null>(null);
   const SiteHomePage = siteExtension.HomePage;
+  const projectPages = siteExtension.pages ?? [];
+  const activeProjectPage = projectPages.find((page) => page.match?.(window.location.pathname) ?? page.path === window.location.pathname) ?? null;
+  const ProjectPage = activeProjectPage?.Component;
   const homeMode = Boolean(SiteHomePage && window.location.pathname === "/" && !window.location.search);
-  const initialVault = pathState ? "" : routeSearch.vault?.trim() || getCurrentVault();
+  const projectPageMode = Boolean(ProjectPage);
+  const initialVault = pathState || projectPageMode ? "" : routeSearch.vault?.trim() || getCurrentVault();
   const viSection = normalizeVISection(routeSearch.section);
   const viShot = viewIsShot(routeSearch);
   const [view, setViewState] = useState<ViewID>(routeSearch.view);
@@ -769,7 +776,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (homeMode) return;
+    if (homeMode || projectPageMode) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -804,7 +811,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (homeMode) return;
+    if (homeMode || projectPageMode) return;
     const customTitle = siteExtension.documentTitle?.({
       brandName,
       view,
@@ -824,12 +831,17 @@ function App() {
       return;
     }
     document.title = brandName;
-  }, [brandName, homeMode, readOnly, view, activeObject?.id, activeObject?.title, activeType]);
+  }, [brandName, homeMode, projectPageMode, readOnly, view, activeObject?.id, activeObject?.title, activeType]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("site-home-active", homeMode);
     return () => document.documentElement.classList.remove("site-home-active");
   }, [homeMode]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("site-project-page-active", projectPageMode);
+    return () => document.documentElement.classList.remove("site-project-page-active");
+  }, [projectPageMode]);
 
   useEffect(() => {
     if (!readOnly || view !== "detail" || !activeObject) return;
@@ -845,14 +857,14 @@ function App() {
   }, [readOnly, view, activeObject?.id, activeObject?.type_id]);
 
   useEffect(() => {
-    if (homeMode || view === "vi" || routeSearch.vault || !vault) return;
+    if (homeMode || projectPageMode || view === "vi" || routeSearch.vault || !vault) return;
     updateSearch({ vault }, { replace: true });
-  }, [routeSearch.vault, vault, view, homeMode]);
+  }, [routeSearch.vault, vault, view, homeMode, projectPageMode]);
 
   useEffect(() => {
-    if (homeMode || !activeType) return;
+    if (homeMode || projectPageMode || !activeType) return;
     void loadRows(activeType, filter);
-  }, [activeType, filter, homeMode]);
+  }, [activeType, filter, homeMode, projectPageMode]);
 
   async function loadRows(type: string, where: string, vaultOverride = vault): Promise<Record<string, unknown>[]> {
     const argv = ["query", type, "--limit", "200"];
@@ -1313,25 +1325,50 @@ function App() {
         saveView: (patch) => relationGraphCall((controller) => controller.saveView(patch)),
         deleteView: (id) => relationGraphCall((controller) => controller.deleteView(id))
       },
-      site: {
+      site: Object.assign({
         id: siteExtension.id,
-        state: () => siteAutomationRef.current?.state() ?? {
-          available: Boolean(SiteHomePage),
-          active: homeMode
+        pages: () => projectPages.map(({ id, path }) => ({ id, path })),
+        openPage: async (path: string) => {
+          const page = projectPages.find((candidate) => candidate.path === path || candidate.match?.(path));
+          if (!page) throw new Error(`Unknown project page: ${path}`);
+          window.location.assign(path);
+          return { id: page.id, path };
         },
+        state: () => ({
+          available: Boolean(SiteHomePage || projectPages.length),
+          active: homeMode || projectPageMode,
+          activePageID: activeProjectPage?.id ?? (homeMode ? "home" : null),
+          registeredPages: projectPages.map(({ id, path }) => ({ id, path })),
+          ...(siteExtension.automation?.state() as Record<string, unknown> | null ?? {}),
+          ...(siteAutomationRef.current?.state() as Record<string, unknown> | null ?? {})
+        }),
         invoke: async (action: string, payload?: unknown) => {
+          if (action === "listPages") return projectPages.map(({ id, path }) => ({ id, path }));
+          if (action === "openPage") {
+            const path = typeof payload === "string" ? payload : String((payload as { path?: unknown } | null)?.path ?? "");
+            const page = projectPages.find((candidate) => candidate.path === path || candidate.match?.(path));
+            if (!page) throw new Error(`Unknown project page: ${path}`);
+            window.location.assign(path);
+            return { id: page.id, path };
+          }
+          if (siteExtension.automation?.actions.includes(action)) {
+            return siteExtension.automation.invoke(action, payload);
+          }
           const controller = siteAutomationRef.current;
           if (!controller) throw new Error("Site automation is unavailable");
           return controller.invoke(action, payload);
         }
-      },
+      }, Object.fromEntries((siteExtension.automationActions ?? []).map((action) => [
+        action,
+        (payload?: unknown) => window.memex?.site.invoke(action, payload)
+      ]))),
       saveObjectImage,
       state: () => currentState()
     };
     return () => {
       delete window.memex;
     };
-  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, mobile, mobileSidebarOpen, inspectorOpen, activeGraphViewID, activeGraphCenterID, homeMode]);
+  }, [view, vault, vaultOK, activeType, activeObject, activeBody, types, rows, links, backlinks, issues, graph, filter, sidebarCollapsed, mobile, mobileSidebarOpen, inspectorOpen, activeGraphViewID, activeGraphCenterID, homeMode, projectPageMode, activeProjectPage?.id]);
 
   const viMode = view === "vi";
   const graphLabMode = view === "graph-lab";
@@ -1343,6 +1380,27 @@ function App() {
     return (
       <div className="site-home-shell min-h-screen bg-background text-foreground">
         <SiteHomePage
+          brandName={brandName}
+          brandMark={brandMark}
+          brandTagline={brandTagline}
+          language={language}
+          setLanguage={async (nextLanguage) => {
+            await i18n.changeLanguage(nextLanguage);
+            await nextFrame();
+          }}
+          automationRef={siteAutomationRef}
+        />
+      </div>
+    );
+  }
+
+  if (ProjectPage && activeProjectPage) {
+    const language: SiteLanguage = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+    return (
+      <div className="site-project-page-shell min-h-screen bg-background text-foreground">
+        <ProjectPage
+          pageID={activeProjectPage.id}
+          pathname={window.location.pathname}
           brandName={brandName}
           brandMark={brandMark}
           brandTagline={brandTagline}
