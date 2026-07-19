@@ -3546,6 +3546,7 @@ function ObjectBodyWorkspace({
   }
 
   const status = saving ? t("status.saving") : uploading ? t("status.importingImage") : dirty ? t("status.unsavedChanges") : justSaved ? t("status.saved") : t("status.saved");
+  const displayBody = withoutLeadingH1(objectBodyForDisplay(object, body));
   return (
     <div className="body-workspace">
       <div className="body-workspace-header">
@@ -3644,14 +3645,14 @@ function ObjectBodyWorkspace({
             )}
             {viewMode !== "write" && (
               <div className="body-preview-pane markdown">
-                <MarkdownBody body={draft || objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
+                <MarkdownBody body={withoutLeadingH1(draft || objectBodyForDisplay(object, body))} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
               </div>
             )}
           </div>
         </div>
       ) : (
         <div className="markdown body-reader-surface">
-          <MarkdownBody body={objectBodyForDisplay(object, body)} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
+          <MarkdownBody body={displayBody} object={object} vault={vault} objectTitleByID={objectTitleByID} openObject={openObject} />
         </div>
       )}
     </div>
